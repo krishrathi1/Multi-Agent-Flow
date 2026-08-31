@@ -58,22 +58,22 @@ export function Settings() {
 
   const tabs: { value: Tab; label: string; icon?: any }[] = [
     { value: 'organization', label: 'Organization' },
-    { value: 'members', label: 'Members & Roles' },
+    { value: 'members', label: 'Team & Roles' },
     { value: 'api-keys', label: 'API Keys' },
-    { value: 'llm-providers', label: 'LLM & AI Models' },
-    { value: 'integrations', label: 'Integrations (GitHub & Vercel)' },
+    { value: 'llm-providers', label: 'AI Models & LLM' },
+    { value: 'integrations', label: 'Integrations' },
   ];
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl w-full min-w-0 overflow-hidden">
       <PageHeader
         icon={Sliders}
         title="Workspace Settings"
         description="Manage organization configuration, team access, AI model providers, and platform integrations."
       />
 
-      {/* Modern High-Contrast Tabs */}
-      <div className="border-b border-line">
+      {/* Modern High-Contrast Tabs with Smooth Mobile Scrolling */}
+      <div className="w-full overflow-hidden">
         <Tabs
           items={tabs}
           value={activeTab}
@@ -83,7 +83,7 @@ export function Settings() {
       </div>
 
       {/* Tab content */}
-      <div className="pt-2">
+      <div className="pt-2 w-full min-w-0">
         {activeTab === 'organization' && <OrganizationTab />}
         {activeTab === 'members' && (
           <MembersTab currentUserId={user?.id ?? ''} isAdmin={isAdmin} isOwner={isOwner} />
@@ -398,8 +398,83 @@ function MembersTab({
         </Card>
       )}
 
-      {/* Member Table */}
-      <Card padding="none" className="overflow-hidden border border-line bg-surface shadow-xs">
+      {/* Mobile Member Cards (sm:hidden) */}
+      <div className="space-y-3 sm:hidden">
+        {loading ? (
+          <Card padding="md" className="p-6 text-center text-xs text-ink-muted">
+            Loading team members...
+          </Card>
+        ) : members.length === 0 ? (
+          <Card padding="md" className="p-6 text-center text-xs text-ink-muted">
+            No members found.
+          </Card>
+        ) : (
+          members.map((member) => {
+            const isSelf = member.userId === currentUserId;
+            return (
+              <Card
+                key={member.id}
+                padding="none"
+                className="p-4 border border-line bg-surface rounded-2xl shadow-2xs space-y-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <Avatar name={member.user.name || member.user.email} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-sm text-ink truncate">
+                          {member.user.name || member.user.email.split('@')[0]}
+                        </span>
+                        {isSelf && (
+                          <span className="rounded-md bg-brand-500/10 px-1.5 py-0.5 text-[10px] font-bold text-brand-600 dark:text-brand-400">
+                            You
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-2xs text-ink-muted truncate block">{member.user.email}</span>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0">
+                    {isOwner && !isSelf ? (
+                      <select
+                        value={member.role}
+                        onChange={(e) => handleRoleChange(member.id, e.target.value as OrgRole)}
+                        className="rounded-xl border border-line bg-canvas px-2.5 py-1 text-xs font-semibold text-ink shadow-2xs focus:border-brand-500 focus:outline-none"
+                      >
+                        {ALL_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Badge tone={roleTone[member.role]}>{member.role}</Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-line-subtle pt-2.5 text-2xs text-ink-faint">
+                  <span>Joined {timeAgo(member.createdAt)}</span>
+                  {isAdmin && !isSelf && member.role !== 'OWNER' && (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 font-bold"
+                      onClick={() => handleRemove(member.id)}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop Member Table (hidden sm:block) */}
+      <Card padding="none" className="hidden sm:block overflow-hidden border border-line bg-surface shadow-xs rounded-2xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-line bg-inset/50 text-[11px] font-bold uppercase tracking-wider text-ink-muted">

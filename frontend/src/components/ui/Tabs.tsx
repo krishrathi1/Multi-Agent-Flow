@@ -73,8 +73,8 @@ export function Tabs<T extends string = string>({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        'inline-flex items-center gap-1 rounded-xl border border-line-subtle/80',
-        'bg-inset/70 p-1 backdrop-blur-sm shadow-2xs',
+        'flex max-w-full items-center gap-1.5 overflow-x-auto rounded-xl border border-line-subtle/80',
+        'bg-inset/70 p-1 backdrop-blur-sm shadow-2xs no-scrollbar scroll-smooth',
         className,
       )}
     >
@@ -88,7 +88,7 @@ export function Tabs<T extends string = string>({
             aria-selected={active}
             onClick={() => onChange(item.value)}
             className={cn(
-              'flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold',
+              'flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold whitespace-nowrap',
               'transition-all duration-150 active:scale-[0.98]',
               active
                 ? 'bg-surface text-ink shadow-xs border border-line-subtle'
