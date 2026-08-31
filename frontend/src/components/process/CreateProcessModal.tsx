@@ -158,16 +158,8 @@ export function CreateProcessModal({
   const [repoGoal, setRepoGoal] = useState('');
   const [loadingRepos, setLoadingRepos] = useState(false);
 
-  // Vercel State
-  const [vercelConnected, setVercelConnected] = useState(true);
-  const [vercelProject, setVercelProject] = useState('nexus-app-prod');
-  const [frameworkPreset, setFrameworkPreset] = useState('vite');
-  const [rootDirectory, setRootDirectory] = useState('./');
-  const [buildCommand, setBuildCommand] = useState('npm run build');
-  const [vercelAutoFix, setVercelAutoFix] = useState(true);
-  const [envVars, setEnvVars] = useState<Array<{ id: string; key: string; value: string }>>([
-    { id: '1', key: 'NODE_ENV', value: 'production' },
-  ]);
+  // Vercel State: Simple check/uncheck for full autonomous deployment via linked Settings
+  const [vercelAutoDeploy, setVercelAutoDeploy] = useState(true);
 
   const [isExpandingPrompt, setIsExpandingPrompt] = useState(false);
 
@@ -233,17 +225,6 @@ export function CreateProcessModal({
     setTimeout(() => setApiSaved(false), 3000);
   };
 
-  const handleAddEnvVar = () => {
-    setEnvVars((prev) => [...prev, { id: String(Date.now()), key: '', value: '' }]);
-  };
-
-  const handleUpdateEnvVar = (id: string, field: 'key' | 'value', val: string) => {
-    setEnvVars((prev) => prev.map((e) => (e.id === id ? { ...e, [field]: val } : e)));
-  };
-
-  const handleRemoveEnvVar = (id: string) => {
-    setEnvVars((prev) => prev.filter((e) => e.id !== id));
-  };
 
   const handleExpandPromptWithAI = () => {
     setIsExpandingPrompt(true);
@@ -334,13 +315,11 @@ export function CreateProcessModal({
       repoSection = `Target GitHub Repository: ${repoInput} (branch: ${repoBranch})`;
     }
 
-    const vercelSection = `Vercel Deployment Setup:\n- Project: ${vercelProject}\n- Framework: ${frameworkPreset}\n- Root Directory: ${rootDirectory}\n- Build Command: ${buildCommand}\n- Auto-Fix Build Errors: ${vercelAutoFix ? 'Enabled' : 'Disabled'}`;
+    const vercelSection = vercelAutoDeploy
+      ? `Vercel Deployment: Enabled (Auto-deployment via linked Settings account — agents will auto-detect framework, run build verification, and deploy live preview)`
+      : `Vercel Deployment: Disabled (Local / Git repository only)`;
 
-    const envSection = envVars.filter(e => e.key.trim()).length > 0
-      ? `\nEnvironment Variables:\n` + envVars.filter(e => e.key.trim()).map(e => `- ${e.key}=${e.value}`).join('\n')
-      : '';
-
-    final += `${repoSection}\n\n${vercelSection}${envSection}`;
+    final += `${repoSection}\n\n${vercelSection}`;
 
     if (repoGoal.trim()) {
       final += `\n\nDeployment Specific Goal:\n${repoGoal.trim()}`;
@@ -1045,127 +1024,54 @@ export function CreateProcessModal({
               )}
             </div>
 
-            {/* Vercel Deployment Settings Card */}
-            <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 shadow-2xs space-y-3">
-              <div className="flex items-center justify-between border-b border-line-subtle pb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                    <Globe size={13} />
+            {/* Vercel Auto-Deployment Check / Uncheck Card */}
+            <div
+              onClick={() => setVercelAutoDeploy(!vercelAutoDeploy)}
+              className={cn(
+                'rounded-2xl border p-4 shadow-2xs transition-all cursor-pointer flex items-start justify-between gap-3',
+                vercelAutoDeploy
+                  ? 'border-emerald-500/30 bg-surface ring-1 ring-emerald-500/15'
+                  : 'border-line-subtle bg-inset/40 hover:bg-surface'
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={cn(
+                    'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors',
+                    vercelAutoDeploy
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      : 'bg-inset text-ink-muted border border-line-subtle'
+                  )}
+                >
+                  <Globe size={16} />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-ink">Auto-Deploy to Vercel</span>
+                    {vercelAutoDeploy ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Enabled
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-inset px-2 py-0.5 text-[10px] font-medium text-ink-muted border border-line-subtle">
+                        Disabled
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    <span className="text-xs font-bold text-ink block">Vercel Continuous Deployment</span>
-                    <span className="text-[10px] text-ink-muted block">Live cloud builds & auto-deployment pipeline</span>
-                  </div>
-                </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Vercel Linked
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div>
-                  <label className="block text-2xs font-medium text-ink-muted mb-1">Vercel Project Name</label>
-                  <input
-                    type="text"
-                    value={vercelProject}
-                    onChange={(e) => setVercelProject(e.target.value)}
-                    placeholder="nexus-app-prod"
-                    className="w-full rounded-xl border border-line bg-surface p-2 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-2xs font-medium text-ink-muted mb-1">Framework Preset</label>
-                  <select
-                    value={frameworkPreset}
-                    onChange={(e) => setFrameworkPreset(e.target.value)}
-                    className="w-full rounded-xl border border-line bg-surface p-2 text-xs font-semibold text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  >
-                    <option value="vite">Vite / React SPA</option>
-                    <option value="nextjs">Next.js (App Router)</option>
-                    <option value="node">Node.js / Express Backend</option>
-                    <option value="remix">Remix / Full-Stack</option>
-                    <option value="astro">Astro / Static</option>
-                    <option value="other">Other / Custom</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-2xs font-medium text-ink-muted mb-1">Build Command</label>
-                  <input
-                    type="text"
-                    value={buildCommand}
-                    onChange={(e) => setBuildCommand(e.target.value)}
-                    placeholder="npm run build"
-                    className="w-full rounded-xl border border-line bg-surface p-2 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  />
+                  <p className="text-2xs text-ink-muted leading-relaxed">
+                    Connects via your Settings credentials. Autonomous agents will automatically detect framework, configure cloud build, and deploy live.
+                  </p>
                 </div>
               </div>
 
-              {/* Auto-Fix Vercel Errors Toggle */}
-              <div className="flex items-center justify-between rounded-xl border border-line-subtle bg-inset/40 p-2.5">
-                <div className="flex items-center gap-2">
-                  <Zap size={14} className="text-amber-500" />
-                  <div>
-                    <p className="text-xs font-semibold text-ink">Auto-Inspect Vercel Build Logs & Auto-Fix Errors</p>
-                    <p className="text-[10px] text-ink-muted">When Vercel build fails, agents isolate stack trace and push fix patches.</p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={vercelAutoFix}
-                  onChange={(e) => setVercelAutoFix(e.target.checked)}
-                  className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500 cursor-pointer"
-                />
-              </div>
-
-              {/* Environment Variables */}
-              <div className="space-y-1.5 pt-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">
-                    Environment Variables ({envVars.length})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddEnvVar}
-                    className="inline-flex items-center gap-1 rounded-md bg-inset border border-line px-2 py-0.5 text-2xs font-semibold text-ink hover:bg-hover transition-all cursor-pointer"
-                  >
-                    <Plus size={10} />
-                    <span>Add Variable</span>
-                  </button>
-                </div>
-
-                <div className="space-y-1.5">
-                  {envVars.map((env) => (
-                    <div key={env.id} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={env.key}
-                        onChange={(e) => handleUpdateEnvVar(env.id, 'key', e.target.value)}
-                        placeholder="KEY (e.g. DATABASE_URL)"
-                        className="w-1/3 rounded-lg border border-line bg-inset/40 px-2 py-1 font-mono text-2xs text-ink uppercase"
-                      />
-                      <input
-                        type="text"
-                        value={env.value}
-                        onChange={(e) => handleUpdateEnvVar(env.id, 'value', e.target.value)}
-                        placeholder="value..."
-                        className="flex-1 rounded-lg border border-line bg-inset/40 px-2 py-1 font-mono text-2xs text-ink"
-                      />
-                      {envVars.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveEnvVar(env.id)}
-                          className="text-ink-muted hover:text-red-400 p-1 cursor-pointer"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <input
+                type="checkbox"
+                checked={vercelAutoDeploy}
+                onChange={(e) => setVercelAutoDeploy(e.target.checked)}
+                onClick={(e) => e.stopPropagation()}
+                className="h-4 w-4 rounded border-line text-emerald-600 focus:ring-emerald-500 cursor-pointer mt-1"
+              />
             </div>
 
             {/* Repository & Deployment Prompt Goal */}
