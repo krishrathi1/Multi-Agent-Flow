@@ -32,6 +32,7 @@ import { Tabs } from '../components/ui/Tabs';
 import { RunCompareModal } from '../components/process/RunCompareModal';
 import { LiveWaveform } from '../components/ui/LiveIcon';
 import { HourglassLoader } from '../components/ui/HourglassLoader';
+import { MarkdownRenderer } from '../components/ui/MarkdownRenderer';
 
 const stateTone: Record<PersistedRunState, Tone> = {
   QUEUED: 'neutral',
@@ -62,97 +63,6 @@ const triggerIcon = {
 } as const;
 
 type Filter = 'all' | PersistedRunState;
-
-/** Helper to render inline code tags, bold, and links cleanly without raw symbols */
-function renderInlineTokens(text: string) {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
-      const codeContent = part.slice(1, -1);
-      return (
-        <code
-          key={i}
-          className="rounded-md bg-inset px-1.5 py-0.5 font-mono text-[11px] font-semibold text-brand-600 dark:text-brand-400 border border-line-subtle inline-block my-0.5"
-        >
-          {codeContent}
-        </code>
-      );
-    }
-    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
-      return (
-        <strong key={i} className="font-bold text-ink">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
-      return (
-        <em key={i} className="italic text-ink font-medium">
-          {part.slice(1, -1)}
-        </em>
-      );
-    }
-    return part;
-  });
-}
-
-/** Industrial-grade step summary parser that eliminates raw markdown noise, extra spaces, and formats code tokens */
-function FormattedStepSummary({ text }: { text: string }) {
-  let cleanText = text.trim();
-  // Strip raw JSON encapsulation if present
-  try {
-    if (cleanText.startsWith('{') && cleanText.endsWith('}')) {
-      const parsed = JSON.parse(cleanText);
-      if (typeof parsed.summary === 'string') cleanText = parsed.summary;
-      else if (typeof parsed.message === 'string') cleanText = parsed.message;
-    }
-  } catch {
-    /* ignore */
-  }
-
-  // Strip code block fence if wrapped
-  if (cleanText.startsWith('```')) {
-    cleanText = cleanText.replace(/^```[a-zA-Z0-9_-]*\n?/, '').replace(/```$/, '').trim();
-  }
-
-  const lines = cleanText.split('\n');
-
-  return (
-    <div className="space-y-2 text-xs leading-relaxed text-ink/90 font-sans mt-2 max-h-52 sm:max-h-60 overflow-y-auto no-scrollbar pr-1 scroll-smooth">
-      {lines.map((line, idx) => {
-        const trimmed = line.trim();
-        if (!trimmed) return null;
-
-        // Clean headings
-        if (trimmed.startsWith('#')) {
-          const headingText = trimmed.replace(/^#+\s*/, '');
-          return (
-            <h5 key={idx} className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider pt-1">
-              {renderInlineTokens(headingText)}
-            </h5>
-          );
-        }
-
-        // Clean bullet items
-        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-          const bulletText = trimmed.substring(2).trim();
-          return (
-            <div key={idx} className="flex items-start gap-2 ml-1 text-xs">
-              <span className="text-brand-500 font-bold mt-0.5">•</span>
-              <span className="flex-1 leading-relaxed">{renderInlineTokens(bulletText)}</span>
-            </div>
-          );
-        }
-
-        return (
-          <p key={idx} className="text-xs leading-relaxed font-normal">
-            {renderInlineTokens(trimmed)}
-          </p>
-        );
-      })}
-    </div>
-  );
-}
 
 /** Expandable row showing a run and, when opened, its per-stage detail. */
 function RunRow({ run }: { run: ProcessRun }) {
@@ -309,7 +219,9 @@ function RunRow({ run }: { run: ProcessRun }) {
                         </div>
                       </div>
                       {s.summary && (
-                        <FormattedStepSummary text={s.summary} />
+                        <div className="mt-2">
+                          <MarkdownRenderer content={s.summary} maxHeight="max-h-60 sm:max-h-72" />
+                        </div>
                       )}
                       {s.error && (
                         <p className="mt-2 text-xs text-rose-600 dark:text-rose-400 font-medium bg-rose-500/10 p-2.5 rounded-lg border border-rose-500/20">

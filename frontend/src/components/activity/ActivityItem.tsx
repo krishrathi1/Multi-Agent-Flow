@@ -3,39 +3,7 @@ import type { Activity } from '../../types';
 import { timeAgo, cn } from '../../lib/utils';
 import { activityIconFor, activityToneFor, activityLabel, tones } from '../../lib/design';
 import { Clock, FileCode, Check, Copy, ChevronRight, FileText, AlertCircle, Wrench } from 'lucide-react';
-
-/** Helper to render inline code tags, bold, and links cleanly without raw symbols */
-function renderInlineTokens(text: string) {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
-      const codeContent = part.slice(1, -1);
-      return (
-        <code
-          key={i}
-          className="rounded-md bg-inset px-1.5 py-0.5 font-mono text-[11px] font-semibold text-brand-600 dark:text-brand-400 border border-line-subtle inline-block my-0.5"
-        >
-          {codeContent}
-        </code>
-      );
-    }
-    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
-      return (
-        <strong key={i} className="font-bold text-ink">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
-      return (
-        <em key={i} className="italic text-ink font-medium">
-          {part.slice(1, -1)}
-        </em>
-      );
-    }
-    return part;
-  });
-}
+import { MarkdownRenderer } from '../ui/MarkdownRenderer';
 
 /** Clean up markdown fences or quotes from summary strings */
 function formatSummaryText(raw: string): string {
@@ -166,11 +134,7 @@ export function ActivityItem({ activity }: { activity: Activity }) {
                     <span>{copied ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
-                <div className="max-h-52 sm:max-h-60 overflow-y-auto no-scrollbar pr-1">
-                  <p className="text-xs text-ink/90 font-sans leading-relaxed whitespace-pre-wrap">
-                    {renderInlineTokens(formatSummaryText(summary))}
-                  </p>
-                </div>
+                <MarkdownRenderer content={summary} maxHeight="max-h-52 sm:max-h-60" />
               </div>
             )}
 
