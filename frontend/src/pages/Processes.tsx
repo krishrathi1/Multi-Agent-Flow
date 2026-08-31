@@ -141,7 +141,7 @@ function ProcessCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-t border-line-subtle px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2 border-t border-line-subtle px-3 py-2.5">
         {/* Primary run control. Start brings every agent in the chain online;
             pause idles them without discarding history. */}
         {running ? (
