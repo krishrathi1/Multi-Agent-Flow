@@ -29,7 +29,7 @@ export function ActivityItem({ activity }: { activity: Activity }) {
 
   // Extract common smart fields
   const summary = typeof metadata?.summary === 'string' && metadata.summary.trim().length > 0 ? metadata.summary : null;
-  const files = Array.isArray(metadata?.files) ? (metadata.files as string[]).filter(Boolean) : [];
+  const metadataFiles = Array.isArray(metadata?.files) ? (metadata.files as string[]).filter(Boolean) : [];
   const error = typeof metadata?.error === 'string' && metadata.error.trim().length > 0 ? metadata.error : null;
   const toolName = typeof metadata?.tool === 'string' && metadata.tool.trim().length > 0 ? metadata.tool : null;
 
@@ -37,7 +37,21 @@ export function ActivityItem({ activity }: { activity: Activity }) {
     ? Object.keys(metadata).filter((k) => !['summary', 'files', 'error', 'tool'].includes(k))
     : [];
 
-  const hasExpandableContent = Boolean(summary || files.length > 0 || error || toolName || otherKeys.length > 0);
+  // Parse message for files if formatted as "lead — created file1, file2..."
+  let messageLead = activity.message;
+  let inlineFiles: string[] = [];
+  if (activity.message.includes(' — created ')) {
+    const [lead, fileListStr] = activity.message.split(' — created ');
+    messageLead = lead;
+    inlineFiles = fileListStr
+      .replace(/\.$/, '')
+      .split(',')
+      .map((f) => f.trim())
+      .filter(Boolean);
+  }
+
+  const allFiles = [...new Set([...inlineFiles, ...metadataFiles])];
+  const hasExpandableContent = Boolean(summary || error || toolName || otherKeys.length > 0);
 
   const handleCopyRaw = () => {
     if (!metadata) return;
@@ -77,17 +91,11 @@ export function ActivityItem({ activity }: { activity: Activity }) {
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="block truncate text-xs sm:text-[13px] font-bold text-ink">
-                {agentName}
-              </span>
-              <span className="inline-flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle text-[10px] font-semibold text-ink-muted font-mono">
-                ▷ {labelText.toLowerCase()}
-              </span>
-            </div>
-
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-2xs text-ink-muted font-medium font-mono">
-              <Clock size={10} className="text-ink-faint" />
+            <span className="block truncate text-xs sm:text-[13px] font-bold text-ink" title={agentName}>
+              {agentName}
+            </span>
+            <div className="mt-0.5 flex items-center gap-1.5 text-2xs text-ink-muted font-medium font-mono">
+              <Clock size={11} className="text-ink-faint" />
               <span>{timeAgo(activity.createdAt)}</span>
             </div>
           </div>
@@ -114,17 +122,11 @@ export function ActivityItem({ activity }: { activity: Activity }) {
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="block truncate text-xs sm:text-[13px] font-bold text-ink">
-                {agentName}
-              </span>
-              <span className="inline-flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle text-[10px] font-semibold text-ink-muted font-mono">
-                ▷ {labelText.toLowerCase()}
-              </span>
-            </div>
-
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-2xs text-ink-muted font-medium font-mono">
-              <Clock size={10} className="text-ink-faint" />
+            <span className="block truncate text-xs sm:text-[13px] font-bold text-ink" title={agentName}>
+              {agentName}
+            </span>
+            <div className="mt-0.5 flex items-center gap-1.5 text-2xs text-ink-muted font-medium font-mono">
+              <Clock size={11} className="text-ink-faint" />
               <span>{timeAgo(activity.createdAt)}</span>
             </div>
           </div>
@@ -142,20 +144,36 @@ export function ActivityItem({ activity }: { activity: Activity }) {
         </div>
       )}
 
-      {/* Message summary & expanded details */}
+      {/* Message summary & files */}
       <div className="px-4 pb-3.5 pt-0 space-y-2.5">
         {/* Main Message */}
-        <p className={cn(
-          'text-xs leading-relaxed text-ink/90 font-medium break-words',
-          hasExpandableContent ? 'pl-7 sm:pl-7.5' : 'pl-12 sm:pl-12'
-        )}>
-          {activity.message}
-        </p>
+        <div className={cn('space-y-2', hasExpandableContent ? 'pl-7 sm:pl-7.5' : 'pl-12 sm:pl-12')}>
+          <p className="text-xs leading-relaxed text-ink/90 font-medium break-words">
+            {messageLead}
+          </p>
 
-        {/* Collapsible details (when open or toggle is clicked) */}
+          {/* Files List as Clean Badges */}
+          {allFiles.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">Created:</span>
+              {allFiles.map((file, fIdx) => (
+                <span
+                  key={fIdx}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-inset border border-line-subtle text-[11px] font-mono font-semibold text-ink shadow-2xs hover:border-brand-500/40 transition-colors"
+                  title={file}
+                >
+                  <FileCode size={11} className="text-brand-500 shrink-0" />
+                  <span className="truncate max-w-[240px]">{file}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Collapsible extra details */}
         {open && hasExpandableContent && (
-          <div className="border-t border-line-subtle pt-3 pl-8 sm:pl-10 space-y-2.5 animate-scale-in">
-            {/* Summary Box */}
+          <div className="border-t border-line-subtle pt-3 pl-7 sm:pl-7.5 space-y-2.5 animate-scale-in">
+            {/* Deliverable Summary Box */}
             {summary && (
               <div className="rounded-xl border border-line-subtle bg-inset/70 p-3 space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
@@ -180,22 +198,6 @@ export function ActivityItem({ activity }: { activity: Activity }) {
               </div>
             )}
 
-            {/* Touched Files */}
-            {files.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">Files:</span>
-                {files.map((file, fIdx) => (
-                  <span
-                    key={fIdx}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-inset border border-line-subtle text-[11px] font-mono font-semibold text-ink"
-                  >
-                    <FileCode size={11} className="text-brand-500 shrink-0" />
-                    <span className="truncate max-w-[220px]">{file}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-
             {/* Tool Calls */}
             {toolName && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 text-[11px] font-mono font-semibold">
@@ -213,7 +215,7 @@ export function ActivityItem({ activity }: { activity: Activity }) {
             )}
 
             {/* Collapsible Raw Payload for debugging */}
-            {hasMetadata && (otherKeys.length > 0 || (!summary && !error)) && (
+            {hasMetadata && otherKeys.length > 0 && (
               <div className="pt-1">
                 <div className="flex items-center gap-2">
                   <button
