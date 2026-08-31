@@ -65,15 +65,37 @@ export function NotificationBell() {
     };
   }, [open]);
 
-  const openPanel = async () => {
-    const next = !open;
-    setOpen(next);
-    // Opening the panel is the read receipt.
-    if (next && unread > 0) {
-      await api.orchestration.markNotificationsRead().catch(() => {});
+  const openPanel = () => {
+    setOpen(!open);
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await api.orchestration.markNotificationsRead();
       setUnread(0);
-      setItems((list) => list.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
+      setItems((list) =>
+        list.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })),
+      );
+    } catch (err) {
+      console.error('Failed to mark notifications read:', err);
+      // Optimistically mark local state as read
+      setUnread(0);
+      setItems((list) =>
+        list.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })),
+      );
     }
+  };
+
+  const handleItemClick = async (n: AppNotification) => {
+    if (!n.readAt) {
+      api.orchestration.markNotificationsRead([n.id]).catch(() => {});
+      setUnread((prev) => Math.max(0, prev - 1));
+      setItems((list) =>
+        list.map((item) => (item.id === n.id ? { ...item, readAt: new Date().toISOString() } : item)),
+      );
+    }
+    if (n.link) navigate(n.link);
+    setOpen(false);
   };
 
   return (
@@ -115,20 +137,28 @@ export function NotificationBell() {
           <div className="flex items-center justify-between border-b border-line-subtle/80 px-4 py-3 bg-surface">
             <div className="flex items-center gap-2">
               <p className="text-sm font-bold text-ink">Notifications</p>
-              <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-2xs font-semibold text-brand-600 dark:text-brand-400">
-                {items.length}
-              </span>
+              {unread > 0 ? (
+                <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-2xs font-bold text-brand-600 dark:text-brand-400 animate-pulse">
+                  {unread} unread
+                </span>
+              ) : (
+                <span className="rounded-full bg-inset px-2 py-0.5 text-2xs font-medium text-ink-muted">
+                  0 unread
+                </span>
+              )}
             </div>
             <button
               type="button"
-              onClick={async () => {
-                await api.orchestration.markNotificationsRead().catch(() => {});
-                setUnread(0);
-                setItems((list) => list.map((n) => ({ ...n, readAt: new Date().toISOString() })));
-              }}
-              className="text-2xs font-medium text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+              onClick={handleMarkAllRead}
+              disabled={unread === 0}
+              className={cn(
+                'text-2xs font-bold transition-colors cursor-pointer',
+                unread > 0
+                  ? 'text-brand-600 dark:text-brand-400 hover:underline'
+                  : 'text-ink-faint cursor-default'
+              )}
             >
-              Mark all read
+              {unread > 0 ? 'Mark all read' : 'All read ✓'}
             </button>
           </div>
 
@@ -147,47 +177,55 @@ export function NotificationBell() {
                   const m = meta[n.kind] ?? { icon: Bell, tone: 'neutral' as Tone };
                   const Icon = m.icon;
                   const cleanTitle = n.title.replace(/^"/, '').replace(/"$/, '');
+                  const isRead = Boolean(n.readAt);
+
                   return (
                     <button
                       key={n.id}
                       type="button"
-                      onClick={() => {
-                        if (n.link) navigate(n.link);
-                        setOpen(false);
-                      }}
+                      onClick={() => handleItemClick(n)}
                       className={cn(
-                        'flex w-full items-start gap-3 rounded-xl p-2.5 text-left transition-all cursor-pointer',
-                        n.readAt
-                          ? 'hover:bg-hover'
-                          : 'bg-brand-500/5 hover:bg-brand-500/10',
+                        'flex w-full items-start gap-3 rounded-xl p-2.5 text-left transition-all cursor-pointer border',
+                        isRead
+                          ? 'border-transparent bg-transparent opacity-65 hover:opacity-100 hover:bg-hover/60'
+                          : 'border-brand-500/30 bg-brand-500/10 dark:bg-brand-500/15 hover:bg-brand-500/20 shadow-2xs'
                       )}
                     >
                       <span
                         className={cn(
-                          'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl border shadow-2xs',
-                          tones[m.tone].soft,
-                          tones[m.tone].text,
+                          'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl border shadow-2xs transition-colors',
+                          isRead
+                            ? 'bg-inset text-ink-muted border-line-subtle'
+                            : cn(tones[m.tone].soft, tones[m.tone].text)
                         )}
                       >
-                        <Icon size={15} strokeWidth={2} aria-hidden />
+                        <Icon size={15} strokeWidth={isRead ? 1.75 : 2.25} aria-hidden />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1">
+                        <div className="flex items-center justify-between gap-1.5">
                           <span
                             className={cn(
-                              'text-xs font-semibold leading-tight line-clamp-1',
-                              n.readAt ? 'text-ink-subtle' : 'text-ink',
+                              'text-xs leading-tight line-clamp-1 transition-colors',
+                              isRead ? 'font-medium text-ink-muted' : 'font-bold text-ink'
                             )}
                           >
                             {cleanTitle}
                           </span>
-                          {!n.readAt && (
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-brand-500" />
+                          {!isRead && (
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full bg-brand-500 shadow-[0_0_8px_rgba(53,133,251,0.8)]"
+                              title="Unread notification"
+                            />
                           )}
                         </div>
 
                         {n.body && (
-                          <p className="mt-1 text-2xs text-ink-muted line-clamp-2 leading-relaxed">
+                          <p
+                            className={cn(
+                              'mt-1 text-2xs line-clamp-2 leading-relaxed',
+                              isRead ? 'text-ink-faint' : 'text-ink-muted'
+                            )}
+                          >
                             {n.body.includes('$0.0000') ? n.body.replace('$0.0000', '$0.0024') : n.body}
                           </p>
                         )}
