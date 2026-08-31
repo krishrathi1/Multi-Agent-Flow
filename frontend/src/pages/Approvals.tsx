@@ -1,18 +1,54 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Header } from '@/components/layout/Header';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { api } from '@/lib/api';
 import { cn, timeAgo } from '@/lib/utils';
 import type { Approval, Board, ApprovalStatus } from '@/types';
-import { ShieldCheck, CheckCircle2, XCircle, Clock, AlertTriangle, ChevronRight, FileText, UserCheck } from 'lucide-react';
+import {
+  ShieldCheck,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  ChevronRight,
+  FileText,
+  UserCheck,
+  Filter,
+  Check,
+  ChevronDown,
+  Layers,
+  Sparkles,
+  Bot,
+  Activity,
+} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { HourglassLoader } from '@/components/ui/HourglassLoader';
+import { LiveWaveform } from '@/components/ui/LiveIcon';
 
-// ─── Status Styling ──────────────────────────────────
+// ─── Status Configuration ─────────────────────────────
 
-const statusConfig: Record<ApprovalStatus, { color: string; bg: string; border: string; label: string }> = {
-  PENDING: { color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-500/15', border: 'border-amber-500/30', label: 'Pending' },
-  APPROVED: { color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', label: 'Approved' },
-  REJECTED: { color: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-500/15', border: 'border-rose-500/30', label: 'Rejected' },
+const statusConfig: Record<ApprovalStatus, { color: string; bg: string; border: string; label: string; icon: typeof CheckCircle2 }> = {
+  PENDING: {
+    color: 'text-amber-600 dark:text-amber-400',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/25',
+    label: 'Pending Review',
+    icon: Clock,
+  },
+  APPROVED: {
+    color: 'text-emerald-600 dark:text-emerald-400',
+    bg: 'bg-emerald-500/10',
+    border: 'border-emerald-500/25',
+    label: 'Approved',
+    icon: CheckCircle2,
+  },
+  REJECTED: {
+    color: 'text-rose-600 dark:text-rose-400',
+    bg: 'bg-rose-500/10',
+    border: 'border-rose-500/25',
+    label: 'Rejected',
+    icon: XCircle,
+  },
 };
 
 interface ApprovalStats {
@@ -22,7 +58,87 @@ interface ApprovalStats {
   total: number;
 }
 
-// ─── Main Component ──────────────────────────────────
+// ─── Custom Select Dropdown ──────────────────────────
+
+function CustomSelect<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  icon: Icon,
+}: {
+  label: string;
+  value: T;
+  onChange: (val: T) => void;
+  options: Array<{ value: T; label: string; count?: number }>;
+  icon?: typeof Filter;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value) ?? options[0];
+
+  return (
+    <div className="relative min-w-[150px]" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'h-9 px-3 rounded-xl bg-inset border text-xs text-ink flex items-center justify-between gap-2 shadow-2xs transition-all cursor-pointer w-full',
+          open ? 'border-brand-500 ring-2 ring-brand-500/10' : 'border-line hover:border-line-strong'
+        )}
+      >
+        <div className="flex items-center gap-1.5 truncate">
+          {Icon && <Icon size={12} className="text-brand-500 shrink-0" />}
+          <span className="font-semibold text-ink truncate">{selected?.label}</span>
+          {selected?.count !== undefined && (
+            <span className="text-[10px] text-ink-muted font-mono bg-surface px-1.5 py-0.2 rounded border border-line-subtle">
+              {selected.count}
+            </span>
+          )}
+        </div>
+        <ChevronDown size={13} className={cn('text-ink-muted shrink-0 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1.5 left-0 w-full min-w-[170px] rounded-xl bg-surface/95 backdrop-blur-xl border border-line shadow-xl p-1 space-y-0.5 animate-scale-in max-h-56 overflow-y-auto no-scrollbar">
+          {options.map((opt) => {
+            const isSelected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors cursor-pointer text-left',
+                  isSelected
+                    ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
+                    : 'text-ink-muted hover:bg-hover hover:text-ink font-medium'
+                )}
+              >
+                <span className="truncate">{opt.label}</span>
+                {isSelected && <Check size={13} className="text-brand-500 shrink-0 ml-1" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Approvals Component ────────────────────────
 
 export function Approvals() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
@@ -79,99 +195,137 @@ export function Approvals() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Header title="Approvals" subtitle="Review and approve autonomous agent action requests" />
-        <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      </div>
-    );
-  }
+  const statusOptions = [
+    { value: 'ALL' as const, label: 'All Statuses', count: stats?.total },
+    { value: 'PENDING' as const, label: 'Pending Review', count: stats?.pending },
+    { value: 'APPROVED' as const, label: 'Approved', count: stats?.approved },
+    { value: 'REJECTED' as const, label: 'Rejected', count: stats?.rejected },
+  ];
+
+  const boardOptions = [
+    { value: 'ALL', label: 'All Boards' },
+    ...boards.map((b) => ({ value: b.id, label: b.name })),
+  ];
 
   return (
     <div className="space-y-6">
-      <Header title="Approvals" subtitle="Review and approve autonomous agent action requests" />
+      <PageHeader
+        icon={ShieldCheck}
+        title="Approvals"
+        description="Human-in-the-loop review pipeline and audit gate for sensitive autonomous agent executions"
+      />
 
-      {/* Stats Bar */}
-      {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard label="Total Reviews" count={stats.total} color="text-ink" bg="bg-surface" border="border-line" />
-          <StatCard
-            label="Pending Action"
-            count={stats.pending}
-            color="text-amber-700 dark:text-amber-300"
-            bg="bg-amber-500/10"
-            border="border-amber-500/30"
-            pulse={stats.pending > 0}
-          />
-          <StatCard label="Approved" count={stats.approved} color="text-emerald-700 dark:text-emerald-300" bg="bg-emerald-500/10" border="border-emerald-500/30" />
-          <StatCard label="Rejected" count={stats.rejected} color="text-rose-700 dark:text-rose-300" bg="bg-rose-500/10" border="border-rose-500/30" />
-        </div>
-      )}
-
-      {/* Filter Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-surface border border-line rounded-2xl p-4 shadow-2xs">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">Filters:</span>
-
-          {/* Status filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as ApprovalStatus | 'ALL')}
-            className="text-xs font-semibold bg-canvas border border-line text-ink rounded-xl px-3 py-1.5 focus:outline-none focus:border-brand-500 shadow-2xs"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="PENDING">Pending Review</option>
-            <option value="APPROVED">Approved</option>
-            <option value="REJECTED">Rejected</option>
-          </select>
-
-          {/* Board filter */}
-          <select
-            value={boardFilter}
-            onChange={(e) => setBoardFilter(e.target.value)}
-            className="text-xs font-semibold bg-canvas border border-line text-ink rounded-xl px-3 py-1.5 focus:outline-none focus:border-brand-500 shadow-2xs"
-          >
-            <option value="ALL">All Boards</option>
-            {boards.map((board) => (
-              <option key={board.id} value={board.id}>
-                {board.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Pending count badge */}
-        {stats && stats.pending > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-bold shadow-2xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-            </span>
-            <span>
-              {stats.pending} pending human review{stats.pending !== 1 ? 's' : ''}
-            </span>
+      {/* 4 Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Total Reviews</span>
+            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center">
+              <ShieldCheck size={16} />
+            </div>
           </div>
-        )}
+          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
+            {stats?.total ?? 0}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Historical audit submissions</p>
+        </div>
+
+        <div className="rounded-2xl border border-amber-500/20 bg-surface p-4.5 shadow-2xs hover:border-amber-500/40 hover:shadow-xs transition-all">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Pending Action</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center">
+              <Clock size={16} className={stats?.pending ? 'animate-pulse' : ''} />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold tracking-tight font-mono text-amber-600 dark:text-amber-400">
+            {stats?.pending ?? 0}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Awaiting human sign-off</p>
+        </div>
+
+        <div className="rounded-2xl border border-emerald-500/20 bg-surface p-4.5 shadow-2xs hover:border-emerald-500/40 hover:shadow-xs transition-all">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Approved</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+              <CheckCircle2 size={16} />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold tracking-tight font-mono text-emerald-600 dark:text-emerald-400">
+            {stats?.approved ?? 0}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Verified & executed</p>
+        </div>
+
+        <div className="rounded-2xl border border-rose-500/20 bg-surface p-4.5 shadow-2xs hover:border-rose-500/40 hover:shadow-xs transition-all">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Rejected</span>
+            <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center">
+              <XCircle size={16} />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold tracking-tight font-mono text-rose-600 dark:text-rose-400">
+            {stats?.rejected ?? 0}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Blocked by reviewers</p>
+        </div>
+      </div>
+
+      {/* Filter Toolbar Container */}
+      <div className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1">
+              <Filter size={12} className="text-brand-500" />
+              Filter By:
+            </span>
+
+            <CustomSelect
+              label="Status"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={statusOptions}
+            />
+
+            <CustomSelect
+              label="Board"
+              value={boardFilter}
+              onChange={setBoardFilter}
+              options={boardOptions}
+              icon={Layers}
+            />
+          </div>
+
+          {stats && stats.pending > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 text-xs font-bold">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              </span>
+              <span>{stats.pending} pending human review{stats.pending !== 1 ? 's' : ''}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Approval List */}
-      {approvals.length === 0 ? (
-        <div className="rounded-2xl border border-line bg-surface p-12 text-center shadow-2xs space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center shadow-xs">
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <HourglassLoader size={48} label="Loading approval queue..." />
+        </div>
+      ) : approvals.length === 0 ? (
+        <div className="rounded-2xl border border-line-subtle bg-surface p-12 text-center shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center shadow-2xs mb-3">
             <CheckCircle2 size={24} />
           </div>
-          <h3 className="text-base font-bold text-ink">No Pending Approvals</h3>
+          <h3 className="text-sm font-bold text-ink mb-1">No Approvals Pending</h3>
           <p className="text-xs text-ink-muted max-w-md mx-auto leading-relaxed">
             {statusFilter !== 'ALL'
-              ? `No ${statusFilter.toLowerCase()} approvals found matching the selected filters.`
-              : 'There are no approvals to review right now. Approvals will appear here when agents request human review before sensitive actions.'}
+              ? `No ${statusFilter.toLowerCase()} requests found matching the active filter.`
+              : 'All autonomous agent actions have been resolved. Approvals will appear here when agents request human sign-off.'}
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           {approvals.map((approval) => (
             <ApprovalCard
               key={approval.id}
@@ -186,35 +340,7 @@ export function Approvals() {
   );
 }
 
-// ─── Stat Card ───────────────────────────────────────
-
-function StatCard({
-  label,
-  count,
-  color,
-  bg,
-  border,
-  pulse,
-}: {
-  label: string;
-  count: number;
-  color: string;
-  bg: string;
-  border: string;
-  pulse?: boolean;
-}) {
-  return (
-    <div className={cn('rounded-2xl border p-4 shadow-2xs flex flex-col justify-between space-y-2', bg, border)}>
-      <div className="flex items-center gap-2">
-        {pulse && <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />}
-        <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">{label}</span>
-      </div>
-      <span className={cn('text-2xl font-bold font-mono', color)}>{count}</span>
-    </div>
-  );
-}
-
-// ─── Approval Card ───────────────────────────────────
+// ─── Approval Item Card ──────────────────────────────
 
 function ApprovalCard({
   approval,
@@ -230,6 +356,7 @@ function ApprovalCard({
 
   const style = statusConfig[approval.status];
   const isPending = approval.status === 'PENDING';
+  const StatusIcon = style.icon;
 
   const handleActionClick = (action: 'approve' | 'reject') => {
     if (confirmAction === action) {
@@ -241,94 +368,82 @@ function ApprovalCard({
     }
   };
 
-  const handleCardClick = () => {
-    if (confirmAction) setConfirmAction(null);
-  };
-
   return (
     <div
       className={cn(
-        'rounded-2xl border p-5 transition-all shadow-2xs',
-        isPending ? 'border-line-strong bg-surface' : 'border-line bg-surface/70',
+        'rounded-2xl border p-4.5 sm:p-5 transition-all shadow-2xs',
+        isPending
+          ? 'border-amber-500/30 bg-surface shadow-xs'
+          : 'border-line-subtle bg-surface/80 hover:border-line-strong',
       )}
-      onClick={handleCardClick}
+      onClick={() => confirmAction && setConfirmAction(null)}
     >
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-        {/* Left content */}
+        {/* Left Content */}
         <div className="flex-1 min-w-0 space-y-3">
-          {/* Top row: status badge + action type + timestamp */}
+          {/* Top Row: Status Badge + Action Type + Timestamp */}
           <div className="flex flex-wrap items-center gap-2.5">
             <span
               className={cn(
-                'px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border',
+                'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border',
                 style.bg,
                 style.border,
                 style.color,
               )}
             >
+              <StatusIcon size={11} />
               {style.label}
             </span>
 
-            <span className="text-xs font-mono font-bold text-ink bg-inset px-2.5 py-0.5 rounded-md border border-line-subtle">
+            <span className="text-xs font-mono font-bold text-ink bg-inset px-2.5 py-0.5 rounded-lg border border-line-subtle">
               {approval.actionType}
             </span>
 
-            <span className="text-2xs font-medium text-ink-muted ml-auto shrink-0">{timeAgo(approval.createdAt)}</span>
+            <span className="text-2xs font-mono font-medium text-ink-muted ml-auto shrink-0">
+              {timeAgo(approval.createdAt)}
+            </span>
           </div>
 
-          {/* Board link */}
-          {approval.board && (
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-2xs font-bold text-ink-muted uppercase">Board:</span>
-              <Link
-                to={`/boards/${approval.boardId}`}
-                className="font-bold text-brand-600 dark:text-brand-400 hover:underline transition-colors"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {approval.board.name}
-              </Link>
-            </div>
-          )}
+          {/* Context Details */}
+          <div className="flex flex-wrap items-center gap-y-1.5 gap-x-4 text-xs font-medium">
+            {approval.board && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-2xs font-bold text-ink-muted uppercase">Board:</span>
+                <Link
+                  to={`/boards/${approval.boardId}`}
+                  className="font-bold text-brand-600 dark:text-brand-400 hover:underline transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {approval.board.name}
+                </Link>
+              </div>
+            )}
 
-          {/* Task title */}
-          {approval.task && (
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-2xs font-bold text-ink-muted uppercase">Task:</span>
-              <span className="text-xs font-bold text-ink truncate">{approval.task.title}</span>
-            </div>
-          )}
+            {approval.task && (
+              <div className="flex items-center gap-1.5 truncate max-w-sm">
+                <span className="text-2xs font-bold text-ink-muted uppercase shrink-0">Task:</span>
+                <span className="text-xs font-bold text-ink truncate">{approval.task.title}</span>
+              </div>
+            )}
 
-          {/* Agent info */}
-          {approval.agent && (
-            <div className="flex items-center gap-2">
-              <span className="text-2xs font-bold text-ink-muted uppercase">Agent:</span>
-              {approval.agent.avatar ? (
-                <img
-                  src={approval.agent.avatar}
-                  alt={approval.agent.displayName}
-                  className="w-5 h-5 rounded-full border border-line"
-                />
-              ) : (
-                <div className="w-5 h-5 rounded-full bg-brand-500/15 border border-brand-500/30 flex items-center justify-center">
-                  <span className="text-[10px] text-brand-700 dark:text-brand-300 font-bold">
-                    {approval.agent.displayName.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-              )}
-              <span className="text-xs font-semibold text-ink">{approval.agent.displayName}</span>
-            </div>
-          )}
+            {approval.agent && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-2xs font-bold text-ink-muted uppercase">Agent:</span>
+                <span className="text-xs font-bold text-ink">{approval.agent.displayName}</span>
+              </div>
+            )}
+          </div>
 
-          {/* Confidence score */}
+          {/* AI Confidence Meter */}
           {approval.confidence !== null && approval.confidence !== undefined && (
-            <div className="max-w-xs space-y-1">
+            <div className="max-w-xs space-y-1.5">
               <div className="flex items-center justify-between text-2xs font-bold">
-                <span className="text-ink-muted uppercase">AI Confidence</span>
-                <span className="text-ink font-mono">{Math.round(approval.confidence * 100)}%</span>
+                <span className="text-ink-muted uppercase">Model Confidence</span>
+                <span className="text-ink font-mono font-bold">{Math.round(approval.confidence * 100)}%</span>
               </div>
               <div className="w-full h-1.5 rounded-full bg-inset overflow-hidden border border-line-subtle">
                 <div
-                  className={cn('h-full rounded-full transition-all', {
+                  className={cn('h-full rounded-full transition-all duration-300', {
                     'bg-emerald-500': approval.confidence >= 0.8,
                     'bg-amber-500': approval.confidence >= 0.5 && approval.confidence < 0.8,
                     'bg-rose-500': approval.confidence < 0.5,
@@ -339,48 +454,49 @@ function ApprovalCard({
             </div>
           )}
 
-          {/* Payload preview */}
+          {/* Payload Details Accordion */}
           {approval.payload && (
             <div>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setPayloadExpanded(!payloadExpanded);
                 }}
-                className="flex items-center gap-1 text-2xs font-bold text-brand-600 dark:text-brand-400 hover:underline"
+                className="flex items-center gap-1 text-2xs font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
               >
                 <ChevronRight
                   size={12}
                   className={cn(
-                    'transition-transform',
+                    'transition-transform duration-200',
                     payloadExpanded && 'rotate-90',
                   )}
                 />
-                <span className="uppercase tracking-wider">Payload Details</span>
+                <span className="uppercase tracking-wider">Payload Inspector</span>
               </button>
               {payloadExpanded && (
-                <pre className="mt-2 p-3.5 rounded-xl bg-canvas border border-line text-xs text-ink font-mono overflow-x-auto max-h-48 overflow-y-auto shadow-2xs">
+                <pre className="mt-2 p-3.5 rounded-xl bg-inset border border-line text-xs text-ink font-mono overflow-x-auto max-h-48 overflow-y-auto shadow-2xs no-scrollbar">
                   {JSON.stringify(approval.payload, null, 2)}
                 </pre>
               )}
             </div>
           )}
 
-          {/* Resolved timestamp */}
+          {/* Resolution Stamp */}
           {approval.resolvedAt && (
-            <div className="text-2xs text-ink-muted font-medium pt-1">
+            <div className="text-[11px] text-ink-muted font-mono pt-0.5">
               Resolved {timeAgo(approval.resolvedAt)}
             </div>
           )}
         </div>
 
-        {/* Right: Action buttons for pending items */}
+        {/* Action Buttons for Pending Items */}
         {isPending && (
-          <div className="flex md:flex-col gap-2 shrink-0 self-end md:self-start" onClick={(e) => e.stopPropagation()}>
+          <div className="flex md:flex-col gap-2 shrink-0 self-end md:self-start pt-2 md:pt-0" onClick={(e) => e.stopPropagation()}>
             <Button
               size="sm"
               variant={confirmAction === 'approve' ? 'primary' : 'secondary'}
-              className={confirmAction === 'approve' ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'text-emerald-700 dark:text-emerald-300 border-emerald-500/30'}
+              className={confirmAction === 'approve' ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10'}
               onClick={() => handleActionClick('approve')}
             >
               {confirmAction === 'approve' ? 'Confirm Approval' : 'Approve'}
@@ -388,7 +504,7 @@ function ApprovalCard({
             <Button
               size="sm"
               variant={confirmAction === 'reject' ? 'primary' : 'secondary'}
-              className={confirmAction === 'reject' ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'text-rose-700 dark:text-rose-300 border-rose-500/30'}
+              className={confirmAction === 'reject' ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10'}
               onClick={() => handleActionClick('reject')}
             >
               {confirmAction === 'reject' ? 'Confirm Reject' : 'Reject'}
@@ -399,3 +515,4 @@ function ApprovalCard({
     </div>
   );
 }
+
