@@ -563,152 +563,158 @@ export function Metrics() {
 
       {/* TAB 1: BY MODEL BREAKDOWN */}
       {activeTab === 'models' && (
-        <div className="space-y-2.5">
+        <div>
           {modelBreakdown.length === 0 ? (
             <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
               No model usage records found for this period.
             </div>
           ) : (
-            modelBreakdown.map((item) => (
-              <div
-                key={item.model}
-                className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line transition-all space-y-2"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
-                      <Layers size={15} />
+            <div className="max-h-[300px] sm:max-h-[340px] overflow-y-auto no-scrollbar pr-0.5 space-y-2">
+              {modelBreakdown.map((item) => (
+                <div
+                  key={item.model}
+                  className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line transition-all space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
+                        <Layers size={15} />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-bold font-mono text-ink truncate">{item.model}</h4>
+                        <p className="text-[10px] text-ink-muted font-mono">{formatCompact(item.tokens)} tokens · {item.count} calls</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xs sm:text-sm font-bold font-mono text-ink truncate">{item.model}</h4>
-                      <p className="text-[10px] text-ink-muted font-mono">{formatCompact(item.tokens)} tokens · {item.count} calls</p>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(item.cost)}
+                      </span>
+                      <span className="text-[10px] text-ink-muted font-mono block">
+                        {item.percentage}% of total
+                      </span>
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <span className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(item.cost)}
-                    </span>
-                    <span className="text-[10px] text-ink-muted font-mono block">
-                      {item.percentage}% of total
-                    </span>
+                  {/* Progress bar */}
+                  <div className="w-full h-1.5 rounded-full bg-inset overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-purple-500 transition-all duration-500"
+                      style={{ width: `${Math.max(item.percentage, 4)}%` }}
+                    />
                   </div>
                 </div>
-
-                {/* Progress bar */}
-                <div className="w-full h-1.5 rounded-full bg-inset overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-purple-500 transition-all duration-500"
-                    style={{ width: `${Math.max(item.percentage, 4)}%` }}
-                  />
-                </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       )}
 
       {/* TAB 2: BY AGENT BREAKDOWN */}
       {activeTab === 'spend' && (
-        <div className="space-y-2.5">
+        <div>
           {agentCostBreakdown.length === 0 ? (
             <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
               No agent spend recorded yet. Run a production chain to generate usage.
             </div>
           ) : (
-            agentCostBreakdown.map((agent, i) => (
-              <div
-                key={agent.id}
-                className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line transition-all space-y-2"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="w-6 h-6 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 text-2xs font-bold flex items-center justify-center shrink-0">
-                      #{i + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <h4 className="text-xs sm:text-sm font-bold text-ink truncate">{agent.name}</h4>
-                      <p className="text-[10px] text-ink-muted font-mono">{formatCompact(agent.tokens)} tokens</p>
+            <div className="max-h-[300px] sm:max-h-[340px] overflow-y-auto no-scrollbar pr-0.5 space-y-2">
+              {agentCostBreakdown.map((agent, i) => (
+                <div
+                  key={agent.id}
+                  className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line transition-all space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-6 h-6 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 text-2xs font-bold flex items-center justify-center shrink-0">
+                        #{i + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-bold text-ink truncate">{agent.name}</h4>
+                        <p className="text-[10px] text-ink-muted font-mono">{formatCompact(agent.tokens)} tokens</p>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(agent.cost)}
+                      </span>
+                      <span className="text-[10px] text-ink-muted font-mono block">
+                        {agent.percentage}%
+                      </span>
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <span className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(agent.cost)}
-                    </span>
-                    <span className="text-[10px] text-ink-muted font-mono block">
-                      {agent.percentage}%
-                    </span>
+                  <div className="w-full h-1.5 rounded-full bg-inset overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-all duration-500"
+                      style={{ width: `${Math.max(agent.percentage, 4)}%` }}
+                    />
                   </div>
                 </div>
-
-                <div className="w-full h-1.5 rounded-full bg-inset overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-all duration-500"
-                    style={{ width: `${Math.max(agent.percentage, 4)}%` }}
-                  />
-                </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       )}
 
       {/* TAB 3: RECENT USAGE ACTIVITY STREAM */}
       {activeTab === 'activity' && (
-        <div className="space-y-4">
+        <div>
           {groupedUsage.length === 0 ? (
             <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
               No recent usage entries found.
             </div>
           ) : (
-            groupedUsage.map((group) => (
-              <div key={group.title} className="space-y-2">
-                <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted px-1">
-                  {group.title}
-                </span>
+            <div className="max-h-[320px] sm:max-h-[360px] overflow-y-auto no-scrollbar pr-0.5 space-y-4">
+              {groupedUsage.map((group) => (
+                <div key={group.title} className="space-y-1.5">
+                  <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted px-1 block sticky top-0 bg-canvas/80 backdrop-blur-xs py-0.5 z-10">
+                    {group.title}
+                  </span>
 
-                <div className="space-y-1.5">
-                  {group.items.map((usage) => {
-                    const agentName = usage.agent?.displayName || usage.agent?.name || 'Agent Execution';
-                    return (
-                      <button
-                        key={usage.id}
-                        type="button"
-                        onClick={() => setSelectedUsage(usage)}
-                        className="w-full rounded-2xl border border-line-subtle bg-surface p-3 sm:p-3.5 shadow-2xs hover:border-line hover:bg-hover/40 transition-all flex items-center justify-between gap-3 text-left cursor-pointer active:scale-[0.99]"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
-                            <Bot size={15} />
-                          </div>
-                          <div className="min-w-0">
-                            <span className="text-xs font-bold text-ink block truncate">{agentName}</span>
-                            <div className="flex items-center gap-1.5 text-[10px] text-ink-muted font-mono mt-0.5">
-                              <span className="px-1.5 py-0.2 rounded bg-inset border border-line-subtle">{usage.model}</span>
-                              <span>•</span>
-                              <span>{formatCompact(usage.totalTokens)} tok</span>
+                  <div className="space-y-1.5">
+                    {group.items.map((usage) => {
+                      const agentName = usage.agent?.displayName || usage.agent?.name || 'Agent Execution';
+                      return (
+                        <button
+                          key={usage.id}
+                          type="button"
+                          onClick={() => setSelectedUsage(usage)}
+                          className="w-full rounded-2xl border border-line-subtle bg-surface p-3 sm:p-3.5 shadow-2xs hover:border-line hover:bg-hover/40 transition-all flex items-center justify-between gap-3 text-left cursor-pointer active:scale-[0.99]"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+                              <Bot size={15} />
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-xs font-bold text-ink block truncate">{agentName}</span>
+                              <div className="flex items-center gap-1.5 text-[10px] text-ink-muted font-mono mt-0.5">
+                                <span className="px-1.5 py-0.2 rounded bg-inset border border-line-subtle">{usage.model}</span>
+                                <span>•</span>
+                                <span>{formatCompact(usage.totalTokens)} tok</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="text-right">
-                            <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400 block">
-                              {formatCurrency(usage.cost)}
-                            </span>
-                            <span className="text-[10px] text-ink-faint font-mono">
-                              {timeAgo(usage.createdAt)}
-                            </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="text-right">
+                              <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400 block">
+                                {formatCurrency(usage.cost)}
+                              </span>
+                              <span className="text-[10px] text-ink-faint font-mono">
+                                {timeAgo(usage.createdAt)}
+                              </span>
+                            </div>
+                            <ChevronRight size={14} className="text-ink-muted" />
                           </div>
-                          <ChevronRight size={14} className="text-ink-muted" />
-                        </div>
-                      </button>
-                    );
-                  })}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       )}
