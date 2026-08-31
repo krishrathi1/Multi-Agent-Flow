@@ -112,6 +112,8 @@ export function Topology() {
 
   const totalMessages = edges.reduce((n, e) => n + e.messageCount, 0);
 
+  const [viewTab, setViewTab] = useState<'graph' | 'list'>('graph');
+
   return (
     <>
       <PageHeader
@@ -126,24 +128,53 @@ export function Topology() {
           ) : undefined
         }
         actions={
-          <>
+          <div className="flex items-center gap-2">
             <ProcessScope align="right" />
             <Button variant="secondary" icon={RefreshCw} onClick={load} loading={loading}>
               Refresh
             </Button>
-          </>
+          </div>
         }
       />
 
+      {/* ── Mobile View Selector Pills ── */}
+      <div className="flex sm:hidden gap-1 bg-inset/50 rounded-xl p-1 border border-line w-fit shadow-2xs mb-4">
+        <button
+          type="button"
+          onClick={() => setViewTab('graph')}
+          className={cn(
+            'px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer',
+            viewTab === 'graph'
+              ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-2xs border border-line-subtle'
+              : 'text-ink-muted hover:text-ink'
+          )}
+        >
+          Graph View
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewTab('list')}
+          className={cn(
+            'px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer',
+            viewTab === 'list'
+              ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-2xs border border-line-subtle'
+              : 'text-ink-muted hover:text-ink'
+          )}
+        >
+          Connections List ({edges.length})
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <Card padding="none" className="overflow-hidden">
+        {/* Main Graph Card */}
+        <Card padding="none" className={cn('overflow-hidden', viewTab === 'list' && 'hidden sm:block')}>
           <CardHeader
             bordered
             icon={Network}
             title="Communication topology"
             description={`${nodes.length} agents · ${edges.length} links · ${totalMessages} messages`}
           />
-          <div className="relative h-[620px] bg-grid">
+          <div className="relative h-[360px] sm:h-[480px] lg:h-[580px] bg-grid">
             {loading ? (
               <div className="absolute inset-0 grid place-items-center">
                 <Spinner size={22} />
@@ -168,8 +199,55 @@ export function Topology() {
                 onSelect={setSelected}
               />
             )}
+
+            {/* Mobile tap hint pill */}
+            <div className="absolute bottom-2.5 left-2.5 sm:hidden px-2.5 py-1 rounded-full bg-surface/90 border border-line text-[10px] font-semibold text-ink-muted backdrop-blur-xs shadow-2xs">
+              Tap any node to inspect connections
+            </div>
           </div>
         </Card>
+
+        {/* Mobile Connections Roster (Visible when Tab is list on phone) */}
+        {viewTab === 'list' && (
+          <div className="block sm:hidden space-y-3">
+            <Card padding="none">
+              <CardHeader
+                bordered
+                icon={Network}
+                title="Active Communication Links"
+                description={`${edges.length} connections in total`}
+              />
+              <ul className="divide-y divide-line-subtle">
+                {edges.map((e, i) => {
+                  const s = nodes.find((n) => n.id === e.source);
+                  const t = nodes.find((n) => n.id === e.target);
+                  return (
+                    <li key={`${e.source}-${e.target}-${i}`} className="p-3 flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-ink truncate">
+                          <span>{s?.displayName ?? 'Unknown'}</span>
+                          <span className="text-brand-500 font-mono">→</span>
+                          <span>{t?.displayName ?? 'Unknown'}</span>
+                        </div>
+                        {e.lastMessage && (
+                          <p className="text-[11px] text-ink-muted truncate font-mono">
+                            {e.lastMessage}
+                          </p>
+                        )}
+                      </div>
+                      <Chip tone="brand">{e.messageCount} msgs</Chip>
+                    </li>
+                  );
+                })}
+                {edges.length === 0 && (
+                  <li className="p-8 text-center text-xs text-ink-muted">
+                    No communication links recorded.
+                  </li>
+                )}
+              </ul>
+            </Card>
+          </div>
+        )}
 
         {/* ---- Inspector ---- */}
         <div className="space-y-4">
@@ -221,22 +299,22 @@ export function Topology() {
                       return (
                         <li
                           key={`${e.source}-${e.target}-${i}`}
-                          className="flex items-center gap-2 rounded-md bg-inset px-2.5 py-2"
+                          className="flex items-center gap-2 rounded-xl bg-inset px-3 py-2 text-xs border border-line-subtle"
                         >
                           <span
                             className={cn(
-                              'text-2xs font-semibold uppercase',
+                              'text-2xs font-bold uppercase tracking-wider',
                               outgoing
-                                ? 'text-brand-700 dark:text-brand-300'
+                                ? 'text-brand-600 dark:text-brand-400'
                                 : 'text-ink-faint',
                             )}
                           >
                             {outgoing ? 'to' : 'from'}
                           </span>
-                          <span className="min-w-0 flex-1 truncate text-sm text-ink-muted">
+                          <span className="min-w-0 flex-1 truncate font-semibold text-ink">
                             {other?.displayName ?? 'Unknown'}
                           </span>
-                          <Chip>{e.messageCount}</Chip>
+                          <Chip tone="brand">{e.messageCount} msgs</Chip>
                         </li>
                       );
                     })}
@@ -253,7 +331,7 @@ export function Topology() {
                 compact
                 icon={Share2}
                 title="Select an agent"
-                description="Click any node to inspect its connections."
+                description="Click any node in the graph to inspect its live connections and message exchange."
               />
             </Card>
           )}
@@ -261,7 +339,7 @@ export function Topology() {
           {/* ---- Busiest links ---- */}
           <Card padding="none">
             <CardHeader bordered title="Busiest links" description="By message volume" />
-            <ul className="p-2">
+            <ul className="p-2 divide-y divide-line-subtle sm:divide-y-0">
               {[...edges]
                 .sort((a, b) => b.messageCount - a.messageCount)
                 .slice(0, 6)
@@ -271,12 +349,12 @@ export function Topology() {
                   return (
                     <li
                       key={`${e.source}-${e.target}-${i}`}
-                      className="flex items-center gap-2 rounded-md p-2 transition-colors hover:wash"
+                      className="flex items-center gap-2 rounded-xl p-2.5 transition-colors hover:bg-hover"
                     >
-                      <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
-                        {s?.displayName ?? '—'} → {t?.displayName ?? '—'}
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
+                        {s?.displayName ?? '—'} <span className="text-brand-500 font-bold">→</span> {t?.displayName ?? '—'}
                       </span>
-                      <Chip>{e.messageCount}</Chip>
+                      <Chip tone="brand">{e.messageCount} msgs</Chip>
                     </li>
                   );
                 })}
