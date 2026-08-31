@@ -5,6 +5,7 @@ import {
   Wand2,
   Workflow,
   ArrowLeft,
+  ArrowRight,
   Terminal,
   Github,
   Server,
@@ -295,35 +296,68 @@ export function CreateProcessModal({
       }
       actions={
         step === 'describe' ? (
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={close} disabled={planning}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              icon={Wand2}
-              loading={planning}
-              onClick={handlePlan}
-            >
-              {planning ? 'Planning Agent Fleet…' : 'Build Agent Fleet with AI'}
-            </Button>
+          <div className="flex items-center justify-between w-full">
+            {/* Step indicator */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">1</span>
+                <span className="text-2xs font-semibold text-brand-600 dark:text-brand-400">Configure</span>
+              </div>
+              <ArrowRight size={12} className="text-ink-faint" />
+              <div className="flex items-center gap-1.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-inset border border-line-subtle text-[10px] font-bold text-ink-muted">2</span>
+                <span className="text-2xs font-medium text-ink-muted">Review</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={close} disabled={planning}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={planning ? Wand2 : ArrowRight}
+                loading={planning}
+                onClick={handlePlan}
+              >
+                {planning ? 'Planning…' : 'Next'}
+              </Button>
+            </div>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={ArrowLeft}
-              onClick={() => setStep('describe')}
-              disabled={creating}
-            >
-              Back
-            </Button>
-            <Button variant="primary" size="sm" icon={Bot} loading={creating} onClick={handleCreate}>
-              Deploy Production ({plan?.agents.length} agents)
-            </Button>
+          <div className="flex items-center justify-between w-full">
+            {/* Step indicator — step 2 active */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-inset border border-line-subtle text-[10px] font-bold text-ink-muted">1</span>
+                <span className="text-2xs font-medium text-ink-muted">Configure</span>
+              </div>
+              <ArrowRight size={12} className="text-ink-faint" />
+              <div className="flex items-center gap-1.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">2</span>
+                <span className="text-2xs font-semibold text-brand-600 dark:text-brand-400">Review</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={ArrowLeft}
+                onClick={() => setStep('describe')}
+                disabled={creating}
+              >
+                Back
+              </Button>
+              <Button variant="primary" size="sm" icon={Bot} loading={creating} onClick={handleCreate}>
+                Deploy Production ({plan?.agents.length} agents)
+              </Button>
+            </div>
           </div>
+
         )
       }
     >
