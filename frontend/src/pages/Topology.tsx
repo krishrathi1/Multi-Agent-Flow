@@ -235,7 +235,7 @@ export function Topology() {
                           </p>
                         )}
                       </div>
-                      <Chip tone="brand">{e.messageCount} msgs</Chip>
+                      <Chip>{e.messageCount} msgs</Chip>
                     </li>
                   );
                 })}
@@ -314,7 +314,7 @@ export function Topology() {
                           <span className="min-w-0 flex-1 truncate font-semibold text-ink">
                             {other?.displayName ?? 'Unknown'}
                           </span>
-                          <Chip tone="brand">{e.messageCount} msgs</Chip>
+                          <Chip>{e.messageCount} msgs</Chip>
                         </li>
                       );
                     })}
@@ -354,7 +354,7 @@ export function Topology() {
                       <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
                         {s?.displayName ?? '—'} <span className="text-brand-500 font-bold">→</span> {t?.displayName ?? '—'}
                       </span>
-                      <Chip tone="brand">{e.messageCount} msgs</Chip>
+                      <Chip>{e.messageCount} msgs</Chip>
                     </li>
                   );
                 })}
