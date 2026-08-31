@@ -321,10 +321,19 @@ export const api = {
     tools: (agentId: string, serverId: string) =>
       request(`/agents/${agentId}/mcp-servers/${serverId}/tools`),
     orgList: () => request<any[]>('/mcp'),
-    orgAdd: (data: { agentId: string; name: string; url: string; transport?: string }) =>
+    orgAdd: (data: { name: string; url: string; transport?: string; agentId?: string }) =>
       request('/mcp', { method: 'POST', body: JSON.stringify(data) }),
     orgRefresh: (serverId: string) =>
       request(`/mcp/${serverId}/refresh`, { method: 'POST' }),
+    orgUpdate: (serverId: string, data: Record<string, unknown>) =>
+      request(`/mcp/${serverId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    orgRemove: (serverId: string) =>
+      request(`/mcp/${serverId}`, { method: 'DELETE' }),
+    callTool: (serverId: string, toolName: string, args: Record<string, any> = {}) =>
+      request<{ success: boolean; result?: any; error?: string; durationMs?: number; executedAt?: string }>(
+        `/mcp/${serverId}/tools/${encodeURIComponent(toolName)}/call`,
+        { method: 'POST', body: JSON.stringify({ arguments: args }) },
+      ),
   },
   activities: {
     list: (params?: { agentId?: string; type?: string; processId?: string; limit?: number; offset?: number }) => {

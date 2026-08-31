@@ -177,6 +177,60 @@ export async function refreshMcpTools(serverId: string, agentId: string) {
   });
 }
 
+export async function callMcpTool(serverId: string, toolName: string, args: Record<string, any> = {}) {
+  return tracer.startActiveSpan('mcp.callTool', async (span) => {
+    try {
+      span.setAttribute('mcp.serverId', serverId);
+      span.setAttribute('mcp.toolName', toolName);
+      const server = await prisma.mcpServer.findFirst({ where: { id: serverId } });
+      if (!server) throw new Error('MCP server not found');
+      if (!server.enabled) throw new Error('MCP server is currently disabled');
+
+      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+      const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
+      const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+
+      let transport;
+      if (server.transport === 'SSE') {
+        transport = new SSEClientTransport(new URL(server.url));
+      } else {
+        transport = new StreamableHTTPClientTransport(new URL(server.url));
+      }
+
+      const client = new Client({ name: 'nexus-dashboard', version: '1.0.0' });
+      await client.connect(transport);
+
+      const startTime = Date.now();
+      const result = await client.callTool({
+        name: toolName,
+        arguments: args,
+      });
+      const durationMs = Date.now() - startTime;
+
+      await client.close();
+
+      logger.info({ mcpServerId: serverId, toolName, durationMs }, 'MCP tool executed directly');
+      return {
+        success: true,
+        result,
+        durationMs,
+        executedAt: new Date().toISOString(),
+      };
+    } catch (err: any) {
+      span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+      span.recordException(err);
+      logger.warn({ mcpServerId: serverId, toolName, error: err.message }, 'MCP tool execution failed');
+      return {
+        success: false,
+        error: err.message || 'Tool execution failed',
+        executedAt: new Date().toISOString(),
+      };
+    } finally {
+      span.end();
+    }
+  });
+}
+
 export async function getAllOrgMcpServers(organizationId: string) {
   return prisma.mcpServer.findMany({
     where: {

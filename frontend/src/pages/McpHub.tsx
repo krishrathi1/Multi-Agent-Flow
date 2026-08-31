@@ -17,6 +17,13 @@ import {
   Power,
   Sparkles,
   Check,
+  Play,
+  Terminal,
+  Code2,
+  XCircle,
+  Copy,
+  Clock,
+  Zap,
 } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -63,7 +70,7 @@ function CustomSelect({
         type="button"
         onClick={() => setOpen(!open)}
         className={cn(
-          'w-full h-10 px-3.5 py-2 rounded-xl bg-inset border text-xs text-ink flex items-center justify-between shadow-2xs transition-all cursor-pointer',
+          'w-full h-10 px-3.5 py-2 rounded-xl bg-inset border text-xs text-ink flex items-center justify-between shadow-2xs transition-all cursor-pointer outline-none focus:outline-none',
           open ? 'border-brand-500 ring-2 ring-brand-500/10' : 'border-line hover:border-line-strong'
         )}
       >
@@ -132,37 +139,45 @@ interface McpServerWithDetails extends McpServer {
 
 export function McpHub() {
   const [servers, setServers] = useState<McpServerWithDetails[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Add Server Form
-  const [selectedAgentId, setSelectedAgentId] = useState('');
+  // Add Standalone Server Form
   const [serverName, setServerName] = useState('');
   const [serverUrl, setServerUrl] = useState('');
   const [transport, setTransport] = useState<'SSE' | 'STDIO'>('SSE');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Interactive Tool Calling Modal State
+  const [activeToolCall, setActiveToolCall] = useState<{
+    serverId: string;
+    serverName: string;
+    tool: McpTool;
+  } | null>(null);
+  const [toolArgsText, setToolArgsText] = useState('{}');
+  const [toolExecuting, setToolExecuting] = useState(false);
+  const [toolResult, setToolResult] = useState<{
+    success: boolean;
+    result?: any;
+    error?: string;
+    durationMs?: number;
+    executedAt?: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const loadData = useCallback(async () => {
     try {
-      const [mcpData, agentsData] = await Promise.all([
-        api.mcp.orgList(),
-        api.agents.list(),
-      ]);
+      const mcpData = await api.mcp.orgList();
       setServers(mcpData);
-      setAgents(agentsData);
-      if (agentsData.length > 0 && !selectedAgentId) {
-        setSelectedAgentId(agentsData[0].id);
-      }
     } catch (err) {
       console.error('Failed to load MCP servers:', err);
     } finally {
       setLoading(false);
     }
-  }, [selectedAgentId]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -184,9 +199,7 @@ export function McpHub() {
 
   const handleToggleEnabled = async (server: McpServerWithDetails) => {
     try {
-      const updated = await api.mcp.update(server.agentId, server.id, {
-        enabled: !server.enabled,
-      });
+      await api.mcp.orgUpdate(server.id, { enabled: !server.enabled });
       setServers((prev) =>
         prev.map((s) => (s.id === server.id ? { ...s, enabled: !server.enabled } : s))
       );
@@ -198,7 +211,7 @@ export function McpHub() {
   const handleDelete = async (server: McpServerWithDetails) => {
     if (!confirm(`Are you sure you want to delete MCP server "${server.name}"?`)) return;
     try {
-      await api.mcp.remove(server.agentId, server.id);
+      await api.mcp.orgRemove(server.id);
       setServers((prev) => prev.filter((s) => s.id !== server.id));
     } catch (err) {
       console.error('Failed to delete MCP server:', err);
@@ -207,19 +220,17 @@ export function McpHub() {
 
   const handleAddServer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAgentId || !serverName.trim() || !serverUrl.trim()) return;
+    if (!serverName.trim() || !serverUrl.trim()) return;
 
     setSubmitting(true);
     setFormError(null);
     try {
-      const created = await api.mcp.orgAdd({
-        agentId: selectedAgentId,
+      await api.mcp.orgAdd({
         name: serverName.trim(),
         url: serverUrl.trim(),
         transport,
       });
 
-      // Reload fresh state with agent details
       await loadData();
       setShowAddModal(false);
       setServerName('');
@@ -232,6 +243,56 @@ export function McpHub() {
     }
   };
 
+  const handleOpenToolCall = (server: McpServerWithDetails, tool: McpTool) => {
+    setActiveToolCall({
+      serverId: server.id,
+      serverName: server.name,
+      tool,
+    });
+    setToolResult(null);
+    // Prefill with schema defaults if available
+    if (tool.inputSchema && typeof tool.inputSchema === 'object') {
+      const properties = (tool.inputSchema as any).properties || {};
+      const sample: Record<string, any> = {};
+      for (const [key, val] of Object.entries<any>(properties)) {
+        sample[key] = val.default !== undefined ? val.default : val.type === 'string' ? '' : val.type === 'number' ? 0 : val.type === 'boolean' ? false : null;
+      }
+      setToolArgsText(JSON.stringify(sample, null, 2));
+    } else {
+      setToolArgsText('{}');
+    }
+  };
+
+  const handleExecuteTool = async () => {
+    if (!activeToolCall) return;
+    setToolExecuting(true);
+    setToolResult(null);
+    try {
+      let parsedArgs = {};
+      if (toolArgsText.trim()) {
+        try {
+          parsedArgs = JSON.parse(toolArgsText);
+        } catch {
+          setToolResult({
+            success: false,
+            error: 'Invalid JSON format in arguments payload. Please check syntax.',
+          });
+          setToolExecuting(false);
+          return;
+        }
+      }
+      const res = await api.mcp.callTool(activeToolCall.serverId, activeToolCall.tool.name, parsedArgs);
+      setToolResult(res);
+    } catch (err: any) {
+      setToolResult({
+        success: false,
+        error: err.message || 'Direct tool execution failed.',
+      });
+    } finally {
+      setToolExecuting(false);
+    }
+  };
+
   const connectedCount = servers.filter((s) => s.enabled).length;
   const totalToolsCount = servers.reduce((acc, s) => acc + (s.tools?.length || 0), 0);
 
@@ -241,7 +302,6 @@ export function McpHub() {
     return (
       s.name.toLowerCase().includes(q) ||
       s.url.toLowerCase().includes(q) ||
-      s.agent?.displayName.toLowerCase().includes(q) ||
       s.tools?.some((t) => t.name.toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)))
     );
   });
@@ -252,7 +312,7 @@ export function McpHub() {
       <PageHeader
         icon={Cpu}
         title="MCP Hub & Tools"
-        description="Manage Model Context Protocol (MCP) server endpoints, live tool discovery, and autonomous agent capabilities"
+        description="Standalone Model Context Protocol (MCP) server endpoints, live tool execution, and direct API capabilities"
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -274,7 +334,7 @@ export function McpHub() {
         }
       />
 
-      {/* ── Telemetry Deck: Responsive Horizontal Deck ── */}
+      {/* ── Telemetry Deck: Standalone Horizontal Deck ── */}
       <div className="flex sm:grid sm:grid-cols-4 gap-2.5 sm:gap-3.5 overflow-x-auto no-scrollbar pb-1">
         {/* Connected Servers */}
         <div className="min-w-[140px] sm:min-w-0 flex-1 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3 sm:p-4 shadow-2xs hover:border-emerald-500/40 transition-all flex flex-col justify-between shrink-0">
@@ -304,17 +364,17 @@ export function McpHub() {
           </p>
         </div>
 
-        {/* Attached Agents */}
+        {/* Standalone Endpoints */}
         <div className="min-w-[140px] sm:min-w-0 flex-1 rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between shrink-0">
           <div className="flex items-center justify-between gap-1.5 mb-1.5">
             <span className="text-[11px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted whitespace-nowrap">
-              Attached Agents
+              Individual Endpoints
             </span>
-            <Bot size={13} className="text-indigo-500 shrink-0" />
+            <Zap size={13} className="text-amber-500 shrink-0" />
           </div>
           <p className="text-xl sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1 font-mono">
-            {new Set(servers.map((s) => s.agentId)).size}
-            <span className="text-[11px] sm:text-xs font-normal text-ink-muted whitespace-nowrap">agents linked</span>
+            {servers.length}
+            <span className="text-[11px] sm:text-xs font-normal text-ink-muted whitespace-nowrap">callable servers</span>
           </p>
         </div>
 
@@ -337,7 +397,7 @@ export function McpHub() {
         </div>
       </div>
 
-      {/* ── Search & Filter Bar ── */}
+      {/* ── Search Bar ── */}
       <div className="flex items-center justify-between gap-3">
         <div className="relative w-full max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -345,7 +405,7 @@ export function McpHub() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search MCP servers, endpoints, or tools..."
+            placeholder="Search standalone MCP servers or tools..."
             className="w-full h-9.5 pl-8.5 pr-3 bg-surface border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-brand-500 focus:outline-none"
           />
         </div>
@@ -362,9 +422,9 @@ export function McpHub() {
             <div className="absolute inset-0 rounded-full bg-cyan-500/10 blur-xl scale-125" />
             <LottieAnimation type="quantumHub" size={68} />
           </div>
-          <h3 className="text-sm font-bold text-ink">No MCP Servers Connected</h3>
+          <h3 className="text-sm font-bold text-ink">No Standalone MCP Servers Connected</h3>
           <p className="text-xs text-ink-muted max-w-md mx-auto">
-            Connect Model Context Protocol (MCP) servers via Server-Sent Events (SSE) or stdio to equip your agents with live tools, databases, and custom API integrations.
+            Connect individual Model Context Protocol (MCP) server endpoints via Server-Sent Events (SSE) or stdio to make tools directly callable across your workspace.
           </p>
           <Button
             variant="primary"
@@ -419,7 +479,7 @@ export function McpHub() {
                         {server.enabled ? (
                           <>
                             <LiveRadarBeacon size={6} tone="emerald" />
-                            <span>Connected</span>
+                            <span>Callable</span>
                           </>
                         ) : (
                           <>
@@ -431,32 +491,25 @@ export function McpHub() {
                     </div>
                   </div>
 
-                  {/* Attached Agent Info */}
-                  {server.agent && (
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-inset border border-line-subtle text-xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Avatar
-                          name={server.agent.displayName}
-                          emoji={server.agent.avatar}
-                          size="xs"
-                        />
-                        <span className="text-ink font-semibold truncate text-xs">
-                          {server.agent.displayName}
-                        </span>
-                        <span className="text-ink-faint text-2xs font-mono truncate">
-                          ({server.agent.name})
-                        </span>
-                      </div>
-                      <span className="text-2xs text-ink-muted font-medium shrink-0">
-                        {server.lastConnected ? `Active ${timeAgo(server.lastConnected)}` : 'Ready'}
+                  {/* Standalone Server Metadata Bar */}
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-inset border border-line-subtle text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold flex items-center gap-1 shrink-0">
+                        <Zap size={11} /> Standalone MCP Host
+                      </span>
+                      <span className="text-ink-muted text-2xs font-mono truncate">
+                        {server.transport} • direct execution
                       </span>
                     </div>
-                  )}
+                    <span className="text-2xs text-ink-muted font-medium shrink-0">
+                      {server.lastConnected ? `Verified ${timeAgo(server.lastConnected)}` : 'Ready'}
+                    </span>
+                  </div>
 
-                  {/* Discovered Tools Preview */}
+                  {/* Discovered Tools & Direct Call Buttons */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-2xs font-bold uppercase tracking-wider text-ink-muted">
-                      <span>Discovered Tools ({server.tools?.length || 0})</span>
+                      <span>Callable Tools ({server.tools?.length || 0})</span>
                       <button
                         type="button"
                         onClick={() => handleRefreshTools(server)}
@@ -464,31 +517,42 @@ export function McpHub() {
                         className="text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1 cursor-pointer font-semibold"
                       >
                         <RefreshCw size={11} className={cn(isRefreshing && 'animate-spin')} />
-                        {isRefreshing ? 'Discovering...' : 'Refresh Tools'}
+                        {isRefreshing ? 'Discovering...' : 'Discover Tools'}
                       </button>
                     </div>
 
                     {server.tools && server.tools.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 no-scrollbar">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 no-scrollbar">
                         {server.tools.map((tool) => (
                           <div
                             key={tool.id}
-                            className="p-2 rounded-xl bg-inset/70 border border-line-subtle text-xs space-y-0.5"
+                            className="p-2.5 rounded-xl bg-inset/70 border border-line-subtle text-xs flex flex-col justify-between gap-2 hover:border-line hover:bg-inset transition-all group"
                           >
-                            <p className="font-mono font-bold text-ink truncate text-[11px]">
-                              {tool.name}
-                            </p>
-                            {tool.description && (
-                              <p className="text-[10px] text-ink-muted line-clamp-1">
-                                {tool.description}
+                            <div className="space-y-0.5 min-w-0">
+                              <p className="font-mono font-bold text-ink truncate text-[11px] flex items-center gap-1">
+                                <Code2 size={11} className="text-brand-500 shrink-0" />
+                                {tool.name}
                               </p>
-                            )}
+                              {tool.description && (
+                                <p className="text-[10px] text-ink-muted line-clamp-2">
+                                  {tool.description}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenToolCall(server, tool)}
+                              className="self-start px-2.5 py-1 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 text-brand-600 dark:text-brand-400 border border-brand-500/25 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                            >
+                              <Play size={10} className="fill-current" />
+                              Call Tool
+                            </button>
                           </div>
                         ))}
                       </div>
                     ) : (
                       <p className="text-[11px] text-ink-faint py-3 text-center bg-inset/40 rounded-xl border border-dashed border-line">
-                        No tools discovered yet. Click "Refresh Tools" to query the server endpoint.
+                        No tools discovered yet. Click "Discover Tools" to query the server endpoint.
                       </p>
                     )}
                   </div>
@@ -525,14 +589,14 @@ export function McpHub() {
         </div>
       )}
 
-      {/* ── Connect MCP Server Modal ── */}
+      {/* ── Connect Standalone MCP Server Modal ── */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setShowAddModal(false)}>
           <div className="bg-surface border border-line rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-line-subtle pb-3">
               <h2 className="text-sm font-bold uppercase tracking-wider text-ink flex items-center gap-2">
                 <Cpu size={16} className="text-brand-500" />
-                <span>Connect MCP Server</span>
+                <span>Connect Individual MCP Server</span>
               </h2>
               <button
                 type="button"
@@ -551,28 +615,13 @@ export function McpHub() {
 
             <form onSubmit={handleAddServer} className="space-y-4">
               <div>
-                <CustomSelect
-                  label="Attach to Agent *"
-                  value={selectedAgentId}
-                  onChange={(val) => setSelectedAgentId(val)}
-                  placeholder="Select target agent"
-                  options={agents.map((ag) => ({
-                    value: ag.id,
-                    label: ag.displayName,
-                    sublabel: ag.name,
-                    avatar: ag.avatar || '🤖',
-                  }))}
-                />
-              </div>
-
-              <div>
                 <label className="block text-xs font-semibold text-ink-muted mb-1.5">Server Name *</label>
                 <input
                   type="text"
                   required
                   value={serverName}
                   onChange={(e) => setServerName(e.target.value)}
-                  placeholder="e.g. filesystem-tools or github-mcp"
+                  placeholder="e.g. filesystem-tools, github-mcp, or postgres-mcp"
                   className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
                 />
               </div>
@@ -615,12 +664,145 @@ export function McpHub() {
                   variant="primary"
                   size="sm"
                   loading={submitting}
-                  disabled={!serverName.trim() || !serverUrl.trim() || !selectedAgentId}
+                  disabled={!serverName.trim() || !serverUrl.trim()}
                 >
                   Connect & Discover
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Interactive Tool Execution Modal ── */}
+      {activeToolCall && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in"
+          onClick={() => setActiveToolCall(null)}
+        >
+          <div
+            className="bg-surface border border-line rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4 animate-scale-in max-h-[90vh] overflow-y-auto no-scrollbar"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-line-subtle pb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0">
+                  <Play size={14} className="fill-current" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-ink font-mono truncate">
+                    {activeToolCall.tool.name}
+                  </h2>
+                  <p className="text-[11px] text-ink-muted truncate">
+                    From {activeToolCall.serverName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveToolCall(null)}
+                className="text-ink-muted hover:text-ink text-xs font-semibold cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {activeToolCall.tool.description && (
+              <p className="text-xs text-ink-muted leading-relaxed bg-inset/50 p-3 rounded-xl border border-line-subtle">
+                {activeToolCall.tool.description}
+              </p>
+            )}
+
+            {/* Input Arguments Editor */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-2xs font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+                  <Terminal size={12} className="text-brand-500" />
+                  Tool Arguments (JSON Payload)
+                </label>
+                <span className="text-[10px] text-ink-faint font-mono">application/json</span>
+              </div>
+              <textarea
+                value={toolArgsText}
+                onChange={(e) => setToolArgsText(e.target.value)}
+                rows={5}
+                placeholder="{}"
+                className="w-full p-3 font-mono text-xs bg-inset border border-line rounded-xl text-ink focus:border-brand-500 focus:outline-none shadow-2xs leading-relaxed"
+              />
+            </div>
+
+            {/* Live Result Output */}
+            {toolResult && (
+              <div className="space-y-2 animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+                    {toolResult.success ? (
+                      <CheckCircle2 size={13} className="text-emerald-500" />
+                    ) : (
+                      <XCircle size={13} className="text-rose-500" />
+                    )}
+                    Execution Result
+                  </span>
+                  {toolResult.durationMs !== undefined && (
+                    <span className="text-[10px] font-mono text-ink-muted flex items-center gap-1">
+                      <Clock size={10} /> {toolResult.durationMs}ms
+                    </span>
+                  )}
+                </div>
+                <div className="relative group">
+                  <pre
+                    className={cn(
+                      'p-3 rounded-xl border font-mono text-[11px] max-h-52 overflow-y-auto no-scrollbar whitespace-pre-wrap break-words',
+                      toolResult.success
+                        ? 'bg-emerald-500/5 border-emerald-500/25 text-ink'
+                        : 'bg-rose-500/5 border-rose-500/25 text-rose-600 dark:text-rose-400'
+                    )}
+                  >
+                    {toolResult.success
+                      ? JSON.stringify(toolResult.result, null, 2)
+                      : toolResult.error || 'Execution failed.'}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        toolResult.success
+                          ? JSON.stringify(toolResult.result, null, 2)
+                          : toolResult.error || ''
+                      );
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-surface/80 border border-line-subtle text-ink-muted hover:text-ink text-xs cursor-pointer shadow-2xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Copy Output"
+                  >
+                    {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-line-subtle">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setActiveToolCall(null)}
+              >
+                Close
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                icon={Play}
+                loading={toolExecuting}
+                onClick={handleExecuteTool}
+              >
+                Execute Call
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -78,12 +78,31 @@ orgMcpRouter.get('/', async (req, res) => {
   res.json(servers);
 });
 
-// POST /api/mcp
+// POST /api/mcp (Standalone / Individual MCP Server creation)
 orgMcpRouter.post('/', async (req, res) => {
   const { agentId, name, url, transport } = req.body;
-  if (!agentId) return res.status(400).json({ error: 'agentId is required' });
   try {
-    const server = await mcpService.addMcpServer(agentId, { name, url, transport });
+    let targetAgentId = agentId;
+    if (!targetAgentId) {
+      const defaultAgent = await prisma.agent.findFirst({
+        where: { organizationId: req.organizationId! },
+      });
+      if (defaultAgent) {
+        targetAgentId = defaultAgent.id;
+      } else {
+        const fallback = await prisma.agent.create({
+          data: {
+            organizationId: req.organizationId!,
+            name: 'system-mcp-hub',
+            displayName: 'Standalone MCP Hub',
+            role: 'COORDINATOR',
+            avatar: '⚡',
+          },
+        });
+        targetAgentId = fallback.id;
+      }
+    }
+    const server = await mcpService.addMcpServer(targetAgentId, { name, url, transport });
     res.status(201).json(server);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -101,6 +120,53 @@ orgMcpRouter.post('/:id/refresh', async (req, res) => {
     res.json(tools);
   } catch (error: any) {
     res.status(502).json({ error: error.message });
+  }
+});
+
+// POST /api/mcp/:id/tools/:toolName/call or /api/mcp/:id/call (Direct Tool Execution)
+orgMcpRouter.post(['/:id/tools/:toolName/call', '/:id/call'], async (req, res) => {
+  const server = await prisma.mcpServer.findFirst({
+    where: { id: req.params.id, agent: { organizationId: req.organizationId! } },
+  });
+  if (!server) return res.status(404).json({ error: 'MCP server not found' });
+
+  const toolName = req.params.toolName || req.body.toolName || req.body.name;
+  if (!toolName) return res.status(400).json({ error: 'Tool name is required for execution' });
+
+  const args = req.body.arguments || req.body.args || {};
+  try {
+    const output = await mcpService.callMcpTool(server.id, toolName, args);
+    res.json(output);
+  } catch (error: any) {
+    res.status(502).json({ error: error.message });
+  }
+});
+
+// PATCH /api/mcp/:id (Update or toggle enabled)
+orgMcpRouter.patch('/:id', async (req, res) => {
+  const server = await prisma.mcpServer.findFirst({
+    where: { id: req.params.id, agent: { organizationId: req.organizationId! } },
+  });
+  if (!server) return res.status(404).json({ error: 'MCP server not found' });
+  try {
+    const updated = await mcpService.updateMcpServer(server.id, server.agentId, req.body);
+    res.json(updated);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// DELETE /api/mcp/:id (Delete MCP Server)
+orgMcpRouter.delete('/:id', async (req, res) => {
+  const server = await prisma.mcpServer.findFirst({
+    where: { id: req.params.id, agent: { organizationId: req.organizationId! } },
+  });
+  if (!server) return res.status(404).json({ error: 'MCP server not found' });
+  try {
+    await mcpService.deleteMcpServer(server.id, server.agentId);
+    res.status(204).end();
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
   }
 });
 
