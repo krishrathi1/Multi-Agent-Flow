@@ -31,13 +31,14 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-xl border border-line-subtle',
-        raised ? 'bg-raised' : 'bg-surface',
-        'shadow-e1',
+        'rounded-2xl border border-line-subtle/80',
+        raised
+          ? 'bg-raised/90 backdrop-blur-xl'
+          : 'bg-surface/85 backdrop-blur-xl',
+        'shadow-2xs transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
         interactive &&
-          'transition-[border-color,background-color,box-shadow] duration-150 ' +
-            'hover:border-line-strong hover:bg-raised hover:shadow-e2 ' +
-            'focus-within:border-brand-500/40',
+          'hover:border-line-strong hover:bg-raised/95 hover:shadow-xs hover:-translate-y-0.5 ' +
+            'focus-within:border-brand-500/50',
         paddings[padding],
         className,
       )}

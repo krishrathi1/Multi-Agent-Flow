@@ -90,7 +90,7 @@ export function Topbar() {
     <header
       className={cn(
         'sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 sm:gap-3',
-        'border-b border-line-subtle bg-surface px-3 sm:px-5 backdrop-blur-md',
+        'border-b border-line-subtle/80 bg-surface/80 px-3 sm:px-5 backdrop-blur-xl shadow-2xs',
         'transition-colors duration-200',
       )}
     >

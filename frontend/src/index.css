@@ -522,9 +522,67 @@ input:-webkit-autofill:focus {
 
 /* Micro-interaction hover transitions for sidebar & cards */
 .live-icon-hover {
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), filter 0.25s ease;
 }
 .group:hover .live-icon-hover {
   transform: scale(1.12);
 }
+
+/* ============================================================================
+   ULTRA-SMOOTH GLASSMORPHISM SUITE
+   ========================================================================= */
+
+/* Frosted Glass Cards with Refractive Edge Highlight */
+.glass-card {
+  background: color-mix(in srgb, var(--c-surface) 82%, transparent);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid color-mix(in srgb, var(--c-line) 65%, transparent);
+  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.04), 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  background: color-mix(in srgb, var(--c-raised) 92%, transparent);
+  border-color: var(--c-line-strong);
+  box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+  transform: translateY(-1.5px);
+}
+
+/* Deep Glass Floating Panel */
+.glass-panel {
+  background: color-mix(in srgb, var(--c-surface) 80%, transparent);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+  box-shadow: 0 20px 48px -8px rgba(0, 0, 0, 0.12), 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+}
+
+/* Translucent Glass Surface */
+.glass-surface {
+  background: color-mix(in srgb, var(--c-surface) 75%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
+}
+
+/* Ultra Smooth Spring Transitions */
+.ultra-smooth {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Glass Pill Buttons */
+.glass-pill {
+  background: color-mix(in srgb, var(--c-surface) 70%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-pill:hover {
+  background: var(--c-surface);
+  border-color: var(--color-brand-500);
+  transform: translateY(-1px);
+}
+
 

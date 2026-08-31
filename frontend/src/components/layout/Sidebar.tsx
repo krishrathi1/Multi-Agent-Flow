@@ -130,7 +130,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-line-subtle bg-surface transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
+        'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-line-subtle/80 bg-surface/85 backdrop-blur-2xl transition-all duration-250 ease-[cubic-bezier(0.16,1,0.3,1)]',
         // Mobile Drawer sliding
         collapsed
           ? '-translate-x-full lg:translate-x-0'

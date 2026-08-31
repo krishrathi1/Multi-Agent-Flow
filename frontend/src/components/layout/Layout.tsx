@@ -105,7 +105,14 @@ export function Layout() {
   }, [pathname]);
 
   return (
-    <div className="min-h-dvh bg-canvas">
+    <div className="relative min-h-dvh bg-canvas overflow-x-hidden">
+      {/* Ambient Glassmorphic Glow Mesh */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+        <div className="absolute -top-40 right-10 w-[550px] h-[550px] rounded-full bg-brand-500/10 dark:bg-brand-500/15 blur-[120px] transform-gpu" />
+        <div className="absolute top-1/3 -left-40 w-[500px] h-[500px] rounded-full bg-purple-500/10 dark:bg-purple-600/15 blur-[130px] transform-gpu" />
+        <div className="absolute -bottom-40 right-1/4 w-[600px] h-[600px] rounded-full bg-cyan-500/10 dark:bg-cyan-500/10 blur-[140px] transform-gpu" />
+      </div>
+
       {/* Keyboard users can jump past the 17-item nav. */}
       <a
         href="#main-content"
@@ -122,7 +129,7 @@ export function Layout() {
       {!sidebarCollapsed && (
         <div
           onClick={() => setSidebarCollapsed(true)}
-          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-xs lg:hidden transition-opacity cursor-pointer"
+          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-md lg:hidden transition-opacity cursor-pointer"
           aria-hidden="true"
         />
       )}
@@ -132,7 +139,7 @@ export function Layout() {
 
       <div
         className={cn(
-          'flex min-h-dvh flex-col transition-[padding] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
+          'relative z-10 flex min-h-dvh flex-col transition-[padding] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)]',
           'pl-0',
           sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[248px]',
         )}
