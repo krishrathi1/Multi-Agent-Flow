@@ -11,48 +11,62 @@ export function ActivityItem({ activity }: { activity: Activity }) {
   return (
     <div
       className={cn(
-        'flex items-start gap-3 rounded-lg border border-line-subtle',
-        'bg-surface p-3.5 transition-colors duration-150 hover:bg-raised',
+        'flex items-start gap-3 rounded-2xl border border-line-subtle',
+        'bg-surface p-3.5 sm:p-4 transition-all duration-150 hover:bg-raised hover:border-line shadow-2xs',
       )}
     >
-      {/* Type icon carries the colour; the label repeats it in text so the
-          meaning survives without colour perception. */}
+      {/* Type icon */}
       <span
         className={cn(
-          'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md border',
+          'mt-0.5 grid h-8 w-8 sm:h-9 sm:w-9 shrink-0 place-items-center rounded-xl border shadow-2xs',
           t.soft,
           t.text,
         )}
       >
-        <Icon size={15} strokeWidth={1.75} aria-hidden />
+        <Icon size={16} strokeWidth={2} aria-hidden />
       </span>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Avatar
-            name={activity.agent.displayName}
-            emoji={activity.agent.avatar}
-            size="xs"
-          />
-          <span className="text-sm font-medium text-ink">
-            {activity.agent.displayName}
-          </span>
-          <span className={cn('text-2xs font-semibold uppercase tracking-[0.07em]', t.text)}>
+      <div className="min-w-0 flex-1 space-y-1">
+        {/* Top Header: Agent Avatar + Name + Time */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Avatar
+              name={activity.agent.displayName}
+              emoji={activity.agent.avatar}
+              size="xs"
+            />
+            <span className="text-xs sm:text-sm font-bold text-ink truncate">
+              {activity.agent.displayName}
+            </span>
+          </div>
+
+          <time
+            className="shrink-0 whitespace-nowrap text-2xs tabular-nums text-ink-faint font-medium"
+            dateTime={activity.createdAt}
+          >
+            {timeAgo(activity.createdAt)}
+          </time>
+        </div>
+
+        {/* Event Type Pill */}
+        <div>
+          <span
+            className={cn(
+              'inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border',
+              t.soft,
+              t.text,
+            )}
+          >
             {(activity.type && activityLabel[activity.type]) ||
               (activity.type ? String(activity.type).replace(/_/g, ' ') : 'EVENT')}
           </span>
         </div>
-        <p className="mt-1 text-base leading-relaxed text-ink-muted">
+
+        {/* Message Content */}
+        <p className="text-xs sm:text-sm leading-relaxed text-ink-muted break-words pt-0.5">
           {activity.message}
         </p>
       </div>
-
-      <time
-        className="shrink-0 whitespace-nowrap pt-0.5 text-xs tabular-nums text-ink-faint"
-        dateTime={activity.createdAt}
-      >
-        {timeAgo(activity.createdAt)}
-      </time>
     </div>
   );
 }

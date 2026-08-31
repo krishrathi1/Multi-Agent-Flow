@@ -33,10 +33,10 @@ function Pill({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium',
-        'transition-colors duration-150',
+        'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium cursor-pointer',
+        'transition-colors duration-150 select-none whitespace-nowrap',
         active
-          ? activeClass ?? 'border-brand-500/35 bg-brand-500/15 text-brand-200'
+          ? activeClass ?? 'border-brand-500/35 bg-brand-500/15 text-brand-600 dark:text-brand-300 font-semibold shadow-2xs'
           : 'border-line bg-raised text-ink-subtle hover:border-line-strong hover:text-ink',
       )}
     >
@@ -61,12 +61,23 @@ export function ActivityFilters() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3.5">
       <div>
-        <p className="mb-2 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-faint">
-          Agent
-        </p>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-2xs font-bold uppercase tracking-wider text-ink-faint">
+            Agent
+          </p>
+          {filterAgent && (
+            <button
+              type="button"
+              onClick={() => applyFilters(null, filterType)}
+              className="text-2xs text-brand-600 dark:text-brand-400 hover:underline font-semibold cursor-pointer"
+            >
+              Clear Agent
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
           <Pill active={!filterAgent} onClick={() => applyFilters(null, filterType)}>
             All agents
           </Pill>
@@ -77,17 +88,28 @@ export function ActivityFilters() {
               onClick={() => applyFilters(agent.id, filterType)}
             >
               <Avatar name={agent.displayName} emoji={agent.avatar} size="xs" />
-              {agent.displayName}
+              <span>{agent.displayName}</span>
             </Pill>
           ))}
         </div>
       </div>
 
       <div>
-        <p className="mb-2 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-faint">
-          Event type
-        </p>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-2xs font-bold uppercase tracking-wider text-ink-faint">
+            Event type
+          </p>
+          {filterType && (
+            <button
+              type="button"
+              onClick={() => applyFilters(filterAgent, null)}
+              className="text-2xs text-brand-600 dark:text-brand-400 hover:underline font-semibold cursor-pointer"
+            >
+              Clear Type
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
           {activityTypes.map((type) => {
             const Icon = type.value ? activityIconFor(type.value) : null;
             const t = type.value ? tones[activityToneFor(type.value)] : null;
@@ -99,7 +121,7 @@ export function ActivityFilters() {
                 onClick={() => applyFilters(filterAgent, type.value)}
               >
                 {Icon && <Icon size={12} strokeWidth={2} aria-hidden />}
-                {type.label}
+                <span>{type.label}</span>
               </Pill>
             );
           })}
