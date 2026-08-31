@@ -99,7 +99,17 @@ export function AgentDetailSheet({ agent, onClose, onCommandSent }: AgentDetailS
   const handleSendCommand = async (type: string, payload?: Record<string, unknown>) => {
     setSendingCmd(type);
     try {
-      await api.commands.send({ agentId: agent.id, type, payload });
+      if (type === 'PAUSE' || type === 'RESUME') {
+        const nextEnabled = type === 'RESUME';
+        const nextStatus = nextEnabled ? 'ONLINE' : 'IDLE';
+        await Promise.all([
+          api.agents.updateConfig(agent.id, { enabled: nextEnabled }),
+          api.commands.send({ agentId: agent.id, type, payload }),
+        ]);
+        updateAgent({ id: agent.id, enabled: nextEnabled, status: nextStatus });
+      } else {
+        await api.commands.send({ agentId: agent.id, type, payload });
+      }
       toast.success(`Command "${type}" dispatched`, `Sent to ${agent.displayName}`);
       onCommandSent?.();
       fetchCommands();

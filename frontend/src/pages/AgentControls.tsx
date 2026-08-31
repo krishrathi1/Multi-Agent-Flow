@@ -107,6 +107,35 @@ export function AgentControls() {
     }
   };
 
+  const [togglingAgentId, setTogglingAgentId] = useState<string | null>(null);
+  const updateAgent = useAgentStore((s) => s.updateAgent);
+
+  const handleToggleAgent = async (agent: Agent, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isOnline = agent.status === 'ONLINE' && agent.enabled;
+    const nextEnabled = !isOnline;
+    const nextStatus = nextEnabled ? 'ONLINE' : 'IDLE';
+    const cmdType = nextEnabled ? 'RESUME' : 'PAUSE';
+
+    setTogglingAgentId(agent.id);
+    try {
+      await Promise.all([
+        api.agents.updateConfig(agent.id, { enabled: nextEnabled }),
+        api.commands.send({ agentId: agent.id, type: cmdType }),
+      ]);
+      updateAgent({ id: agent.id, enabled: nextEnabled, status: nextStatus });
+      toast.success(
+        nextEnabled ? 'Agent Activated' : 'Agent Deactivated',
+        `${agent.displayName} is now ${nextEnabled ? 'online' : 'paused/idle'}`
+      );
+      handleRefresh();
+    } catch (err) {
+      toast.error('Failed to toggle agent state', (err as Error).message);
+    } finally {
+      setTogglingAgentId(null);
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6 max-w-5xl mx-auto pb-16">
       {/* Mobile Header */}
@@ -241,6 +270,7 @@ export function AgentControls() {
       ) : (
         <div className="space-y-2.5">
           {filteredAgents.map((agent) => {
+            const isOnline = agent.status === 'ONLINE' && agent.enabled;
             const tone = agentStatusTone[agent.status] || 'neutral';
             return (
               <div
@@ -258,7 +288,7 @@ export function AgentControls() {
                       <span className="text-xs sm:text-sm font-bold text-ink truncate">
                         {agent.displayName}
                       </span>
-                      <Badge tone={tone} size="sm" dot pulse={agent.status === 'ONLINE'}>
+                      <Badge tone={tone} size="sm" dot pulse={isOnline}>
                         {agent.status.toLowerCase()}
                       </Badge>
                     </div>
@@ -277,8 +307,21 @@ export function AgentControls() {
                   </div>
                 </div>
 
-                {/* Direct Action Indicator */}
-                <div className="flex items-center gap-2 shrink-0">
+                {/* Direct Actions: Activate / Deactivate Toggle + Directives */}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  <Button
+                    variant={isOnline ? 'secondary' : 'primary'}
+                    size="xs"
+                    icon={isOnline ? Pause : Play}
+                    loading={togglingAgentId === agent.id}
+                    onClick={(e) => handleToggleAgent(agent, e)}
+                    className={cn(
+                      isOnline && 'text-amber-600 dark:text-amber-400 hover:text-rose-600 border-line'
+                    )}
+                  >
+                    {isOnline ? 'Deactivate' : 'Activate'}
+                  </Button>
+
                   <Button
                     variant="secondary"
                     size="xs"
