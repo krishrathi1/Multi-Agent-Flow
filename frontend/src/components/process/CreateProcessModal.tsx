@@ -157,6 +157,8 @@ export function CreateProcessModal({
   const [initReadme, setInitReadme] = useState(true);
   const [repoGoal, setRepoGoal] = useState('');
   const [loadingRepos, setLoadingRepos] = useState(false);
+  const [creatingRepo, setCreatingRepo] = useState(false);
+  const [createdRepoResult, setCreatedRepoResult] = useState<{ full_name: string; html_url: string } | null>(null);
 
   // Vercel State: Dynamic check against Settings localStorage token
   const [isVercelConnected, setIsVercelConnected] = useState(() => !!localStorage.getItem('nexus:vercel_token'));
@@ -377,6 +379,50 @@ export function CreateProcessModal({
     setStep('github');
   };
 
+  const handleCreateRepoOnGitHub = async () => {
+    if (!newRepoName.trim()) {
+      setError('Please enter a repository name first.');
+      return;
+    }
+    const ghToken = localStorage.getItem('nexus:github_token');
+    if (!ghToken) {
+      setError('GitHub Personal Access Token not found. Please connect your GitHub account in Settings > Integrations.');
+      return;
+    }
+    setCreatingRepo(true);
+    setError(undefined);
+    try {
+      const res = await api.processes.githubCreateRepo({
+        token: ghToken,
+        name: newRepoName.trim(),
+        description: newRepoDescription.trim() || undefined,
+        isPrivate: newRepoVisibility === 'private',
+        autoInit: initReadme,
+      });
+      if (res.success && res.repo) {
+        setCreatedRepoResult({ full_name: res.repo.full_name, html_url: res.repo.html_url });
+        setRepoInput(res.repo.full_name);
+        setRepoBranch(res.repo.default_branch || 'main');
+        setRepoList((prev) => [
+          {
+            name: res.repo!.name,
+            full_name: res.repo!.full_name,
+            default_branch: res.repo!.default_branch || 'main',
+            description: res.repo!.description,
+            private: res.repo!.private,
+          },
+          ...prev.filter((r) => r.full_name !== res.repo!.full_name),
+        ]);
+      } else {
+        setError(res.error || 'Failed to create repository on GitHub.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error communicating with GitHub API.');
+    } finally {
+      setCreatingRepo(false);
+    }
+  };
+
   const handlePlan = async () => {
     const effective = getEffectivePrompt();
     if (effective.length < 5) {
@@ -405,6 +451,28 @@ export function CreateProcessModal({
     setCreating(true);
     setError(undefined);
     try {
+      // If user chose to create a new GitHub repo, create it on GitHub if not already created
+      if (repoMode === 'new' && newRepoName.trim() && !createdRepoResult) {
+        const ghToken = localStorage.getItem('nexus:github_token');
+        if (ghToken) {
+          try {
+            const res = await api.processes.githubCreateRepo({
+              token: ghToken,
+              name: newRepoName.trim(),
+              description: newRepoDescription.trim() || undefined,
+              isPrivate: newRepoVisibility === 'private',
+              autoInit: initReadme,
+            });
+            if (res.success && res.repo) {
+              setCreatedRepoResult({ full_name: res.repo.full_name, html_url: res.repo.html_url });
+              setRepoInput(res.repo.full_name);
+            }
+          } catch {
+            // Non-blocking for process launch
+          }
+        }
+      }
+
       const effective = getEffectivePrompt();
       const created = await createProcess({ prompt: effective, plan });
       onCreated?.(created);
@@ -1056,6 +1124,55 @@ export function CreateProcessModal({
                         Init README & .gitignore
                       </label>
                     </div>
+                  </div>
+
+                  {/* Create on GitHub Action Bar */}
+                  <div className="flex items-center justify-between gap-3 pt-1 border-t border-line-subtle">
+                    {createdRepoResult ? (
+                      <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
+                        <Check size={14} />
+                        <span>Created: {createdRepoResult.full_name}</span>
+                        <a
+                          href={createdRepoResult.html_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-0.5 ml-1"
+                        >
+                          <ExternalLink size={12} />
+                        </a>
+                      </div>
+                    ) : (
+                      <span className="text-2xs text-ink-muted">
+                        Repo will be initialized on your connected GitHub account.
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleCreateRepoOnGitHub}
+                      disabled={creatingRepo || !newRepoName.trim() || !!createdRepoResult}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shrink-0 cursor-pointer',
+                        createdRepoResult
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25'
+                          : 'bg-brand-600 text-white shadow-xs hover:bg-brand-700 disabled:opacity-50'
+                      )}
+                    >
+                      {creatingRepo ? (
+                        <RefreshCw size={13} className="animate-spin" />
+                      ) : createdRepoResult ? (
+                        <Check size={13} />
+                      ) : (
+                        <Zap size={13} />
+                      )}
+                      <span>
+                        {creatingRepo
+                          ? 'Creating Repo…'
+                          : createdRepoResult
+                          ? 'Created on GitHub'
+                          : 'Create on GitHub'}
+                      </span>
+                    </button>
                   </div>
                 </div>
               )}

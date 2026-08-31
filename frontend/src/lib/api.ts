@@ -249,6 +249,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ token }),
       }),
+    githubCreateRepo: (data: { token?: string; name: string; description?: string; isPrivate?: boolean; autoInit?: boolean }) =>
+      request<{ success: boolean; repo?: { name: string; full_name: string; html_url: string; clone_url: string; default_branch: string; private: boolean; description?: string }; error?: string }>('/processes/github-create-repo', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 
   auth: {

@@ -362,4 +362,69 @@ router.post('/github-repos', async (req, res) => {
   });
 });
 
+/** Create a new GitHub Repository via Personal Access Token */
+router.post('/github-create-repo', async (req, res) => {
+  const { token, name, description, isPrivate = false, autoInit = true } = req.body;
+  if (!token) {
+    return res.status(400).json({
+      success: false,
+      error: 'GitHub Personal Access Token is required. Please connect your GitHub account in Settings.',
+    });
+  }
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: 'Repository name is required.',
+    });
+  }
+
+  const cleanName = name.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+
+  try {
+    const ghRes = await fetch('https://api.github.com/user/repos', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Nexus-AI',
+      },
+      body: JSON.stringify({
+        name: cleanName,
+        description: description || 'Autonomous application created via Nexus AI Multi-Agent Flow',
+        private: Boolean(isPrivate),
+        auto_init: Boolean(autoInit),
+      }),
+    });
+
+    const data = (await ghRes.json()) as any;
+
+    if (ghRes.ok || ghRes.status === 201) {
+      return res.status(201).json({
+        success: true,
+        repo: {
+          name: data.name,
+          full_name: data.full_name,
+          html_url: data.html_url,
+          clone_url: data.clone_url,
+          default_branch: data.default_branch || 'main',
+          private: data.private,
+          description: data.description,
+        },
+      });
+    }
+
+    return res.status(ghRes.status || 400).json({
+      success: false,
+      error: data.message || 'GitHub API returned an error creating the repository.',
+      details: data.errors || null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Network error connecting to GitHub API.',
+    });
+  }
+});
+
 export default router;
