@@ -15,6 +15,9 @@ import {
   CheckCircle2,
   Cpu,
   CornerDownLeft,
+  Globe,
+  Zap,
+  Check,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { getSocket } from '../lib/socket';
@@ -88,10 +91,24 @@ export function Chat() {
 
   const { processes, fetchProcesses } = useProcessStore();
   const [selectedProcessId, setSelectedProcessId] = useState<string>('all');
+  const [processDropdownOpen, setProcessDropdownOpen] = useState(false);
+  const processDropdownRef = useRef<HTMLDivElement>(null);
 
   const activeProcess: Process | undefined = useMemo(() => {
     return processes.find((p) => p.id === selectedProcessId);
   }, [processes, selectedProcessId]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (processDropdownRef.current && !processDropdownRef.current.contains(e.target as Node)) {
+        setProcessDropdownOpen(false);
+      }
+    }
+    if (processDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [processDropdownOpen]);
 
   useEffect(() => {
     fetchProcesses();
@@ -248,31 +265,97 @@ export function Chat() {
             </div>
           </div>
 
-          {/* Production Selector Dropdown */}
-          <div className="space-y-1.5">
+          {/* Glassmorphic Production Selector Dropdown */}
+          <div className="space-y-1.5" ref={processDropdownRef}>
             <label className="block text-2xs font-semibold uppercase tracking-wider text-ink-muted">
               Production Context
             </label>
             <div className="relative">
-              <select
-                value={selectedProcessId}
-                onChange={(e) => {
-                  setSelectedProcessId(e.target.value);
-                  setSelectedTarget({ type: 'mother', processId: e.target.value === 'all' ? undefined : e.target.value });
-                }}
-                className="w-full truncate appearance-none rounded-xl border border-line bg-surface py-2 pl-3 pr-8 text-xs font-semibold text-ink shadow-2xs focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+              <button
+                type="button"
+                onClick={() => setProcessDropdownOpen(!processDropdownOpen)}
+                className={cn(
+                  'flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink shadow-2xs transition-all hover:border-brand-500/50 hover:bg-hover active:scale-[0.99] cursor-pointer text-left',
+                  processDropdownOpen && 'border-brand-500 ring-2 ring-brand-500/10 bg-surface'
+                )}
               >
-                <option value="all" className="bg-surface text-ink py-1">🌐 All Production Chains (Fleet View)</option>
-                {processes.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-surface text-ink py-1">
-                    ⚡ {p.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={14}
-                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted"
-              />
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {selectedProcessId === 'all' ? (
+                    <Globe size={14} className="shrink-0 text-brand-500" />
+                  ) : (
+                    <Zap size={14} className="shrink-0 text-amber-500" />
+                  )}
+                  <span className="truncate">
+                    {selectedProcessId === 'all'
+                      ? 'All Production Chains (Fleet View)'
+                      : activeProcess?.name || 'Selected Production'}
+                  </span>
+                </div>
+                <ChevronDown
+                  size={14}
+                  className={cn(
+                    'shrink-0 text-ink-muted transition-transform duration-200',
+                    processDropdownOpen && 'rotate-180 text-brand-500'
+                  )}
+                />
+              </button>
+
+              {/* Floating Glass Options Menu */}
+              {processDropdownOpen && (
+                <div className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-2xl border border-line bg-surface/95 backdrop-blur-2xl p-1.5 shadow-xl space-y-1 animate-scale-in">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProcessId('all');
+                      setSelectedTarget({ type: 'mother', processId: undefined });
+                      setProcessDropdownOpen(false);
+                    }}
+                    className={cn(
+                      'flex w-full items-center justify-between gap-2.5 rounded-xl px-2.5 py-2 text-xs font-semibold transition-colors cursor-pointer text-left',
+                      selectedProcessId === 'all'
+                        ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400'
+                        : 'text-ink-muted hover:bg-hover hover:text-ink'
+                    )}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Globe size={14} className="shrink-0 text-brand-500" />
+                      <span className="truncate">All Production Chains (Fleet View)</span>
+                    </div>
+                    {selectedProcessId === 'all' && (
+                      <Check size={13} className="shrink-0 text-brand-600 dark:text-brand-400" />
+                    )}
+                  </button>
+
+                  {processes.map((p) => {
+                    const isSelected = selectedProcessId === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedProcessId(p.id);
+                          setSelectedTarget({ type: 'mother', processId: p.id });
+                          setProcessDropdownOpen(false);
+                        }}
+                        className={cn(
+                          'flex w-full items-center justify-between gap-2.5 rounded-xl px-2.5 py-2 text-xs font-semibold transition-colors cursor-pointer text-left',
+                          isSelected
+                            ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400'
+                            : 'text-ink-muted hover:bg-hover hover:text-ink'
+                        )}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Zap size={14} className="shrink-0 text-amber-500" />
+                          <span className="truncate">{p.name}</span>
+                        </div>
+                        {isSelected && (
+                          <Check size={13} className="shrink-0 text-brand-600 dark:text-brand-400" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
