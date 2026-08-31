@@ -60,7 +60,7 @@ export function Invitations() {
       />
 
       {/* Invite Form */}
-      <Card className="p-5">
+      <Card className="p-5 relative z-20 overflow-visible">
         <h3 className="text-xs font-bold uppercase tracking-wider text-ink mb-1">
           Invite New Member
         </h3>
@@ -78,7 +78,7 @@ export function Invitations() {
             className="flex-1 min-w-[240px] rounded-xl border border-line bg-inset px-3.5 py-2 text-xs text-ink placeholder:text-ink-muted shadow-2xs focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
 
-          <div className="w-56">
+          <div className="w-56 relative z-30">
             <CustomSelect
               value={role}
               onChange={val => setRole(val)}

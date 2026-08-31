@@ -54,7 +54,7 @@ export function CustomSelect<T extends string = string>({
   };
 
   return (
-    <div className={cn('relative inline-block w-full', className)} ref={dropdownRef}>
+    <div className={cn('relative inline-block w-full', open ? 'z-50' : 'z-10', className)} ref={dropdownRef}>
       <button
         type="button"
         disabled={disabled}
@@ -83,7 +83,7 @@ export function CustomSelect<T extends string = string>({
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-60 overflow-y-auto rounded-2xl border border-line bg-surface/95 backdrop-blur-2xl p-1.5 shadow-2xl space-y-1 animate-scale-in no-scrollbar">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-60 overflow-y-auto rounded-2xl border border-line bg-surface p-1.5 shadow-2xl space-y-1 animate-scale-in no-scrollbar">
           {options.map((opt) => {
             const isSelected = opt.value === value;
             return (
