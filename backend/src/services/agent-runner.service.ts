@@ -61,12 +61,12 @@ async function executeAgentWork(params: {
       geminiKey = decryptField(geminiProv.apiKey);
     } catch { /* ignore */ }
   }
-  if (!geminiKey && process.env.PLATFORM_GOOGLE_API_KEY) {
-    geminiKey = process.env.PLATFORM_GOOGLE_API_KEY;
-  }
+  if (!geminiKey && process.env.PLATFORM_GOOGLE_API_KEY) geminiKey = process.env.PLATFORM_GOOGLE_API_KEY;
+  if (!geminiKey && process.env.GEMINI_API_KEY) geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey && process.env.GOOGLE_API_KEY) geminiKey = process.env.GOOGLE_API_KEY;
 
   if (geminiKey) {
-    const candidateModels = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     for (const model of candidateModels) {
       try {
         const promptText = `${params.systemPrompt}\n\nTask Goal: ${params.goal}\nRole: ${params.agent.processRole || params.agent.description}\n\n${params.userPrompt}\n\nPlease generate complete production-ready code files for this task. Format code blocks with filepath as: \`\`\`typescript:src/filename.ts\n...code...\n\`\`\``;
@@ -80,7 +80,7 @@ async function executeAgentWork(params: {
               contents: [{ parts: [{ text: promptText }] }],
               generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
             }),
-            signal: AbortSignal.timeout(45000),
+            signal: AbortSignal.timeout(15000),
           },
         );
 
@@ -107,12 +107,8 @@ async function executeAgentWork(params: {
     }
   }
 
-  // 3. Check for Local PC Model (Ollama qwen2.5-coder:1.5b, llama3.3, deepseek-r1)
-  const localCandidates = [
-    'http://host.docker.internal:11434',
-    'http://localhost:11434',
-    'http://127.0.0.1:11434',
-  ];
+  // 3. Fast probe for Local PC Model (Ollama)
+  const localCandidates = ['http://127.0.0.1:11434', 'http://localhost:11434'];
 
   for (const ep of localCandidates) {
     try {
@@ -125,7 +121,7 @@ async function executeAgentWork(params: {
           prompt: promptCombined,
           stream: false,
         }),
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(1500),
       });
 
       if (ollamaRes.ok) {
@@ -146,7 +142,7 @@ async function executeAgentWork(params: {
         }
       }
     } catch {
-      // Continue to next candidate or fallback
+      // Snappy fallback to Autonomous Synthesizer
     }
   }
 
