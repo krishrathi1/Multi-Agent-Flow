@@ -34,7 +34,7 @@ function FilterPill({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold cursor-pointer',
+        'inline-flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-semibold cursor-pointer outline-none focus:outline-none focus-visible:outline-none',
         'transition-all duration-150 select-none whitespace-nowrap active:scale-[0.97]',
         active
           ? activeClass ?? 'border-brand-500/40 bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold shadow-2xs'

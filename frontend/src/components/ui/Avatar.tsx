@@ -63,7 +63,7 @@ export function Avatar({
     <span className={cn('relative inline-flex shrink-0', className)}>
       <span
         className={cn(
-          'grid place-items-center rounded-lg border font-semibold',
+          'grid place-items-center rounded-full border font-bold text-center select-none',
           s.box,
           emoji ? 'border-line bg-raised' : hashTint(name),
         )}

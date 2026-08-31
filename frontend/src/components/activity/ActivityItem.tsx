@@ -21,7 +21,7 @@ export function ActivityItem({ activity }: { activity: Activity }) {
       {/* Type icon */}
       <span
         className={cn(
-          'mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl border shadow-2xs',
+          'mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full border shadow-2xs',
           t.soft,
           t.text,
         )}
@@ -70,7 +70,7 @@ export function ActivityItem({ activity }: { activity: Activity }) {
         {/* Optional details/metadata if present */}
         {activity.metadata && Object.keys(activity.metadata).length > 0 && (
           <div className="pt-1">
-            <pre className="text-[10px] font-mono bg-inset p-2 rounded-lg border border-line-subtle text-ink-muted overflow-x-auto no-scrollbar">
+            <pre className="text-[11px] font-mono bg-inset/80 p-3 rounded-xl border border-line-subtle text-ink font-medium overflow-x-auto no-scrollbar">
               {JSON.stringify(activity.metadata, null, 2)}
             </pre>
           </div>
