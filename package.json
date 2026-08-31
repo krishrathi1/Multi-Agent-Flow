@@ -7,7 +7,9 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev -w backend\" \"npm run dev -w frontend\"",
-    "build": "npm run build -w backend && npm run build -w frontend"
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "test": "npm test -w frontend",
+    "test:ruflo": "npm run --prefix backend test src/test/ruflo.test.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
