@@ -106,11 +106,13 @@ export function Layout() {
 
   return (
     <div className="relative min-h-dvh bg-canvas overflow-x-clip">
-      {/* Ambient Glassmorphic Glow Mesh */}
+      {/* Sleek Modern Architectural Tech Background */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
-        <div className="absolute -top-40 right-10 w-[550px] h-[550px] rounded-full bg-brand-500/10 dark:bg-brand-500/15 blur-[120px] transform-gpu" />
-        <div className="absolute top-1/3 -left-40 w-[500px] h-[500px] rounded-full bg-purple-500/10 dark:bg-purple-600/15 blur-[130px] transform-gpu" />
-        <div className="absolute -bottom-40 right-1/4 w-[600px] h-[600px] rounded-full bg-cyan-500/10 dark:bg-cyan-500/10 blur-[140px] transform-gpu" />
+        {/* Clean Subtle Dot Grid Pattern */}
+        <div className="absolute inset-0 bg-[radial-gradient(#94a3b8_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.22] dark:opacity-[0.35]" />
+
+        {/* Soft Cohesive Top Radial Vignette */}
+        <div className="absolute -top-[25%] left-1/2 -translate-x-1/2 w-[1100px] h-[550px] bg-gradient-to-b from-brand-500/8 dark:from-brand-500/12 via-brand-500/2 to-transparent rounded-full blur-3xl transform-gpu" />
       </div>
 
       {/* Keyboard users can jump past the 17-item nav. */}
