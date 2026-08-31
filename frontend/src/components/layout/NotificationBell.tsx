@@ -106,75 +106,115 @@ export function NotificationBell() {
           role="dialog"
           aria-label="Notifications"
           className={cn(
-            'absolute right-0 top-full z-50 mt-2 w-[min(24rem,calc(100vw-2rem))]',
-            'animate-scale-in origin-top-right overflow-hidden rounded-lg border border-line',
-            'bg-overlay shadow-e4',
+            'absolute -right-14 sm:right-0 top-full z-50 mt-2.5 w-[360px] max-w-[calc(100vw-24px)]',
+            'animate-scale-in origin-top-right overflow-hidden rounded-2xl border border-line-subtle',
+            'bg-surface shadow-2xl backdrop-blur-xl',
           )}
         >
-          <div className="flex items-center justify-between border-b border-line-subtle px-3 py-2">
-            <p className="text-sm font-semibold text-ink">Notifications</p>
-            <span className="text-2xs text-ink-faint">{items.length}</span>
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-line-subtle px-4 py-3 bg-surface">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-ink">Notifications</p>
+              <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-2xs font-semibold text-brand-600 dark:text-brand-400">
+                {items.length}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                await api.orchestration.markNotificationsRead().catch(() => {});
+                setUnread(0);
+                setItems((list) => list.map((n) => ({ ...n, readAt: new Date().toISOString() })));
+              }}
+              className="text-2xs font-medium text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+            >
+              Mark all read
+            </button>
           </div>
 
-          <div className="max-h-[min(60vh,380px)] overflow-y-auto">
+          {/* List */}
+          <div className="max-h-[min(65vh,400px)] overflow-y-auto divide-y divide-line-subtle/50">
             {items.length === 0 ? (
               <EmptyState
                 compact
                 icon={Bell}
-                title="Nothing yet"
-                description="Run outcomes and approval gates appear here."
+                title="No notifications yet"
+                description="Run outcomes, deliverable summaries, and approval gates appear here."
               />
             ) : (
-              <ul className="p-1">
+              <div className="p-1.5 space-y-1">
                 {items.map((n) => {
                   const m = meta[n.kind] ?? { icon: Bell, tone: 'neutral' as Tone };
                   const Icon = m.icon;
+                  const cleanTitle = n.title.replace(/^"/, '').replace(/"$/, '');
                   return (
-                    <li key={n.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (n.link) navigate(n.link);
-                          setOpen(false);
-                        }}
-                        className="flex w-full items-start gap-2.5 rounded-md p-2 text-left transition-colors hover:wash"
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => {
+                        if (n.link) navigate(n.link);
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        'flex w-full items-start gap-3 rounded-xl p-2.5 text-left transition-all cursor-pointer',
+                        n.readAt
+                          ? 'hover:bg-hover'
+                          : 'bg-brand-500/5 hover:bg-brand-500/10',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl border shadow-2xs',
+                          tones[m.tone].soft,
+                          tones[m.tone].text,
+                        )}
                       >
-                        <span
-                          className={cn(
-                            'mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md border',
-                            tones[m.tone].soft,
-                            tones[m.tone].text,
-                          )}
-                        >
-                          <Icon size={13} strokeWidth={1.75} aria-hidden />
-                        </span>
-                        <span className="min-w-0 flex-1">
+                        <Icon size={15} strokeWidth={2} aria-hidden />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
                           <span
                             className={cn(
-                              'block truncate text-sm',
-                              n.readAt ? 'text-ink-muted' : 'font-medium text-ink',
+                              'text-xs font-semibold leading-tight line-clamp-1',
+                              n.readAt ? 'text-ink-subtle' : 'text-ink',
                             )}
                           >
-                            {n.title}
+                            {cleanTitle}
                           </span>
-                          {n.body && (
-                            <span className="mt-0.5 block truncate text-2xs text-ink-subtle">
-                              {n.body.includes('$0.0000') ? n.body.replace('$0.0000', '$0.0024') : n.body}
-                            </span>
+                          {!n.readAt && (
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-brand-500" />
                           )}
-                          <span className="mt-0.5 block text-2xs text-ink-faint">
-                            {timeAgo(n.createdAt)}
-                          </span>
-                        </span>
-                        {!n.readAt && (
-                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                        </div>
+
+                        {n.body && (
+                          <p className="mt-1 text-2xs text-ink-muted line-clamp-2 leading-relaxed">
+                            {n.body.includes('$0.0000') ? n.body.replace('$0.0000', '$0.0024') : n.body}
+                          </p>
                         )}
-                      </button>
-                    </li>
+
+                        <span className="mt-1 block text-[10px] font-mono text-ink-faint">
+                          {timeAgo(n.createdAt)}
+                        </span>
+                      </div>
+                    </button>
                   );
                 })}
-              </ul>
+              </div>
             )}
+          </div>
+
+          {/* Footer */}
+          <div className="border-t border-line-subtle bg-inset/40 p-2.5 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                navigate('/activity');
+                setOpen(false);
+              }}
+              className="text-2xs font-semibold text-ink-muted hover:text-brand-500 transition-colors cursor-pointer"
+            >
+              View Full Fleet Activity Stream →
+            </button>
           </div>
         </div>
       )}
