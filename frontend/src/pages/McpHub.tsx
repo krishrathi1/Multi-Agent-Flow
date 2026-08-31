@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Cpu,
   Server,
@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Power,
   Sparkles,
+  Check,
 } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -27,6 +28,95 @@ import { LottieAnimation } from '../components/ui/LottieAnimation';
 import { api } from '../lib/api';
 import { cn, timeAgo } from '../lib/utils';
 import type { McpServer, McpTool, Agent } from '../types';
+
+function CustomSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = 'Select an option',
+}: {
+  label?: string;
+  value: string;
+  onChange: (val: string) => void;
+  options: Array<{ value: string; label: string; sublabel?: string; avatar?: string }>;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <div className="relative" ref={ref}>
+      {label && <label className="block text-xs font-semibold text-ink-muted mb-1.5">{label}</label>}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'w-full h-10 px-3.5 py-2 rounded-xl bg-inset border text-xs text-ink flex items-center justify-between shadow-2xs transition-all cursor-pointer',
+          open ? 'border-brand-500 ring-2 ring-brand-500/10' : 'border-line hover:border-line-strong'
+        )}
+      >
+        <div className="flex items-center gap-2 truncate min-w-0">
+          {selected?.avatar && (
+            <span className="text-sm shrink-0">{selected.avatar}</span>
+          )}
+          <span className={cn('truncate', !selected && 'text-ink-faint')}>
+            {selected ? selected.label : placeholder}
+          </span>
+          {selected?.sublabel && (
+            <span className="text-[11px] text-ink-faint font-mono truncate hidden sm:inline">
+              ({selected.sublabel})
+            </span>
+          )}
+        </div>
+        <ChevronDown size={14} className={cn('text-ink-muted shrink-0 ml-2 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1.5 left-0 w-full rounded-2xl bg-surface/95 backdrop-blur-2xl border border-line shadow-xl p-1.5 space-y-0.5 animate-scale-in max-h-60 overflow-y-auto no-scrollbar">
+          {options.map((opt) => {
+            const isOptSelected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs text-left transition-colors cursor-pointer',
+                  isOptSelected
+                    ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
+                    : 'text-ink-muted hover:bg-hover hover:text-ink font-medium'
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
+                  {opt.avatar && <span className="text-sm shrink-0">{opt.avatar}</span>}
+                  <div className="truncate">
+                    <span className="block truncate">{opt.label}</span>
+                    {opt.sublabel && <p className="text-[10px] text-ink-faint font-mono">{opt.sublabel}</p>}
+                  </div>
+                </div>
+                {isOptSelected && <Check size={13} className="text-brand-500 shrink-0 ml-2" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface McpServerWithDetails extends McpServer {
   tools?: McpTool[];
@@ -436,8 +526,8 @@ export function McpHub() {
 
       {/* ── Connect MCP Server Modal ── */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4" onClick={() => setShowAddModal(false)}>
-          <div className="bg-surface border border-line rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setShowAddModal(false)}>
+          <div className="bg-surface border border-line rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-line-subtle pb-3">
               <h2 className="text-sm font-bold uppercase tracking-wider text-ink flex items-center gap-2">
                 <Cpu size={16} className="text-brand-500" />
@@ -446,7 +536,7 @@ export function McpHub() {
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="text-ink-muted hover:text-ink text-xs font-semibold cursor-pointer"
+                className="text-ink-muted hover:text-ink text-xs font-semibold cursor-pointer p-1"
               >
                 ✕
               </button>
@@ -458,25 +548,24 @@ export function McpHub() {
               </div>
             )}
 
-            <form onSubmit={handleAddServer} className="space-y-3.5">
+            <form onSubmit={handleAddServer} className="space-y-4">
               <div>
-                <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">Attach to Agent *</label>
-                <select
+                <CustomSelect
+                  label="Attach to Agent *"
                   value={selectedAgentId}
-                  onChange={(e) => setSelectedAgentId(e.target.value)}
-                  className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs font-semibold text-ink focus:border-brand-500 focus:outline-none shadow-2xs cursor-pointer"
-                  required
-                >
-                  {agents.map((ag) => (
-                    <option key={ag.id} value={ag.id}>
-                      {ag.displayName} ({ag.name})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setSelectedAgentId(val)}
+                  placeholder="Select target agent"
+                  options={agents.map((ag) => ({
+                    value: ag.id,
+                    label: ag.displayName,
+                    sublabel: ag.name,
+                    avatar: ag.avatar || '🤖',
+                  }))}
+                />
               </div>
 
               <div>
-                <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">Server Name *</label>
+                <label className="block text-xs font-semibold text-ink-muted mb-1.5">Server Name *</label>
                 <input
                   type="text"
                   required
@@ -488,7 +577,7 @@ export function McpHub() {
               </div>
 
               <div>
-                <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">Server URL / SSE Endpoint *</label>
+                <label className="block text-xs font-semibold text-ink-muted mb-1.5">Server URL / SSE Endpoint *</label>
                 <input
                   type="text"
                   required
@@ -500,15 +589,15 @@ export function McpHub() {
               </div>
 
               <div>
-                <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">Transport Protocol</label>
-                <select
+                <CustomSelect
+                  label="Transport Protocol"
                   value={transport}
-                  onChange={(e) => setTransport(e.target.value as 'SSE' | 'STDIO')}
-                  className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs font-semibold text-ink focus:border-brand-500 focus:outline-none shadow-2xs cursor-pointer"
-                >
-                  <option value="SSE">SSE (Server-Sent Events)</option>
-                  <option value="STDIO">STDIO (Standard I/O)</option>
-                </select>
+                  onChange={(val) => setTransport(val as 'SSE' | 'STDIO')}
+                  options={[
+                    { value: 'SSE', label: 'SSE (Server-Sent Events)', sublabel: 'HTTP Streaming connection' },
+                    { value: 'STDIO', label: 'STDIO (Standard I/O)', sublabel: 'Direct process pipes' },
+                  ]}
+                />
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-line-subtle">
@@ -525,7 +614,7 @@ export function McpHub() {
                   variant="primary"
                   size="sm"
                   loading={submitting}
-                  disabled={!serverName.trim() || !serverUrl.trim()}
+                  disabled={!serverName.trim() || !serverUrl.trim() || !selectedAgentId}
                 >
                   Connect & Discover
                 </Button>
