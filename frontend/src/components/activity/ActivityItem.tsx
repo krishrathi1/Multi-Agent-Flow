@@ -28,16 +28,16 @@ export function ActivityItem({ activity }: { activity: Activity }) {
   const hasMetadata = metadata && Object.keys(metadata).length > 0;
 
   // Extract common smart fields
-  const summary = typeof metadata?.summary === 'string' ? metadata.summary : null;
+  const summary = typeof metadata?.summary === 'string' && metadata.summary.trim().length > 0 ? metadata.summary : null;
   const files = Array.isArray(metadata?.files) ? (metadata.files as string[]).filter(Boolean) : [];
-  const error = typeof metadata?.error === 'string' ? metadata.error : null;
-  const toolName = typeof metadata?.tool === 'string' ? metadata.tool : null;
-
-  const hasExpandableContent = summary || files.length > 0 || error || toolName || hasMetadata;
+  const error = typeof metadata?.error === 'string' && metadata.error.trim().length > 0 ? metadata.error : null;
+  const toolName = typeof metadata?.tool === 'string' && metadata.tool.trim().length > 0 ? metadata.tool : null;
 
   const otherKeys = hasMetadata
     ? Object.keys(metadata).filter((k) => !['summary', 'files', 'error', 'tool'].includes(k))
     : [];
+
+  const hasExpandableContent = Boolean(summary || files.length > 0 || error || toolName || otherKeys.length > 0);
 
   const handleCopyRaw = () => {
     if (!metadata) return;
@@ -51,62 +51,104 @@ export function ActivityItem({ activity }: { activity: Activity }) {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line-subtle bg-surface shadow-2xs hover:border-line-strong hover:shadow-xs transition-all">
-      {/* Header Row - Formatted identically to RunRow */}
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-3.5 p-3.5 sm:p-4 text-left transition-colors hover:bg-hover/50 cursor-pointer"
-      >
-        <ChevronRight
-          size={16}
-          className={cn(
-            'shrink-0 text-ink-muted transition-transform duration-200',
-            open && 'rotate-90 text-brand-500',
-          )}
-          aria-hidden
-        />
+      {/* Header Row */}
+      {hasExpandableContent ? (
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          className="flex w-full items-center gap-3 p-3.5 sm:p-4 text-left transition-colors hover:bg-hover/50 cursor-pointer"
+        >
+          <ChevronRight
+            size={16}
+            className={cn(
+              'shrink-0 text-ink-muted transition-transform duration-200',
+              open && 'rotate-90 text-brand-500',
+            )}
+            aria-hidden
+          />
 
-        <div className={cn(
-          'w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 shadow-2xs',
-          t.soft,
-          t.text,
-        )}>
-          <Icon size={16} strokeWidth={2.2} />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="block truncate text-xs sm:text-[13px] font-bold text-ink">
-              {agentName}
-            </span>
-            <span className="inline-flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle text-[10px] font-semibold text-ink-muted font-mono">
-              ▷ {labelText.toLowerCase()}
-            </span>
-          </div>
-
-          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-2xs text-ink-muted font-medium font-mono">
-            <Clock size={10} className="text-ink-faint" />
-            <span>{timeAgo(activity.createdAt)}</span>
-          </div>
-        </div>
-
-        <div className="shrink-0">
-          <span className={cn(
-            'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-2xs',
+          <div className={cn(
+            'w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 shadow-2xs',
             t.soft,
             t.text,
           )}>
-            <span className="w-1.5 h-1.5 rounded-full bg-current" />
-            {labelText}
-          </span>
+            <Icon size={16} strokeWidth={2.2} />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="block truncate text-xs sm:text-[13px] font-bold text-ink">
+                {agentName}
+              </span>
+              <span className="inline-flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle text-[10px] font-semibold text-ink-muted font-mono">
+                ▷ {labelText.toLowerCase()}
+              </span>
+            </div>
+
+            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-2xs text-ink-muted font-medium font-mono">
+              <Clock size={10} className="text-ink-faint" />
+              <span>{timeAgo(activity.createdAt)}</span>
+            </div>
+          </div>
+
+          <div className="shrink-0">
+            <span className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-2xs',
+              t.soft,
+              t.text,
+            )}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              {labelText}
+            </span>
+          </div>
+        </button>
+      ) : (
+        <div className="flex w-full items-center gap-3 p-3.5 sm:p-4 text-left">
+          <div className={cn(
+            'w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 shadow-2xs',
+            t.soft,
+            t.text,
+          )}>
+            <Icon size={16} strokeWidth={2.2} />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="block truncate text-xs sm:text-[13px] font-bold text-ink">
+                {agentName}
+              </span>
+              <span className="inline-flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle text-[10px] font-semibold text-ink-muted font-mono">
+                ▷ {labelText.toLowerCase()}
+              </span>
+            </div>
+
+            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-2xs text-ink-muted font-medium font-mono">
+              <Clock size={10} className="text-ink-faint" />
+              <span>{timeAgo(activity.createdAt)}</span>
+            </div>
+          </div>
+
+          <div className="shrink-0">
+            <span className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-2xs',
+              t.soft,
+              t.text,
+            )}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              {labelText}
+            </span>
+          </div>
         </div>
-      </button>
+      )}
 
       {/* Message summary & expanded details */}
       <div className="px-4 pb-3.5 pt-0 space-y-2.5">
         {/* Main Message */}
-        <p className="text-xs leading-relaxed text-ink/90 font-medium break-words pl-8 sm:pl-10">
+        <p className={cn(
+          'text-xs leading-relaxed text-ink/90 font-medium break-words',
+          hasExpandableContent ? 'pl-7 sm:pl-7.5' : 'pl-12 sm:pl-12'
+        )}>
           {activity.message}
         </p>
 
