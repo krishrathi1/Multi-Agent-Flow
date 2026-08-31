@@ -33,8 +33,12 @@ export function ActivityItem({ activity }: { activity: Activity }) {
   const error = typeof metadata?.error === 'string' && metadata.error.trim().length > 0 ? metadata.error : null;
   const toolName = typeof metadata?.tool === 'string' && metadata.tool.trim().length > 0 ? metadata.tool : null;
 
+  const internalKeys = new Set([
+    'summary', 'files', 'error', 'tool', 'threadId', 'senderId', 'receiverId',
+    'processId', 'agentId', 'organizationId', 'runId', 'stepId', 'timestamp', 'channel', 'type',
+  ]);
   const otherKeys = hasMetadata
-    ? Object.keys(metadata).filter((k) => !['summary', 'files', 'error', 'tool'].includes(k))
+    ? Object.keys(metadata).filter((k) => !internalKeys.has(k))
     : [];
 
   // Parse message for files if formatted as "lead — created file1, file2..."
@@ -148,9 +152,9 @@ export function ActivityItem({ activity }: { activity: Activity }) {
       <div className="px-4 pb-3.5 pt-0 space-y-2.5">
         {/* Main Message */}
         <div className={cn('space-y-2', hasExpandableContent ? 'pl-7 sm:pl-7.5' : 'pl-12 sm:pl-12')}>
-          <p className="text-xs leading-relaxed text-ink/90 font-medium break-words">
-            {messageLead}
-          </p>
+          <div className="text-xs leading-relaxed text-ink/90 font-normal break-words">
+            <MarkdownRenderer content={messageLead} hideScrollbar />
+          </div>
 
           {/* Files List as Clean Badges */}
           {allFiles.length > 0 && (

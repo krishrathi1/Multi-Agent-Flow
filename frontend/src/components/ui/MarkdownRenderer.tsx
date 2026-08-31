@@ -9,11 +9,14 @@ interface MarkdownRendererProps {
   hideScrollbar?: boolean;
 }
 
-/** Render inline tokens: `code`, **bold**, *italic*, [links](url) */
+/** Render inline tokens: `code`, ***bold-italic***, **bold**, *italic*, [links](url) */
 export function renderInline(text: string): React.ReactNode[] {
-  // Regex to split on `code`, **bold**, *italic*, [link](url)
-  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g;
-  const parts = text.split(regex);
+  // Normalize messy consecutive asterisks e.g. * *** to * **
+  const sanitized = text.replace(/\*\s+\*\*\*/g, '* **').replace(/\*\*\*\*/g, '***');
+
+  // Regex to split on `code`, ***bold-italic***, **bold**, *italic*, [link](url)
+  const regex = /(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g;
+  const parts = sanitized.split(regex);
 
   return parts.map((part, i) => {
     if (!part) return null;
@@ -31,7 +34,16 @@ export function renderInline(text: string): React.ReactNode[] {
       );
     }
 
-    // Bold
+    // Bold + Italic (***text***)
+    if (part.startsWith('***') && part.endsWith('***') && part.length >= 6) {
+      return (
+        <strong key={i} className="font-bold italic text-ink">
+          {part.slice(3, -3)}
+        </strong>
+      );
+    }
+
+    // Bold (**text**)
     if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
       return (
         <strong key={i} className="font-bold text-ink">
@@ -40,7 +52,7 @@ export function renderInline(text: string): React.ReactNode[] {
       );
     }
 
-    // Italic
+    // Italic (*text*)
     if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
       return (
         <em key={i} className="italic text-ink font-medium">
