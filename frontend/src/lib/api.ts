@@ -201,11 +201,20 @@ export const api = {
       agentCount?: number;
       plan?: ProcessPlan;
       gatewayId?: string;
-    }) =>
-      request<Process>('/processes', {
+      githubToken?: string;
+      vercelToken?: string;
+    }) => {
+      const ghToken = data.githubToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('nexus:github_token') : null) || undefined;
+      const vToken = data.vercelToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('nexus:vercel_token') : null) || undefined;
+      return request<Process>('/processes', {
         method: 'POST',
-        body: JSON.stringify(data),
-      }),
+        headers: {
+          ...(ghToken ? { 'x-github-token': ghToken } : {}),
+          ...(vToken ? { 'x-vercel-token': vToken } : {}),
+        },
+        body: JSON.stringify({ ...data, githubToken: ghToken, vercelToken: vToken }),
+      });
+    },
     start: (id: string) => request<Process>(`/processes/${id}/start`, { method: 'POST' }),
     /** Starts the chain. Returns immediately; poll `runStatus` for progress. */
     run: (id: string) => request<RunStatus>(`/processes/${id}/run`, { method: 'POST' }),

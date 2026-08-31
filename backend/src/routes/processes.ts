@@ -17,6 +17,8 @@ const createSchema = planSchema.extend({
   gatewayId: z.string().uuid().optional(),
   // A plan previously returned by /plan, so confirming doesn't re-plan.
   plan: z.any().optional(),
+  githubToken: z.string().optional(),
+  vercelToken: z.string().optional(),
 });
 
 const updateSchema = z.object({
@@ -57,6 +59,11 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', validate(createSchema), async (req, res) => {
+  const ghToken = req.headers['x-github-token'] || req.body.githubToken;
+  const vToken = req.headers['x-vercel-token'] || req.body.vercelToken;
+  if (ghToken && typeof ghToken === 'string') process.env.GITHUB_TOKEN = ghToken;
+  if (vToken && typeof vToken === 'string') process.env.VERCEL_TOKEN = vToken;
+
   const proc = await processService.createProcess(req.organizationId!, req.body);
   req.app.get('io')?.to(`org:${req.organizationId}`).emit('process:created', proc);
   res.status(201).json(proc);

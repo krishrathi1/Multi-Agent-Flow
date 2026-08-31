@@ -23,6 +23,28 @@ export async function pushWorkspaceToGitHub(params: {
   try {
     const gitOptions = { cwd: workspace, timeout: 60000 };
 
+    // 0. Auto-create repo on GitHub if it does not exist
+    try {
+      const repoNameOnly = repoFullName.includes('/') ? repoFullName.split('/')[1] : repoFullName;
+      await fetch('https://api.github.com/user/repos', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          'User-Agent': 'NexusAI-Agent',
+          'Content-Type': 'application/json',
+          Accept: 'application/vnd.github+json',
+        },
+        body: JSON.stringify({
+          name: repoNameOnly,
+          description: 'Autonomous multi-agent deliverables created by Nexus AI',
+          private: false,
+          auto_init: false,
+        }),
+      });
+    } catch {
+      // Continue if repo already exists
+    }
+
     try {
       await execFileAsync('git', ['init'], gitOptions);
     } catch { /* ignore */ }
