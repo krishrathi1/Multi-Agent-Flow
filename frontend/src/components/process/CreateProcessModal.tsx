@@ -41,7 +41,7 @@ import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import type { Process, ProcessPlan } from '../../types';
 
-type InputMode = 'ai' | 'curl' | 'github';
+export type WizardStep = 'prompt' | 'curl' | 'github' | 'review';
 
 interface ParsedCurl {
   method: string;
@@ -137,8 +137,8 @@ export function CreateProcessModal({
 }) {
   const { planProcess, createProcess } = useProcessStore();
 
-  const [step, setStep] = useState<'describe' | 'review'>('describe');
-  const [mode, setMode] = useState<InputMode>('ai');
+  // Wizard Step State: 1 = prompt, 2 = curl, 3 = github, 4 = review
+  const [step, setStep] = useState<WizardStep>('prompt');
   const [prompt, setPrompt] = useState('');
 
   // cURL & API State
@@ -182,7 +182,7 @@ export function CreateProcessModal({
   const [isExpandingPrompt, setIsExpandingPrompt] = useState(false);
 
   // Dynamic API Endpoints list (Add More API feature)
-  const [apiEndpoints, setApiEndpoints] = useState<Array<{ id: string; name: string; url: string; apiKey: string; tested?: boolean }>>([
+  const [apiEndpoints, setApiEndpoints] = useState<Array<{ id: string; name: string; url: string; apiKey: string }>>([
     { id: '1', name: 'Primary API Endpoint', url: 'https://api.example.com/v1/data', apiKey: '' },
   ]);
 
@@ -297,7 +297,7 @@ export function CreateProcessModal({
   }, [open]);
 
   const reset = () => {
-    setStep('describe');
+    setStep('prompt');
     setPrompt('');
     setCurlInput('');
     setParsedCurl(null);
@@ -323,43 +323,60 @@ export function CreateProcessModal({
   };
 
   const getEffectivePrompt = () => {
-    if (mode === 'ai') {
-      return prompt.trim();
-    }
-    if (mode === 'curl') {
-      let final = `cURL Command & API Integration:\n${curlInput.trim()}\n\nParsed Endpoint: ${apiMethod} ${apiUrl}`;
-      if (apiAuthHeader.trim()) final += `\nAuth: ${apiAuthHeader.trim()}`;
-      if (apiBody.trim()) final += `\nPayload: ${apiBody.trim()}`;
+    let final = `Fleet Primary Goal & Requirements:\n${prompt.trim() || 'Review codebase, build modular full-stack components, and deploy deliverables.'}\n\n`;
+
+    if (curlInput.trim() || apiUrl.trim()) {
+      final += `API & cURL Integrations:\n`;
+      if (curlInput.trim()) final += `Raw cURL: ${curlInput.trim()}\n`;
+      if (apiUrl.trim()) final += `Endpoint: ${apiMethod} ${apiUrl.trim()}\n`;
+      if (apiAuthHeader.trim()) final += `Auth Header: ${apiAuthHeader.trim()}\n`;
+      if (apiBody.trim()) final += `Payload: ${apiBody.trim()}\n`;
       if (apiEndpoints.length > 1) {
-        final += `\n\nAdditional Endpoints:\n` + apiEndpoints.map((e) => `- ${e.name}: ${e.url} (Key: ${e.apiKey || 'None'})`).join('\n');
+        final += `Additional APIs:\n` + apiEndpoints.map(e => `- ${e.name}: ${e.url} (Key: ${e.apiKey || 'None'})`).join('\n') + '\n';
       }
-      return final;
+      final += '\n';
     }
-    if (mode === 'github') {
-      let repoSection = '';
-      if (repoMode === 'new') {
-        repoSection = `Action: Create New GitHub Repository\nName: ${newRepoName.trim() || 'nexus-autonomous-app'}\nVisibility: ${newRepoVisibility}\nBranch: ${newRepoBranch}\nDescription: ${newRepoDescription.trim() || 'Multi-agent autonomous application'}\nInit README: ${initReadme}`;
-      } else {
-        repoSection = `Target Existing GitHub Repository: ${repoInput} (branch: ${repoBranch})`;
-      }
 
-      const vercelSection = `Vercel Deployment Setup:\n- Project: ${vercelProject}\n- Framework: ${frameworkPreset}\n- Root Directory: ${rootDirectory}\n- Build Command: ${buildCommand}\n- Auto-Fix Build Errors: ${vercelAutoFix ? 'Enabled' : 'Disabled'}`;
-
-      const envSection = envVars.filter(e => e.key.trim()).length > 0
-        ? `\nEnvironment Variables:\n` + envVars.filter(e => e.key.trim()).map(e => `- ${e.key}=${e.value}`).join('\n')
-        : '';
-
-      const userGoal = repoGoal.trim() || 'Review pull requests, build features, maintain codebase, and ensure continuous Vercel deployment.';
-
-      return `${repoSection}\n\n${vercelSection}${envSection}\n\nGoal / Prompt:\n${userGoal}`;
+    let repoSection = '';
+    if (repoMode === 'new' && newRepoName.trim()) {
+      repoSection = `Action: Create New GitHub Repository\nName: ${newRepoName.trim()}\nVisibility: ${newRepoVisibility}\nBranch: ${newRepoBranch}\nDescription: ${newRepoDescription.trim() || 'Multi-agent autonomous application'}\nInit README: ${initReadme}`;
+    } else {
+      repoSection = `Target GitHub Repository: ${repoInput} (branch: ${repoBranch})`;
     }
-    return prompt.trim();
+
+    const vercelSection = `Vercel Deployment Setup:\n- Project: ${vercelProject}\n- Framework: ${frameworkPreset}\n- Root Directory: ${rootDirectory}\n- Build Command: ${buildCommand}\n- Auto-Fix Build Errors: ${vercelAutoFix ? 'Enabled' : 'Disabled'}`;
+
+    const envSection = envVars.filter(e => e.key.trim()).length > 0
+      ? `\nEnvironment Variables:\n` + envVars.filter(e => e.key.trim()).map(e => `- ${e.key}=${e.value}`).join('\n')
+      : '';
+
+    final += `${repoSection}\n\n${vercelSection}${envSection}`;
+
+    if (repoGoal.trim()) {
+      final += `\n\nDeployment Specific Goal:\n${repoGoal.trim()}`;
+    }
+
+    return final.trim();
+  };
+
+  const handleNextFromPrompt = () => {
+    if (prompt.trim().length < 5) {
+      setError('Please describe what your AI agents should do or select a 1-click template.');
+      return;
+    }
+    setError(undefined);
+    setStep('curl');
+  };
+
+  const handleNextFromCurl = () => {
+    setError(undefined);
+    setStep('github');
   };
 
   const handlePlan = async () => {
     const effective = getEffectivePrompt();
     if (effective.length < 5) {
-      setError('Please provide requirements or pick a template to build your agent fleet.');
+      setError('Please provide requirements to build your agent fleet.');
       return;
     }
 
@@ -396,792 +413,856 @@ export function CreateProcessModal({
     }
   };
 
+  const stepTitles: Record<WizardStep, { title: string; desc: string }> = {
+    prompt: {
+      title: '1. Describe Agent Fleet Goal',
+      desc: 'Tell the AI what you want to build. Local PC models configure the entire multi-stage agent fleet.',
+    },
+    curl: {
+      title: '2. API Integrations & cURL (Optional)',
+      desc: 'Paste cURL commands, test endpoint connectivity, and save API configurations for your agents.',
+    },
+    github: {
+      title: '3. GitHub Repository & Vercel Deployment',
+      desc: 'Select or create a GitHub repository and configure Vercel live cloud deployment & auto-fixing.',
+    },
+    review: {
+      title: plan?.name ?? '4. Review & Deploy Agent Fleet',
+      desc: plan?.summary ?? 'Review planned autonomous agent stages, responsibilities, and deliverable targets.',
+    },
+  };
+
+  const stepsList: Array<{ id: WizardStep; label: string; number: number; icon: any }> = [
+    { id: 'prompt', label: '1. Prompt', number: 1, icon: Sparkles },
+    { id: 'curl',   label: '2. cURL / API', number: 2, icon: Terminal },
+    { id: 'github', label: '3. GitHub + Vercel', number: 3, icon: Github },
+    { id: 'review', label: '4. Review', number: 4, icon: Bot },
+  ];
 
   return (
     <Modal
       open={open}
       onClose={close}
       size="lg"
-      title={step === 'describe' ? 'Create Autonomous Agent Fleet' : plan?.name ?? 'Review Agent Pipeline'}
-      description={
-        step === 'describe'
-          ? 'Tell the AI what you want to build. Local PC models and orchestrators configure the entire multi-stage agent team.'
-          : plan?.summary
-      }
+      title={stepTitles[step].title}
+      description={stepTitles[step].desc}
       actions={
-        step === 'describe' ? (
-          <div className="flex items-center justify-between w-full">
-            {/* Step indicator */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">1</span>
-                <span className="text-2xs font-semibold text-brand-600 dark:text-brand-400">Configure</span>
-              </div>
-              <ArrowRight size={12} className="text-ink-faint" />
-              <div className="flex items-center gap-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-inset border border-line-subtle text-[10px] font-bold text-ink-muted">2</span>
-                <span className="text-2xs font-medium text-ink-muted">Review</span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" onClick={close} disabled={planning}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                icon={planning ? Wand2 : ArrowRight}
-                loading={planning}
-                onClick={handlePlan}
-              >
-                {planning ? 'Planning…' : 'Next'}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between w-full">
-            {/* Step indicator — step 2 active */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-inset border border-line-subtle text-[10px] font-bold text-ink-muted">1</span>
-                <span className="text-2xs font-medium text-ink-muted">Configure</span>
-              </div>
-              <ArrowRight size={12} className="text-ink-faint" />
-              <div className="flex items-center gap-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">2</span>
-                <span className="text-2xs font-semibold text-brand-600 dark:text-brand-400">Review</span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={ArrowLeft}
-                onClick={() => setStep('describe')}
-                disabled={creating}
-              >
-                Back
-              </Button>
-              <Button variant="primary" size="sm" icon={Bot} loading={creating} onClick={handleCreate}>
-                Deploy Production ({plan?.agents.length} agents)
-              </Button>
-            </div>
-          </div>
-
-        )
-      }
-    >
-      {step === 'describe' ? (
-        <div className="space-y-4">
-          {/* Mode Selector — Pill Segmented Control */}
-          <div className="grid grid-cols-3 rounded-2xl bg-inset border border-line-subtle p-1 gap-1">
-            {(
-              [
-                { id: 'ai',     icon: Sparkles,  label: 'Build with AI',    activeColor: 'text-amber-600 dark:text-amber-400',  activeBg: 'bg-amber-500/10 border-amber-500/25' },
-                { id: 'curl',   icon: Terminal,  label: 'cURL / API',       activeColor: 'text-brand-600 dark:text-brand-400',  activeBg: 'bg-brand-500/10 border-brand-500/25' },
-                { id: 'github', icon: Github,    label: 'GitHub + Vercel',  activeColor: 'text-purple-600 dark:text-purple-400', activeBg: 'bg-purple-500/10 border-purple-500/25' },
-              ] as const
-            ).map((tab) => {
-              const isActive = mode === tab.id;
-              const Icon = tab.icon;
+        <div className="flex items-center justify-between w-full">
+          {/* Step indicator pills */}
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            {stepsList.map((s, idx) => {
+              const isCurrent = step === s.id;
+              const isPassed = (
+                (s.id === 'prompt') ||
+                (s.id === 'curl' && (step === 'curl' || step === 'github' || step === 'review')) ||
+                (s.id === 'github' && (step === 'github' || step === 'review')) ||
+                (s.id === 'review' && step === 'review')
+              );
               return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setMode(tab.id)}
-                  className={cn(
-                    'flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-2 text-xs font-bold transition-all duration-150 whitespace-nowrap',
-                    isActive
-                      ? `bg-surface shadow-sm border ${tab.activeBg} ${tab.activeColor}`
-                      : 'text-ink-muted hover:text-ink hover:bg-surface/50'
+                <div key={s.id} className="flex items-center gap-1 sm:gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (s.id === 'review' && !plan) return;
+                      setStep(s.id);
+                    }}
+                    className={cn(
+                      'flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap',
+                      isCurrent
+                        ? 'bg-brand-500 text-white shadow-xs'
+                        : isPassed
+                        ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 hover:bg-brand-500/20'
+                        : 'bg-inset text-ink-muted opacity-60'
+                    )}
+                  >
+                    <span>{s.number}</span>
+                    <span className="hidden sm:inline">{s.label.split('. ')[1]}</span>
+                  </button>
+                  {idx < stepsList.length - 1 && (
+                    <span className="text-ink-faint text-[10px]">→</span>
                   )}
-                >
-                  <Icon size={13} className="shrink-0" />
-                  <span className="truncate">{tab.label}</span>
-                </button>
+                </div>
               );
             })}
           </div>
 
+          {/* Action buttons per step */}
+          <div className="flex items-center gap-2">
+            {step === 'prompt' && (
+              <>
+                <Button variant="secondary" size="sm" onClick={close}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={ArrowRight}
+                  onClick={handleNextFromPrompt}
+                >
+                  Next: cURL / API
+                </Button>
+              </>
+            )}
 
-          {error && (
-            <p role="alert" className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300">
-              {error}
-            </p>
-          )}
+            {step === 'curl' && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={ArrowLeft}
+                  onClick={() => setStep('prompt')}
+                >
+                  Back
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={ArrowRight}
+                  onClick={handleNextFromCurl}
+                >
+                  Next: GitHub + Vercel
+                </Button>
+              </>
+            )}
 
-          {/* TAB 1: BUILD WITH AI (PRIMARY) */}
-          {mode === 'ai' && (
-            <div className="space-y-3.5">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-ink">
-                    What should your AI agents do?
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleExpandPromptWithAI}
-                    disabled={isExpandingPrompt}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-brand-500/10 px-2 py-0.5 text-2xs font-semibold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 transition-all"
-                  >
-                    <Wand2 size={11} className={isExpandingPrompt ? 'animate-spin' : ''} />
-                    <span>{isExpandingPrompt ? 'Expanding Prompt…' : '✨ Generate / Expand Prompt with AI'}</span>
-                  </button>
-                </div>
-                <textarea
-                  rows={3.5}
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="e.g. Review the codebase in krishrathi1/Multi-Agent-Flow, perform security audit, and generate deliverable reports..."
-                  className="w-full rounded-xl border border-line bg-surface p-3 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
-                />
+            {step === 'github' && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={ArrowLeft}
+                  onClick={() => setStep('curl')}
+                  disabled={planning}
+                >
+                  Back
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={planning ? Wand2 : Wand2}
+                  loading={planning}
+                  onClick={handlePlan}
+                >
+                  {planning ? 'Planning Agent Fleet…' : 'Plan & Review Fleet with AI'}
+                </Button>
+              </>
+            )}
+
+            {step === 'review' && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={ArrowLeft}
+                  onClick={() => setStep('github')}
+                  disabled={creating}
+                >
+                  Back
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={Bot}
+                  loading={creating}
+                  onClick={handleCreate}
+                >
+                  Deploy Production ({plan?.agents.length} agents)
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {error && (
+          <p role="alert" className="rounded-xl border border-red-500/25 bg-red-500/10 px-3.5 py-2 text-xs text-red-700 dark:text-red-300 font-medium">
+            {error}
+          </p>
+        )}
+
+        {/* ========================================================================= */}
+        {/* STEP 1: PROMPT & INFERENCE ENGINE (BUILD WITH AI)                         */}
+        {/* ========================================================================= */}
+        {step === 'prompt' && (
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-ink flex items-center gap-1.5">
+                  <Sparkles size={13} className="text-amber-500" />
+                  What should your AI agents do?
+                </label>
+                <button
+                  type="button"
+                  onClick={handleExpandPromptWithAI}
+                  disabled={isExpandingPrompt}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-0.5 text-2xs font-bold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 transition-all cursor-pointer"
+                >
+                  <Wand2 size={11} className={isExpandingPrompt ? 'animate-spin' : ''} />
+                  <span>{isExpandingPrompt ? 'Expanding Prompt…' : '✨ Expand Prompt with AI'}</span>
+                </button>
               </div>
-
-              {/* Quick 1-Click Templates */}
-              <div>
-                <span className="block text-2xs font-semibold uppercase tracking-wider text-ink-muted mb-2">
-                  Or pick a 1-click template:
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {AI_TEMPLATES.map((tmpl) => (
-                    <button
-                      key={tmpl.title}
-                      type="button"
-                      onClick={() => setPrompt(tmpl.prompt)}
-                      className="rounded-xl border border-line-subtle bg-surface p-2.5 text-left hover:border-brand-500/50 hover:bg-raised transition-all shadow-2xs group"
-                    >
-                      <span className="block text-xs font-semibold text-ink group-hover:text-brand-600 dark:group-hover:text-brand-400">
-                        {tmpl.title}
-                      </span>
-                      <span className="block text-2xs text-ink-muted mt-0.5 line-clamp-2">
-                        {tmpl.desc}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <textarea
+                rows={3.5}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="e.g. Review the codebase in krishrathi1/Multi-Agent-Flow, build full-stack responsive dashboard, and generate production deliverables..."
+                className="w-full rounded-xl border border-line bg-surface p-3 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+              />
             </div>
-          )}
 
-          {/* TAB 2: CURL COMMAND & INTERACTIVE API TESTER / SAVER */}
-          {mode === 'curl' && (
-            <div className="space-y-4">
-              {/* cURL input area */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-ink flex items-center gap-1.5">
-                    <Terminal size={13} className="text-brand-500" />
-                    Paste Raw cURL Command
-                  </label>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleParseAndSaveCurl()}
-                      disabled={!curlInput.trim()}
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-2xs font-bold transition-all cursor-pointer',
-                        curlSaved
-                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                          : 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20'
-                      )}
-                    >
-                      {curlSaved ? <Check size={11} /> : <Save size={11} />}
-                      <span>{curlSaved ? '✓ cURL Parsed & Saved' : 'Save & Parse cURL'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <textarea
-                    rows={3}
-                    value={curlInput}
-                    onChange={(e) => {
-                      setCurlInput(e.target.value);
-                      handleParseAndSaveCurl(e.target.value);
-                    }}
-                    placeholder="curl -X POST https://api.example.com/v1/chat \
-  -H 'Authorization: Bearer sk-...' \
-  -H 'Content-Type: application/json' \
-  -d '{&quot;model&quot;: &quot;gpt-4o&quot;, &quot;prompt&quot;: &quot;build agent&quot;}'"
-                    className="w-full rounded-xl border border-line bg-surface p-3 font-mono text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
-                  />
-                </div>
-
-                {/* Quick Example Loaders */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Quick Load:</span>
-                  {CURL_EXAMPLES.map((ex, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => {
-                        setCurlInput(ex);
-                        handleParseAndSaveCurl(ex);
-                      }}
-                      className="rounded-md border border-line-subtle bg-inset/50 px-2 py-0.5 text-[10px] font-mono text-ink-muted hover:border-brand-500 hover:text-ink transition-colors cursor-pointer"
-                    >
-                      {i === 0 ? '⚡ Gemini API' : '💳 Stripe API'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Extracted API Endpoint & Test / Save Card */}
-              <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center">
-                      <Zap size={13} />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-ink block">Extracted API Endpoint & Connection</span>
-                      <span className="text-[10px] text-ink-muted block">Direct endpoint generated from your cURL</span>
-                    </div>
-                  </div>
-
-                  {/* Test status badge */}
-                  {testStatus !== 'idle' && (
-                    <span
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono font-bold',
-                        testStatus === 'testing' && 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25',
-                        testStatus === 'success' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25',
-                        testStatus === 'failed' && 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25'
-                      )}
-                    >
-                      {testStatus === 'testing' && <RefreshCw size={10} className="animate-spin" />}
-                      {testStatus === 'success' && <CheckCircle2 size={10} />}
-                      {testStatus === 'failed' && <AlertCircle size={10} />}
-                      {testMessage}
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-2.5">
-                  {/* Method & URL */}
-                  <div className="flex gap-2">
-                    <select
-                      value={apiMethod}
-                      onChange={(e) => setApiMethod(e.target.value)}
-                      className="w-24 rounded-xl border border-line bg-inset font-mono text-xs font-bold text-ink px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    >
-                      <option value="GET">GET</option>
-                      <option value="POST">POST</option>
-                      <option value="PUT">PUT</option>
-                      <option value="PATCH">PATCH</option>
-                      <option value="DELETE">DELETE</option>
-                    </select>
-                    <input
-                      type="text"
-                      value={apiUrl}
-                      onChange={(e) => setApiUrl(e.target.value)}
-                      placeholder="https://api.example.com/v1/endpoint"
-                      className="flex-1 rounded-xl border border-line bg-surface px-3 py-2 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    />
-                  </div>
-
-                  {/* Auth / API Key Header */}
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 top-2.5 text-ink-muted">
-                        <Key size={12} />
-                      </span>
-                      <input
-                        type="text"
-                        value={apiAuthHeader}
-                        onChange={(e) => setApiAuthHeader(e.target.value)}
-                        placeholder="Authorization: Bearer sk-... or API Key"
-                        className="w-full rounded-xl border border-line bg-surface pl-8 pr-3 py-2 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Payload / Body if not GET */}
-                  {apiMethod !== 'GET' && (
-                    <div>
-                      <label className="block text-[10px] font-semibold text-ink-muted mb-1 uppercase tracking-wider">
-                        Request Payload (JSON Body)
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={apiBody}
-                        onChange={(e) => setApiBody(e.target.value)}
-                        placeholder='{"key": "value"}'
-                        className="w-full rounded-xl border border-line bg-inset/40 p-2.5 font-mono text-2xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
-                      />
-                    </div>
-                  )}
-
-                  {/* Test Connection & Save Action Buttons */}
-                  <div className="flex items-center justify-between pt-1">
-                    <button
-                      type="button"
-                      onClick={handleTestApi}
-                      disabled={testStatus === 'testing' || !apiUrl.trim()}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-inset border border-line px-3 py-1.5 text-xs font-bold text-ink hover:bg-hover hover:border-brand-500 transition-all disabled:opacity-50 cursor-pointer"
-                    >
-                      <Send size={12} className={testStatus === 'testing' ? 'animate-pulse text-brand-500' : 'text-brand-500'} />
-                      <span>{testStatus === 'testing' ? 'Testing Connection…' : 'Test Connection'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleSaveParsedApi}
-                      className={cn(
-                        'inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer',
-                        apiSaved
-                          ? 'bg-emerald-500 text-white shadow-xs'
-                          : 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20'
-                      )}
-                    >
-                      {apiSaved ? <Check size={12} /> : <Save size={12} />}
-                      <span>{apiSaved ? '✓ API Saved' : 'Save API Configuration'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Secondary API Endpoints Manager */}
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center justify-between">
-                  <span className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
-                    Additional Connected APIs ({apiEndpoints.length})
-                  </span>
+            {/* Quick 1-Click Templates */}
+            <div>
+              <span className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-2">
+                Or pick a 1-click template:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {AI_TEMPLATES.map((tmpl) => (
                   <button
+                    key={tmpl.title}
                     type="button"
-                    onClick={handleAddApiEndpoint}
-                    className="inline-flex items-center gap-1 rounded-md bg-brand-500/10 px-2 py-0.5 text-2xs font-semibold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 transition-all cursor-pointer"
+                    onClick={() => setPrompt(tmpl.prompt)}
+                    className="rounded-xl border border-line-subtle bg-surface p-2.5 text-left hover:border-brand-500/50 hover:bg-hover transition-all shadow-2xs group cursor-pointer"
                   >
-                    <Plus size={11} />
-                    <span>+ Add Another API</span>
+                    <span className="block text-xs font-bold text-ink group-hover:text-brand-600 dark:group-hover:text-brand-400">
+                      {tmpl.title}
+                    </span>
+                    <span className="block text-2xs text-ink-muted mt-0.5 line-clamp-2">
+                      {tmpl.desc}
+                    </span>
                   </button>
-                </div>
-
-                {apiEndpoints.map((ep, idx) => (
-                  <div key={ep.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line-subtle bg-surface p-2.5 text-xs">
-                    <input
-                      type="text"
-                      value={ep.name}
-                      onChange={(e) => handleUpdateApiEndpoint(ep.id, 'name', e.target.value)}
-                      placeholder="API Name"
-                      className="w-28 sm:w-36 rounded-lg border border-line bg-inset/50 px-2 py-1.5 text-2xs font-bold text-ink"
-                    />
-                    <input
-                      type="text"
-                      value={ep.url}
-                      onChange={(e) => handleUpdateApiEndpoint(ep.id, 'url', e.target.value)}
-                      placeholder="https://api.service.com/v1/..."
-                      className="flex-1 min-w-[140px] rounded-lg border border-line bg-inset/50 px-2.5 py-1.5 font-mono text-2xs text-ink"
-                    />
-                    <input
-                      type="password"
-                      value={ep.apiKey}
-                      onChange={(e) => handleUpdateApiEndpoint(ep.id, 'apiKey', e.target.value)}
-                      placeholder="API Key / Auth"
-                      className="w-28 sm:w-32 rounded-lg border border-line bg-inset/50 px-2 py-1.5 font-mono text-2xs text-ink"
-                    />
-                    {idx > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveApiEndpoint(ep.id)}
-                        className="text-red-400 hover:text-red-300 p-1 transition-colors cursor-pointer"
-                        title="Remove API"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                  </div>
                 ))}
               </div>
             </div>
-          )}
 
-          {/* TAB 3: GITHUB + VERCEL INTEGRATION */}
-          {mode === 'github' && (
-            <div className="space-y-4">
-              {/* GitHub Repository Mode: Existing vs Create New */}
-              <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between border-b border-line-subtle pb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-                      <Github size={13} />
-                    </div>
-                    <span className="text-xs font-bold text-ink">GitHub Repository Source</span>
+            {/* Model Engine & Team Size Options */}
+            <div className="rounded-2xl border border-line-subtle bg-inset/50 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-ink">
+                  <Cpu size={14} className="text-brand-500" />
+                  Inference Model Engine
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  Local Host Default • Cloud LLM Fallback
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-2xs font-medium text-ink-muted mb-1">Select Model (Local Host Only)</label>
+                  <CustomSelect
+                    value={selectedModel}
+                    onChange={(val) => setSelectedModel(val)}
+                    upward
+                    options={localModels.map((m) => ({
+                      value: m.id,
+                      label: m.name,
+                    }))}
+                  />
+                  <p className="mt-1 text-[10px] text-ink-muted">
+                    * Automatically falls back to Cloud LLM if local token capacity is exceeded.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-2xs font-medium text-ink-muted mb-1">Fleet Team Size</label>
+                  <CustomSelect
+                    value={agentCount}
+                    onChange={(val) => setAgentCount(val)}
+                    upward
+                    options={[
+                      { value: 'auto', label: '✨ Auto (AI decides optimal stages)' },
+                      { value: '1', label: '1 Agent (Solo Specialist)' },
+                      { value: '2', label: '2 Agents (Planner + Deliverables Engineer)' },
+                      { value: '3', label: '3 Agents (Planner + Engineer + QA Reviewer)' },
+                      { value: '4', label: '4 Agents (Full Autonomous Team)' },
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* STEP 2: CURL COMMAND & API INTEGRATIONS                                    */}
+        {/* ========================================================================= */}
+        {step === 'curl' && (
+          <div className="space-y-4">
+            {/* cURL input area */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-ink flex items-center gap-1.5">
+                  <Terminal size={13} className="text-brand-500" />
+                  Paste Raw cURL Command
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleParseAndSaveCurl()}
+                    disabled={!curlInput.trim()}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-2xs font-bold transition-all cursor-pointer',
+                      curlSaved
+                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                        : 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20'
+                    )}
+                  >
+                    {curlSaved ? <Check size={11} /> : <Save size={11} />}
+                    <span>{curlSaved ? '✓ cURL Parsed & Saved' : 'Save & Parse cURL'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative">
+                <textarea
+                  rows={3}
+                  value={curlInput}
+                  onChange={(e) => {
+                    setCurlInput(e.target.value);
+                    handleParseAndSaveCurl(e.target.value);
+                  }}
+                  placeholder="curl -X POST https://api.example.com/v1/chat \
+  -H 'Authorization: Bearer sk-...' \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;model&quot;: &quot;gpt-4o&quot;, &quot;prompt&quot;: &quot;build agent&quot;}'"
+                  className="w-full rounded-xl border border-line bg-surface p-3 font-mono text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+                />
+              </div>
+
+              {/* Quick Example Loaders */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Quick Load:</span>
+                {CURL_EXAMPLES.map((ex, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      setCurlInput(ex);
+                      handleParseAndSaveCurl(ex);
+                    }}
+                    className="rounded-md border border-line-subtle bg-inset/50 px-2 py-0.5 text-[10px] font-mono text-ink-muted hover:border-brand-500 hover:text-ink transition-colors cursor-pointer"
+                  >
+                    {i === 0 ? '⚡ Gemini API' : '💳 Stripe API'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Extracted API Endpoint & Test / Save Card */}
+            <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center">
+                    <Zap size={13} />
                   </div>
-
-                  {/* Mode switcher: Existing vs New */}
-                  <div className="flex rounded-lg bg-inset p-0.5 border border-line-subtle text-2xs font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => setRepoMode('existing')}
-                      className={cn(
-                        'px-2.5 py-1 rounded-md transition-all cursor-pointer',
-                        repoMode === 'existing'
-                          ? 'bg-surface text-ink font-bold shadow-xs border border-line-subtle'
-                          : 'text-ink-muted hover:text-ink'
-                      )}
-                    >
-                      Existing Repo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRepoMode('new')}
-                      className={cn(
-                        'px-2.5 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer',
-                        repoMode === 'new'
-                          ? 'bg-surface text-purple-600 dark:text-purple-400 font-bold shadow-xs border border-line-subtle'
-                          : 'text-ink-muted hover:text-ink'
-                      )}
-                    >
-                      <Plus size={10} />
-                      <span>Create New Repo</span>
-                    </button>
+                  <div>
+                    <span className="text-xs font-bold text-ink block">Extracted API Endpoint & Connection</span>
+                    <span className="text-[10px] text-ink-muted block">Direct endpoint generated from your cURL</span>
                   </div>
                 </div>
 
-                {repoMode === 'existing' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <div className="sm:col-span-2">
-                      <label className="block text-2xs font-medium text-ink-muted mb-1">Select Target Repository</label>
-                      <CustomSelect
-                        value={repoInput}
-                        onChange={(val) => {
-                          setRepoInput(val);
-                          const found = repoList.find((r) => r.full_name === val);
-                          if (found) setRepoBranch(found.default_branch || 'main');
-                        }}
-                        options={repoList.map((r) => ({
-                          value: r.full_name,
-                          label: r.full_name,
-                          badge: r.default_branch,
-                        }))}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-2xs font-medium text-ink-muted mb-1">Target Branch</label>
-                      <input
-                        type="text"
-                        value={repoBranch}
-                        onChange={(e) => setRepoBranch(e.target.value)}
-                        placeholder="main"
-                        className="w-full rounded-xl border border-line bg-surface p-2 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  /* Create New Repository Form */
-                  <div className="space-y-2.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <div className="sm:col-span-2">
-                        <label className="block text-2xs font-medium text-ink-muted mb-1">New Repository Name</label>
-                        <div className="flex items-center">
-                          <span className="px-2.5 py-2 rounded-l-xl bg-inset border border-r-0 border-line text-2xs font-mono text-ink-muted">
-                            krishrathi1 /
-                          </span>
-                          <input
-                            type="text"
-                            value={newRepoName}
-                            onChange={(e) => setNewRepoName(e.target.value)}
-                            placeholder="nexus-autonomous-app"
-                            className="flex-1 rounded-r-xl border border-line bg-surface p-2 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-2xs font-medium text-ink-muted mb-1">Visibility</label>
-                        <div className="flex rounded-xl bg-inset p-1 border border-line text-2xs font-semibold">
-                          <button
-                            type="button"
-                            onClick={() => setNewRepoVisibility('public')}
-                            className={cn(
-                              'flex-1 py-1 rounded-lg text-center transition-all flex items-center justify-center gap-1 cursor-pointer',
-                              newRepoVisibility === 'public'
-                                ? 'bg-surface text-ink font-bold shadow-xs'
-                                : 'text-ink-muted'
-                            )}
-                          >
-                            <Globe size={11} />
-                            Public
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setNewRepoVisibility('private')}
-                            className={cn(
-                              'flex-1 py-1 rounded-lg text-center transition-all flex items-center justify-center gap-1 cursor-pointer',
-                              newRepoVisibility === 'private'
-                                ? 'bg-surface text-ink font-bold shadow-xs'
-                                : 'text-ink-muted'
-                            )}
-                          >
-                            <Lock size={11} />
-                            Private
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <div className="sm:col-span-2">
-                        <input
-                          type="text"
-                          value={newRepoDescription}
-                          onChange={(e) => setNewRepoDescription(e.target.value)}
-                          placeholder="Repository description (optional)..."
-                          className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 px-1">
-                        <input
-                          type="checkbox"
-                          id="initReadme"
-                          checked={initReadme}
-                          onChange={(e) => setInitReadme(e.target.checked)}
-                          className="h-3.5 w-3.5 rounded border-line text-brand-600 focus:ring-brand-500 cursor-pointer"
-                        />
-                        <label htmlFor="initReadme" className="text-2xs font-medium text-ink-muted cursor-pointer">
-                          Init README & .gitignore
-                        </label>
-                      </div>
-                    </div>
-                  </div>
+                {/* Test status badge */}
+                {testStatus !== 'idle' && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono font-bold',
+                      testStatus === 'testing' && 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25',
+                      testStatus === 'success' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25',
+                      testStatus === 'failed' && 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25'
+                    )}
+                  >
+                    {testStatus === 'testing' && <RefreshCw size={10} className="animate-spin" />}
+                    {testStatus === 'success' && <CheckCircle2 size={10} />}
+                    {testStatus === 'failed' && <AlertCircle size={10} />}
+                    {testMessage}
+                  </span>
                 )}
               </div>
 
-              {/* Vercel Deployment Settings Card */}
-              <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between border-b border-line-subtle pb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                      <Globe size={13} />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-ink block">Vercel Continuous Deployment</span>
-                      <span className="text-[10px] text-ink-muted block">Live cloud builds & auto-deployment pipeline</span>
-                    </div>
-                  </div>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Vercel Linked
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div>
-                    <label className="block text-2xs font-medium text-ink-muted mb-1">Vercel Project Name</label>
-                    <input
-                      type="text"
-                      value={vercelProject}
-                      onChange={(e) => setVercelProject(e.target.value)}
-                      placeholder="nexus-app-prod"
-                      className="w-full rounded-xl border border-line bg-surface p-2 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-2xs font-medium text-ink-muted mb-1">Framework Preset</label>
-                    <select
-                      value={frameworkPreset}
-                      onChange={(e) => setFrameworkPreset(e.target.value)}
-                      className="w-full rounded-xl border border-line bg-surface p-2 text-xs font-semibold text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    >
-                      <option value="vite">Vite / React SPA</option>
-                      <option value="nextjs">Next.js (App Router)</option>
-                      <option value="node">Node.js / Express Backend</option>
-                      <option value="remix">Remix / Full-Stack</option>
-                      <option value="astro">Astro / Static</option>
-                      <option value="other">Other / Custom</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-2xs font-medium text-ink-muted mb-1">Build Command</label>
-                    <input
-                      type="text"
-                      value={buildCommand}
-                      onChange={(e) => setBuildCommand(e.target.value)}
-                      placeholder="npm run build"
-                      className="w-full rounded-xl border border-line bg-surface p-2 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Auto-Fix Vercel Errors Toggle */}
-                <div className="flex items-center justify-between rounded-xl border border-line-subtle bg-inset/40 p-2.5">
-                  <div className="flex items-center gap-2">
-                    <Zap size={14} className="text-amber-500" />
-                    <div>
-                      <p className="text-xs font-semibold text-ink">Auto-Inspect Vercel Build Logs & Auto-Fix Errors</p>
-                      <p className="text-[10px] text-ink-muted">When Vercel build fails, agents isolate stack trace and push fix patches.</p>
-                    </div>
-                  </div>
+              <div className="space-y-2.5">
+                {/* Method & URL */}
+                <div className="flex gap-2">
+                  <select
+                    value={apiMethod}
+                    onChange={(e) => setApiMethod(e.target.value)}
+                    className="w-24 rounded-xl border border-line bg-inset font-mono text-xs font-bold text-ink px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  >
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
+                  </select>
                   <input
-                    type="checkbox"
-                    checked={vercelAutoFix}
-                    onChange={(e) => setVercelAutoFix(e.target.checked)}
-                    className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500 cursor-pointer"
+                    type="text"
+                    value={apiUrl}
+                    onChange={(e) => setApiUrl(e.target.value)}
+                    placeholder="https://api.example.com/v1/endpoint"
+                    className="flex-1 rounded-xl border border-line bg-surface px-3 py-2 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
                   />
                 </div>
 
-                {/* Environment Variables */}
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">
-                      Environment Variables ({envVars.length})
+                {/* Auth / API Key Header */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-2.5 text-ink-muted">
+                      <Key size={12} />
                     </span>
+                    <input
+                      type="text"
+                      value={apiAuthHeader}
+                      onChange={(e) => setApiAuthHeader(e.target.value)}
+                      placeholder="Authorization: Bearer sk-... or API Key"
+                      className="w-full rounded-xl border border-line bg-surface pl-8 pr-3 py-2 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Payload / Body if not GET */}
+                {apiMethod !== 'GET' && (
+                  <div>
+                    <label className="block text-[10px] font-semibold text-ink-muted mb-1 uppercase tracking-wider">
+                      Request Payload (JSON Body)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={apiBody}
+                      onChange={(e) => setApiBody(e.target.value)}
+                      placeholder='{"key": "value"}'
+                      className="w-full rounded-xl border border-line bg-inset/40 p-2.5 font-mono text-2xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+                    />
+                  </div>
+                )}
+
+                {/* Test Connection & Save Action Buttons */}
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={handleTestApi}
+                    disabled={testStatus === 'testing' || !apiUrl.trim()}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-inset border border-line px-3 py-1.5 text-xs font-bold text-ink hover:bg-hover hover:border-brand-500 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    <Send size={12} className={testStatus === 'testing' ? 'animate-pulse text-brand-500' : 'text-brand-500'} />
+                    <span>{testStatus === 'testing' ? 'Testing Connection…' : 'Test Connection'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveParsedApi}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer',
+                      apiSaved
+                        ? 'bg-emerald-500 text-white shadow-xs'
+                        : 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20'
+                    )}
+                  >
+                    {apiSaved ? <Check size={12} /> : <Save size={12} />}
+                    <span>{apiSaved ? '✓ API Saved' : 'Save API Configuration'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Secondary API Endpoints Manager */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <span className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
+                  Additional Connected APIs ({apiEndpoints.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddApiEndpoint}
+                  className="inline-flex items-center gap-1 rounded-md bg-brand-500/10 px-2 py-0.5 text-2xs font-semibold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 transition-all cursor-pointer"
+                >
+                  <Plus size={11} />
+                  <span>+ Add Another API</span>
+                </button>
+              </div>
+
+              {apiEndpoints.map((ep, idx) => (
+                <div key={ep.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line-subtle bg-surface p-2.5 text-xs">
+                  <input
+                    type="text"
+                    value={ep.name}
+                    onChange={(e) => handleUpdateApiEndpoint(ep.id, 'name', e.target.value)}
+                    placeholder="API Name"
+                    className="w-28 sm:w-36 rounded-lg border border-line bg-inset/50 px-2 py-1.5 text-2xs font-bold text-ink"
+                  />
+                  <input
+                    type="text"
+                    value={ep.url}
+                    onChange={(e) => handleUpdateApiEndpoint(ep.id, 'url', e.target.value)}
+                    placeholder="https://api.service.com/v1/..."
+                    className="flex-1 min-w-[140px] rounded-lg border border-line bg-inset/50 px-2.5 py-1.5 font-mono text-2xs text-ink"
+                  />
+                  <input
+                    type="password"
+                    value={ep.apiKey}
+                    onChange={(e) => handleUpdateApiEndpoint(ep.id, 'apiKey', e.target.value)}
+                    placeholder="API Key / Auth"
+                    className="w-28 sm:w-32 rounded-lg border border-line bg-inset/50 px-2.5 py-1.5 font-mono text-2xs text-ink"
+                  />
+                  {idx > 0 && (
                     <button
                       type="button"
-                      onClick={handleAddEnvVar}
-                      className="inline-flex items-center gap-1 rounded-md bg-inset border border-line px-2 py-0.5 text-2xs font-semibold text-ink hover:bg-hover transition-all cursor-pointer"
+                      onClick={() => handleRemoveApiEndpoint(ep.id)}
+                      className="text-red-400 hover:text-red-300 p-1 transition-colors cursor-pointer"
+                      title="Remove API"
                     >
-                      <Plus size={10} />
-                      <span>Add Variable</span>
+                      <Trash2 size={13} />
                     </button>
-                  </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-                  <div className="space-y-1.5">
-                    {envVars.map((env) => (
-                      <div key={env.id} className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={env.key}
-                          onChange={(e) => handleUpdateEnvVar(env.id, 'key', e.target.value)}
-                          placeholder="KEY (e.g. DATABASE_URL)"
-                          className="w-1/3 rounded-lg border border-line bg-inset/40 px-2 py-1 font-mono text-2xs text-ink uppercase"
-                        />
-                        <input
-                          type="text"
-                          value={env.value}
-                          onChange={(e) => handleUpdateEnvVar(env.id, 'value', e.target.value)}
-                          placeholder="value..."
-                          className="flex-1 rounded-lg border border-line bg-inset/40 px-2 py-1 font-mono text-2xs text-ink"
-                        />
-                        {envVars.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEnvVar(env.id)}
-                            className="text-ink-muted hover:text-red-400 p-1 cursor-pointer"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+        {/* ========================================================================= */}
+        {/* STEP 3: GITHUB REPO & VERCEL DEPLOYMENT                                    */}
+        {/* ========================================================================= */}
+        {step === 'github' && (
+          <div className="space-y-4">
+            {/* GitHub Repository Mode: Existing vs Create New */}
+            <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-line-subtle pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                    <Github size={13} />
                   </div>
+                  <span className="text-xs font-bold text-ink">GitHub Repository Source</span>
+                </div>
+
+                {/* Mode switcher: Existing vs New */}
+                <div className="flex rounded-lg bg-inset p-0.5 border border-line-subtle text-2xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setRepoMode('existing')}
+                    className={cn(
+                      'px-2.5 py-1 rounded-md transition-all cursor-pointer',
+                      repoMode === 'existing'
+                        ? 'bg-surface text-ink font-bold shadow-xs border border-line-subtle'
+                        : 'text-ink-muted hover:text-ink'
+                    )}
+                  >
+                    Existing Repo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRepoMode('new')}
+                    className={cn(
+                      'px-2.5 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer',
+                      repoMode === 'new'
+                        ? 'bg-surface text-purple-600 dark:text-purple-400 font-bold shadow-xs border border-line-subtle'
+                        : 'text-ink-muted hover:text-ink'
+                    )}
+                  >
+                    <Plus size={10} />
+                    <span>Create New Repo</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Repository & Deployment Prompt Goal */}
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1">
-                  Fleet Instructions for Repository & Deployment
-                </label>
-                <textarea
-                  rows={2.5}
-                  value={repoGoal}
-                  onChange={(e) => setRepoGoal(e.target.value)}
-                  placeholder="Review codebase, create production deliverables, execute Vercel build verification, and auto-resolve any deployment issues..."
-                  className="w-full rounded-xl border border-line bg-surface p-3 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+              {repoMode === 'existing' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="sm:col-span-2">
+                    <label className="block text-2xs font-medium text-ink-muted mb-1">Select Target Repository</label>
+                    <CustomSelect
+                      value={repoInput}
+                      onChange={(val) => {
+                        setRepoInput(val);
+                        const found = repoList.find((r) => r.full_name === val);
+                        if (found) setRepoBranch(found.default_branch || 'main');
+                      }}
+                      options={repoList.map((r) => ({
+                        value: r.full_name,
+                        label: r.full_name,
+                        badge: r.default_branch,
+                      }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-2xs font-medium text-ink-muted mb-1">Target Branch</label>
+                    <input
+                      type="text"
+                      value={repoBranch}
+                      onChange={(e) => setRepoBranch(e.target.value)}
+                      placeholder="main"
+                      className="w-full rounded-xl border border-line bg-surface p-2 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Create New Repository Form */
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <label className="block text-2xs font-medium text-ink-muted mb-1">New Repository Name</label>
+                      <div className="flex items-center">
+                        <span className="px-2.5 py-2 rounded-l-xl bg-inset border border-r-0 border-line text-2xs font-mono text-ink-muted">
+                          krishrathi1 /
+                        </span>
+                        <input
+                          type="text"
+                          value={newRepoName}
+                          onChange={(e) => setNewRepoName(e.target.value)}
+                          placeholder="nexus-autonomous-app"
+                          className="flex-1 rounded-r-xl border border-line bg-surface p-2 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-2xs font-medium text-ink-muted mb-1">Visibility</label>
+                      <div className="flex rounded-xl bg-inset p-1 border border-line text-2xs font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setNewRepoVisibility('public')}
+                          className={cn(
+                            'flex-1 py-1 rounded-lg text-center transition-all flex items-center justify-center gap-1 cursor-pointer',
+                            newRepoVisibility === 'public'
+                              ? 'bg-surface text-ink font-bold shadow-xs'
+                              : 'text-ink-muted'
+                          )}
+                        >
+                          <Globe size={11} />
+                          Public
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewRepoVisibility('private')}
+                          className={cn(
+                            'flex-1 py-1 rounded-lg text-center transition-all flex items-center justify-center gap-1 cursor-pointer',
+                            newRepoVisibility === 'private'
+                              ? 'bg-surface text-ink font-bold shadow-xs'
+                              : 'text-ink-muted'
+                          )}
+                        >
+                          <Lock size={11} />
+                          Private
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <input
+                        type="text"
+                        value={newRepoDescription}
+                        onChange={(e) => setNewRepoDescription(e.target.value)}
+                        placeholder="Repository description (optional)..."
+                        className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 px-1">
+                      <input
+                        type="checkbox"
+                        id="initReadme"
+                        checked={initReadme}
+                        onChange={(e) => setInitReadme(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-line text-brand-600 focus:ring-brand-500 cursor-pointer"
+                      />
+                      <label htmlFor="initReadme" className="text-2xs font-medium text-ink-muted cursor-pointer">
+                        Init README & .gitignore
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Vercel Deployment Settings Card */}
+            <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-line-subtle pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                    <Globe size={13} />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-ink block">Vercel Continuous Deployment</span>
+                    <span className="text-[10px] text-ink-muted block">Live cloud builds & auto-deployment pipeline</span>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Vercel Linked
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-2xs font-medium text-ink-muted mb-1">Vercel Project Name</label>
+                  <input
+                    type="text"
+                    value={vercelProject}
+                    onChange={(e) => setVercelProject(e.target.value)}
+                    placeholder="nexus-app-prod"
+                    className="w-full rounded-xl border border-line bg-surface p-2 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-2xs font-medium text-ink-muted mb-1">Framework Preset</label>
+                  <select
+                    value={frameworkPreset}
+                    onChange={(e) => setFrameworkPreset(e.target.value)}
+                    className="w-full rounded-xl border border-line bg-surface p-2 text-xs font-semibold text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  >
+                    <option value="vite">Vite / React SPA</option>
+                    <option value="nextjs">Next.js (App Router)</option>
+                    <option value="node">Node.js / Express Backend</option>
+                    <option value="remix">Remix / Full-Stack</option>
+                    <option value="astro">Astro / Static</option>
+                    <option value="other">Other / Custom</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-2xs font-medium text-ink-muted mb-1">Build Command</label>
+                  <input
+                    type="text"
+                    value={buildCommand}
+                    onChange={(e) => setBuildCommand(e.target.value)}
+                    placeholder="npm run build"
+                    className="w-full rounded-xl border border-line bg-surface p-2 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
+
+              {/* Auto-Fix Vercel Errors Toggle */}
+              <div className="flex items-center justify-between rounded-xl border border-line-subtle bg-inset/40 p-2.5">
+                <div className="flex items-center gap-2">
+                  <Zap size={14} className="text-amber-500" />
+                  <div>
+                    <p className="text-xs font-semibold text-ink">Auto-Inspect Vercel Build Logs & Auto-Fix Errors</p>
+                    <p className="text-[10px] text-ink-muted">When Vercel build fails, agents isolate stack trace and push fix patches.</p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={vercelAutoFix}
+                  onChange={(e) => setVercelAutoFix(e.target.checked)}
+                  className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500 cursor-pointer"
                 />
+              </div>
+
+              {/* Environment Variables */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">
+                    Environment Variables ({envVars.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddEnvVar}
+                    className="inline-flex items-center gap-1 rounded-md bg-inset border border-line px-2 py-0.5 text-2xs font-semibold text-ink hover:bg-hover transition-all cursor-pointer"
+                  >
+                    <Plus size={10} />
+                    <span>Add Variable</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  {envVars.map((env) => (
+                    <div key={env.id} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={env.key}
+                        onChange={(e) => handleUpdateEnvVar(env.id, 'key', e.target.value)}
+                        placeholder="KEY (e.g. DATABASE_URL)"
+                        className="w-1/3 rounded-lg border border-line bg-inset/40 px-2 py-1 font-mono text-2xs text-ink uppercase"
+                      />
+                      <input
+                        type="text"
+                        value={env.value}
+                        onChange={(e) => handleUpdateEnvVar(env.id, 'value', e.target.value)}
+                        placeholder="value..."
+                        className="flex-1 rounded-lg border border-line bg-inset/40 px-2 py-1 font-mono text-2xs text-ink"
+                      />
+                      {envVars.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEnvVar(env.id)}
+                          className="text-ink-muted hover:text-red-400 p-1 cursor-pointer"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          )}
 
-          {/* Model Engine & Team Size Options */}
-          <div className="rounded-xl border border-line-subtle bg-inset/50 p-3.5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-ink">
-                <Cpu size={14} className="text-brand-500" />
-                Inference Model Engine
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-2xs font-semibold text-emerald-600 dark:text-emerald-400">
-                Local Host Default • Cloud LLM Fallback
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-2xs font-medium text-ink-muted mb-1">Select Model (Local Host Only)</label>
-                <CustomSelect
-                  value={selectedModel}
-                  onChange={(val) => setSelectedModel(val)}
-                  upward
-                  options={localModels.map((m) => ({
-                    value: m.id,
-                    label: m.name,
-                  }))}
-                />
-                <p className="mt-1 text-[10px] text-ink-muted">
-                  * If Local Token Limit is reached, system automatically falls back to Cloud LLM to complete execution.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-2xs font-medium text-ink-muted mb-1">Fleet Team Size</label>
-                <CustomSelect
-                  value={agentCount}
-                  onChange={(val) => setAgentCount(val)}
-                  upward
-                  options={[
-                    { value: 'auto', label: '✨ Auto (AI decides optimal stages)' },
-                    { value: '1', label: '1 Agent (Solo Specialist)' },
-                    { value: '2', label: '2 Agents (Planner + Deliverables Engineer)' },
-                    { value: '3', label: '3 Agents (Planner + Engineer + QA Reviewer)' },
-                    { value: '4', label: '4 Agents (Full Autonomous Team)' },
-                  ]}
-                />
-              </div>
-
+            {/* Repository & Deployment Prompt Goal */}
+            <div>
+              <label className="block text-xs font-semibold text-ink mb-1">
+                Fleet Instructions for Repository & Deployment
+              </label>
+              <textarea
+                rows={2.5}
+                value={repoGoal}
+                onChange={(e) => setRepoGoal(e.target.value)}
+                placeholder="Review codebase, create production deliverables, execute Vercel build verification, and auto-resolve any deployment issues..."
+                className="w-full rounded-xl border border-line bg-surface p-3 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+              />
             </div>
           </div>
-        </div>
-      ) : (
-        /* STEP 2: REVIEW AGENT FLEET PLAN */
-        <div className="space-y-4">
-          <div className="rounded-xl border border-line-subtle bg-surface p-4 shadow-sm">
-            <h4 className="text-sm font-semibold text-ink">{plan?.name}</h4>
-            <p className="mt-1 text-xs text-ink-muted leading-relaxed">{plan?.summary}</p>
-          </div>
+        )}
 
-          <div className="space-y-3">
-            <span className="block text-xs font-semibold text-ink">
-              Planned Agent Stages ({plan?.agents.length} Agents)
-            </span>
-            {plan?.stages.map((stage) => {
-              const stageAgents = plan.agents.filter((a) => a.stage === stage.stage);
-              return (
-                <div key={stage.stage} className="rounded-xl border border-line-subtle bg-inset/40 p-3.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-ink flex items-center gap-1.5">
-                      <span className="grid h-5 w-5 place-items-center rounded-full bg-brand-500/10 text-2xs font-bold text-brand-600">
-                        {stage.stage}
+        {/* ========================================================================= */}
+        {/* STEP 4: REVIEW & DEPLOY PLANNED AGENT FLEET                               */}
+        {/* ========================================================================= */}
+        {step === 'review' && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-sm space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                  <Bot size={14} />
+                </span>
+                <h4 className="text-sm font-bold text-ink">{plan?.name}</h4>
+              </div>
+              <p className="text-xs text-ink-muted leading-relaxed">{plan?.summary}</p>
+            </div>
+
+            <div className="space-y-3">
+              <span className="block text-xs font-bold uppercase tracking-wider text-ink">
+                Planned Agent Stages ({plan?.agents.length} Autonomous Agents)
+              </span>
+              {plan?.stages.map((stage) => {
+                const stageAgents = plan.agents.filter((a) => a.stage === stage.stage);
+                return (
+                  <div key={stage.stage} className="rounded-2xl border border-line-subtle bg-inset/40 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                        <span className="grid h-5 w-5 place-items-center rounded-full bg-brand-500/10 text-2xs font-bold text-brand-600">
+                          {stage.stage}
+                        </span>
+                        {stage.name}
                       </span>
-                      {stage.name}
-                    </span>
-                    <span className="text-2xs text-ink-faint">{stage.description}</span>
-                  </div>
+                      <span className="text-2xs text-ink-faint">{stage.description}</span>
+                    </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                    {stageAgents.map((ag) => (
-                      <div key={ag.name} className="flex items-center gap-2.5 rounded-lg border border-line bg-surface p-2.5 shadow-2xs">
-                        <Avatar name={ag.name} emoji={ag.avatar} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <span className="block text-xs font-medium text-ink truncate">{ag.name}</span>
-                          <span className="block text-2xs text-brand-600 dark:text-brand-400 font-medium truncate">{ag.role}</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      {stageAgents.map((ag) => (
+                        <div key={ag.name} className="flex items-center gap-2.5 rounded-xl border border-line bg-surface p-2.5 shadow-2xs">
+                          <Avatar name={ag.name} emoji={ag.avatar} size="sm" />
+                          <div className="min-w-0 flex-1">
+                            <span className="block text-xs font-bold text-ink truncate">{ag.name}</span>
+                            <span className="block text-2xs text-brand-600 dark:text-brand-400 font-semibold truncate">{ag.role}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </Modal>
   );
 }
