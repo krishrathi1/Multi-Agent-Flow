@@ -37,22 +37,22 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   return (
-    <div className={cn('mb-6', className)}>
+    <div className={cn('mb-6 border-b border-line-subtle/70 pb-5', className)}>
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav aria-label="Breadcrumb" className="mb-2">
-          <ol className="flex items-center gap-1 text-xs text-ink-faint">
+          <ol className="flex items-center gap-1.5 text-[11px] font-mono font-medium text-ink-faint">
             {breadcrumbs.map((crumb, i) => (
-              <li key={`${crumb.label}-${i}`} className="flex items-center gap-1">
-                {i > 0 && <ChevronRight size={12} strokeWidth={2} aria-hidden />}
+              <li key={`${crumb.label}-${i}`} className="flex items-center gap-1.5">
+                {i > 0 && <ChevronRight size={11} strokeWidth={2} className="text-ink-faint/60" aria-hidden />}
                 {crumb.to ? (
                   <Link
                     to={crumb.to}
-                    className="rounded-xs transition-colors hover:text-ink-muted"
+                    className="transition-colors hover:text-brand-500"
                   >
                     {crumb.label}
                   </Link>
                 ) : (
-                  <span className="text-ink-subtle" aria-current="page">
+                  <span className="text-ink-subtle font-semibold" aria-current="page">
                     {crumb.label}
                   </span>
                 )}
@@ -62,22 +62,22 @@ export function PageHeader({
         </nav>
       )}
 
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="flex min-w-0 items-start gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <div className="flex min-w-0 items-center gap-3">
           {Icon && (
-            <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line bg-surface text-brand-700 dark:text-brand-300">
-              <Icon size={18} strokeWidth={1.75} aria-hidden />
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-line bg-surface/90 text-brand-600 dark:text-brand-400 shadow-xs">
+              <Icon size={18} strokeWidth={2} aria-hidden />
             </span>
           )}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-xl font-semibold tracking-tight text-ink">
+              <h1 className="text-xl font-bold tracking-tight text-ink">
                 {title}
               </h1>
               {badge}
             </div>
             {description && (
-              <p className="mt-1 max-w-2xl text-base text-ink-subtle">
+              <p className="mt-0.5 max-w-2xl text-xs text-ink-muted leading-relaxed">
                 {description}
               </p>
             )}
@@ -89,7 +89,7 @@ export function PageHeader({
         )}
       </div>
 
-      {toolbar && <div className="mt-5">{toolbar}</div>}
+      {toolbar && <div className="mt-4">{toolbar}</div>}
     </div>
   );
 }

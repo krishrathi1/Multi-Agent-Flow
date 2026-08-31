@@ -135,47 +135,62 @@ export function Sidebar() {
       )}
       aria-label="Main navigation"
     >
-      {/* ---- Brand ---- */}
+      {/* ---- Brand / Workspace Selector ---- */}
       <div
         className={cn(
-          'flex h-14 shrink-0 items-center border-b border-line-subtle/80 bg-surface/50 backdrop-blur-md',
-          collapsed ? 'justify-center px-2' : 'gap-2.5 px-4',
+          'flex h-14 shrink-0 items-center border-b border-line-subtle/80 bg-surface/80 backdrop-blur-md',
+          collapsed ? 'justify-center px-2' : 'justify-between px-3.5',
         )}
       >
-        <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 via-brand-600 to-indigo-600 text-sm font-black text-white shadow-md shadow-brand-500/25 ring-1 ring-white/20">
-          M
-          <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-surface bg-emerald-400" />
-        </span>
-        {!collapsed && (
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold tracking-tight text-ink">
-              Mycelium<span className="text-brand-500">Ops</span>
-            </p>
-            <p className="truncate text-[10px] font-medium tracking-wider uppercase text-ink-faint">
-              Mission Control
-            </p>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-xs font-bold text-white shadow-xs border border-brand-400/30">
+            {orgInitial}
+            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-emerald-500 shadow-2xs" />
           </div>
-        )}
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-xs font-bold tracking-tight text-ink">
+                  {organization?.name || 'Nexus Control Plane'}
+                </p>
+                <span className="rounded bg-brand-500/10 px-1 py-0.2 text-[9px] font-mono font-semibold text-brand-500 border border-brand-500/20">
+                  PRO
+                </span>
+              </div>
+              <p className="truncate text-[10px] font-mono text-ink-faint flex items-center gap-1 mt-0.5">
+                <span className="h-1 w-1 rounded-full bg-emerald-500 inline-block" />
+                Fleet Operational
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ---- Primary action ---- */}
-      <div className={cn('shrink-0 pt-3', collapsed ? 'px-2.5' : 'px-3')}>
+      <div className={cn('shrink-0 pt-3.5', collapsed ? 'px-2.5' : 'px-3.5')}>
         <NavLink
           to="/processes"
-          title={collapsed ? 'New production' : undefined}
+          title={collapsed ? 'New Production' : undefined}
           className={({ isActive }) =>
             cn(
-              'flex h-9 items-center rounded-md text-sm font-medium',
-              'transition-colors duration-150',
-              collapsed ? 'justify-center px-0' : 'gap-2 px-3',
+              'group flex h-9 w-full items-center rounded-lg text-xs font-semibold tracking-wide shadow-xs',
+              'transition-all duration-150 active:scale-[0.98]',
+              collapsed ? 'justify-center px-0' : 'justify-between px-3',
               isActive
-                ? 'bg-brand-600 text-white'
-                : 'bg-brand-500/12 text-brand-700 dark:text-brand-200 border border-brand-600/25 dark:border-brand-500/25 hover:bg-brand-500/20 hover:border-brand-600/40 dark:hover:border-brand-500/40',
+                ? 'bg-brand-600 text-white shadow-brand-500/20'
+                : 'bg-brand-500/10 text-brand-600 dark:text-brand-300 border border-brand-500/20 hover:bg-brand-500/15 hover:border-brand-500/40',
             )
           }
         >
-          <Plus size={16} strokeWidth={2} className="shrink-0" aria-hidden />
-          {!collapsed && 'New Production'}
+          <div className="flex items-center gap-2">
+            <Plus size={15} strokeWidth={2.25} className="shrink-0 transition-transform group-hover:scale-110" aria-hidden />
+            {!collapsed && <span>New Production</span>}
+          </div>
+          {!collapsed && (
+            <kbd className="hidden sm:inline-flex items-center justify-center rounded border border-brand-500/30 bg-surface/50 px-1.5 py-0.5 font-mono text-[9px] text-ink-faint">
+              ⌘N
+            </kbd>
+          )}
           <span className="sr-only">{collapsed ? 'New production' : ''}</span>
         </NavLink>
       </div>

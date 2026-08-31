@@ -46,27 +46,27 @@ export function StatCard({
 
   const body = (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
+      <div className="flex items-center justify-between gap-2.5">
+        <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-ink-faint">
           {label}
         </p>
         {Icon && (
           <span
             className={cn(
-              'grid h-7 w-7 shrink-0 place-items-center rounded-md border',
+              'grid h-6.5 w-6.5 shrink-0 place-items-center rounded-lg border text-xs shadow-2xs',
               t.soft,
               t.text,
             )}
           >
-            <Icon size={14} strokeWidth={1.75} aria-hidden />
+            <Icon size={13} strokeWidth={2} aria-hidden />
           </span>
         )}
       </div>
 
-      <div className="mt-3 flex items-baseline gap-2">
+      <div className="mt-2.5 flex items-baseline justify-between gap-2">
         <span
           className={cn(
-            'text-2xl font-semibold tabular-nums leading-none tracking-tight',
+            'text-2xl font-bold font-mono tabular-nums leading-none tracking-tight',
             muted ? 'text-ink-subtle' : 'text-ink',
           )}
         >
@@ -75,8 +75,8 @@ export function StatCard({
         {hasDelta && (
           <span
             className={cn(
-              'inline-flex items-center gap-0.5 text-xs font-medium tabular-nums',
-              positive ? 'text-emerald-300' : 'text-red-300',
+              'inline-flex items-center gap-0.5 text-xs font-semibold font-mono tabular-nums',
+              positive ? 'text-emerald-400' : 'text-rose-400',
             )}
           >
             <DeltaIcon size={12} strokeWidth={2.25} aria-hidden />
@@ -87,17 +87,16 @@ export function StatCard({
       </div>
 
       {(sublabel || deltaLabel) && (
-        <p className="mt-1.5 text-xs text-ink-faint">{sublabel ?? deltaLabel}</p>
+        <p className="mt-1.5 text-[11px] font-medium text-ink-faint truncate">{sublabel ?? deltaLabel}</p>
       )}
     </>
   );
 
   const shell = cn(
-    'block rounded-xl border border-line-subtle bg-surface p-4',
-    'shadow-e1',
+    'group relative block rounded-xl border border-line-subtle/80 bg-surface/90 p-3.5',
+    'shadow-xs backdrop-blur-sm transition-all duration-150',
     to &&
-      'transition-[border-color,background-color,box-shadow] duration-150 ' +
-        'hover:border-line-strong hover:bg-raised hover:shadow-e2',
+      'hover:-translate-y-0.5 hover:border-brand-500/40 hover:bg-surface hover:shadow-e2 active:translate-y-0',
     className,
   );
 
