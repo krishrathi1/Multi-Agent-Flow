@@ -383,9 +383,9 @@ export function LottieAnimation({
       className={cn('shrink-0 select-none flex items-center justify-center', className)}
     >
       <Lottie
-        animationData={animationData}
+        src={animationData}
         loop={loop}
-        autoPlay={autoplay}
+        autoplay={autoplay}
         style={{ width: '100%', height: '100%' }}
       />
     </div>
