@@ -27,6 +27,8 @@ interface ProcessState {
     name?: string;
     agentCount?: number;
     plan?: ProcessPlan;
+    githubToken?: string;
+    vercelToken?: string;
   }) => Promise<Process>;
   removeProcess: (id: string, deleteAgents?: boolean) => Promise<void>;
   /** Run controls — also refresh agent state, which start/pause mutates. */

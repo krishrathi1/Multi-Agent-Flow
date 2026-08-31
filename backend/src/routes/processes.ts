@@ -386,6 +386,8 @@ router.post('/github-create-repo', async (req, res) => {
   }
 
   const cleanName = name.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
+  process.env.GITHUB_TOKEN = token;
+  process.env.PLATFORM_GITHUB_TOKEN = token;
 
   try {
     const ghRes = await fetch('https://api.github.com/user/repos', {

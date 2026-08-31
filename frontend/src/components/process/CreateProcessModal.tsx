@@ -474,7 +474,14 @@ export function CreateProcessModal({
       }
 
       const effective = getEffectivePrompt();
-      const created = await createProcess({ prompt: effective, plan });
+      const ghToken = localStorage.getItem('nexus:github_token') || undefined;
+      const vToken = localStorage.getItem('nexus:vercel_token') || undefined;
+      const created = await createProcess({
+        prompt: effective,
+        plan,
+        githubToken: ghToken,
+        vercelToken: vToken,
+      });
       onCreated?.(created);
       reset();
       onClose();
