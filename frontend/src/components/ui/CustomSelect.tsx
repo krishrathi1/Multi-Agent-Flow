@@ -60,7 +60,7 @@ export function CustomSelect<T extends string = string>({
         disabled={disabled}
         onClick={() => setOpen(!open)}
         className={cn(
-          'flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-surface font-semibold text-ink shadow-2xs transition-all hover:border-brand-500/50 hover:bg-hover active:scale-[0.99] cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-brand-500/20',
+          'flex w-full items-center justify-between gap-2 rounded-xl border border-line bg-surface font-semibold text-ink shadow-2xs transition-all hover:border-brand-500/50 hover:bg-hover active:scale-[0.99] cursor-pointer text-left outline-none focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-brand-500/20',
           sizeClasses[size],
           open && 'border-brand-500 ring-2 ring-brand-500/10',
           disabled && 'opacity-50 cursor-not-allowed pointer-events-none',

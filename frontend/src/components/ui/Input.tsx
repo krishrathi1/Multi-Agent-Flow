@@ -11,7 +11,7 @@ import { cn } from '../../lib/utils';
 /* One field shell shared by input / select / textarea so borders, focus rings
    and error states are identical across every form in the product. */
 const fieldBase =
-  'w-full bg-inset border rounded-md text-ink ' +
+  'w-full bg-inset border rounded-xl text-ink outline-none focus:outline-none focus-visible:outline-none ' +
   'placeholder:text-ink-faint transition-colors duration-150 ' +
   'disabled:opacity-50 disabled:cursor-not-allowed';
 

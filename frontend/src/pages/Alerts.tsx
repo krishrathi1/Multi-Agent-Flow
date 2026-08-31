@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/Button';
 import { LiveWaveform, LiveRadarBeacon } from '@/components/ui/LiveIcon';
 import { LottieAnimation } from '@/components/ui/LottieAnimation';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 const severityConfig: Record<Severity, { color: string; bg: string; border: string; label: string; dot: string; icon: typeof AlertTriangle }> = {
   INFO: { color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/25', label: 'Info', dot: 'bg-blue-500', icon: Info },
@@ -69,7 +70,7 @@ function CustomDropdown<T extends string>({
         type="button"
         onClick={() => setOpen(!open)}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-2xs transition-all hover:border-brand-500/50 hover:bg-hover active:scale-[0.98] cursor-pointer',
+          'flex h-9 items-center gap-2 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-2xs transition-all hover:border-brand-500/50 hover:bg-hover active:scale-[0.98] cursor-pointer outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/20',
           open && 'border-brand-500 ring-2 ring-brand-500/10 bg-surface'
         )}
       >
@@ -558,22 +559,22 @@ function AddRuleModal({
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. High Error Rate Anomaly"
               required
-              className="w-full h-10 px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+              className="w-full h-10 px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted outline-none focus:outline-none focus-visible:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all"
             />
           </div>
           <div>
             <label className="block text-xs font-semibold text-ink-muted mb-1.5">Condition Trigger</label>
-            <select
+            <CustomSelect
               value={condition}
-              onChange={(e) => setCondition(e.target.value)}
-              className="w-full h-10 px-3.5 py-2 bg-inset border border-line rounded-xl text-xs font-semibold text-ink focus:border-brand-500 focus:outline-none shadow-2xs cursor-pointer"
-            >
-              <option value="error_rate">Error Rate Threshold Exceeded</option>
-              <option value="heartbeat_missed">Heartbeat Missed (Stalled Agent)</option>
-              <option value="offline">Agent Node Offline</option>
-              <option value="high_response_time">High Response Latency</option>
-              <option value="high_cost">High Token Cost Spike</option>
-            </select>
+              onChange={(val) => setCondition(val)}
+              options={[
+                { value: 'error_rate', label: 'Error Rate Threshold Exceeded' },
+                { value: 'heartbeat_missed', label: 'Heartbeat Missed (Stalled Agent)' },
+                { value: 'offline', label: 'Agent Node Offline' },
+                { value: 'high_response_time', label: 'High Response Latency' },
+                { value: 'high_cost', label: 'High Token Cost Spike' },
+              ]}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -582,7 +583,7 @@ function AddRuleModal({
                 type="number"
                 value={threshold}
                 onChange={(e) => setThreshold(Number(e.target.value))}
-                className="w-full h-10 px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink focus:border-brand-500 focus:outline-none shadow-2xs"
+                className="w-full h-10 px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink outline-none focus:outline-none focus-visible:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all"
               />
             </div>
             <div>
@@ -591,7 +592,7 @@ function AddRuleModal({
                 type="number"
                 value={windowMinutes}
                 onChange={(e) => setWindowMinutes(Number(e.target.value))}
-                className="w-full h-10 px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink focus:border-brand-500 focus:outline-none shadow-2xs"
+                className="w-full h-10 px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink outline-none focus:outline-none focus-visible:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all"
               />
             </div>
           </div>
