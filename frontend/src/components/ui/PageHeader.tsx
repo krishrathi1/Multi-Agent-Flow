@@ -107,16 +107,16 @@ export function SectionHeading({
   className?: string;
 }) {
   return (
-    <div className={cn('mb-3 flex items-end justify-between gap-4', className)}>
+    <div className={cn('mb-3 flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4', className)}>
       <div className="min-w-0">
         <h2 className="text-2xs font-semibold uppercase tracking-[0.09em] text-ink-faint">
           {title}
         </h2>
         {description && (
-          <p className="mt-1 text-sm text-ink-subtle">{description}</p>
+          <p className="mt-1 text-sm text-ink-subtle leading-relaxed">{description}</p>
         )}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      {actions && <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">{actions}</div>}
     </div>
   );
 }

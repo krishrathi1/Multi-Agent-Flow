@@ -256,21 +256,21 @@ function ProductionBlockCard({
   return (
     <Card padding="none" className="overflow-hidden border border-line-subtle bg-surface shadow-xs hover:shadow-sm transition-all rounded-2xl">
       {/* Block Header */}
-      <div className="border-b border-line-subtle px-5 py-4 bg-surface">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="border-b border-line-subtle px-4 sm:px-5 py-4 bg-surface">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="rounded bg-inset px-2 py-0.5 text-2xs font-semibold text-ink-muted border border-line-subtle">
+              <span className="rounded bg-inset px-2 py-0.5 text-2xs font-semibold text-ink-muted border border-line-subtle shrink-0">
                 Repo
               </span>
               <Link
                 to={`/processes`}
-                className="truncate text-base font-bold tracking-tight text-ink hover:text-brand-500 transition-colors"
+                className="text-sm sm:text-base font-bold tracking-tight text-ink hover:text-brand-500 transition-colors break-words"
               >
                 {process.name}
               </Link>
               <span className={cn(
-                'rounded-full px-2.5 py-0.5 text-[11px] font-semibold',
+                'rounded-full px-2.5 py-0.5 text-[11px] font-semibold shrink-0',
                 isRunning
                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                   : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
@@ -287,7 +287,7 @@ function ProductionBlockCard({
           </div>
 
           {/* Quick Action Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap shrink-0 pt-1 sm:pt-0">
             <Button
               size="xs"
               variant="primary"
@@ -317,7 +317,7 @@ function ProductionBlockCard({
             </ButtonLink>
             <button
               type="button"
-              className="grid h-7 w-7 place-items-center rounded-lg text-ink-muted hover:bg-hover hover:text-ink transition-colors"
+              className="grid h-7 w-7 place-items-center rounded-lg text-ink-muted hover:bg-hover hover:text-ink transition-colors cursor-pointer"
               title="More options"
             >
               <MoreVertical size={14} />
@@ -327,7 +327,7 @@ function ProductionBlockCard({
       </div>
 
       {/* Pipeline Stage Visualization */}
-      <div className="p-5 bg-surface space-y-3">
+      <div className="p-4 sm:p-5 bg-surface space-y-3">
         <div className="flex items-center justify-between text-xs text-ink-muted font-medium">
           <span className="flex items-center gap-1.5 font-semibold text-ink-muted">
             <Workflow size={13} className="text-brand-500" />
@@ -371,8 +371,8 @@ function ProductionBlockCard({
       </div>
 
       {/* Block Footer */}
-      <div className="flex items-center justify-between border-t border-line-subtle px-5 py-3 text-xs text-ink-muted bg-surface">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-line-subtle px-4 sm:px-5 py-3 text-xs text-ink-muted bg-surface">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
             <span className="font-semibold text-ink">
@@ -396,7 +396,7 @@ function ProductionBlockCard({
 
         <Link
           to="/processes"
-          className="flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+          className="flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline shrink-0"
         >
           <span>Pipeline Details →</span>
         </Link>
