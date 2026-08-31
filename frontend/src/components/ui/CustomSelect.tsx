@@ -18,6 +18,8 @@ export interface CustomSelectProps<T extends string = string> {
   buttonClassName?: string;
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
+  /** When true the dropdown opens upward (above the trigger). Use near bottom of modal. */
+  upward?: boolean;
 }
 
 export function CustomSelect<T extends string = string>({
@@ -29,6 +31,7 @@ export function CustomSelect<T extends string = string>({
   buttonClassName,
   size = 'md',
   disabled = false,
+  upward = false,
 }: CustomSelectProps<T>) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -77,13 +80,18 @@ export function CustomSelect<T extends string = string>({
           size={size === 'sm' ? 12 : 14}
           className={cn(
             'shrink-0 text-ink-muted transition-transform duration-200',
-            open && 'rotate-180 text-brand-500'
+            open && (upward ? '-rotate-180 text-brand-500' : 'rotate-180 text-brand-500')
           )}
         />
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-60 overflow-y-auto rounded-2xl border border-line bg-surface p-1.5 shadow-2xl space-y-1 animate-scale-in no-scrollbar">
+        <div
+          className={cn(
+            'absolute left-0 right-0 z-50 max-h-60 overflow-y-auto rounded-2xl border border-line bg-surface p-1.5 shadow-2xl space-y-1 animate-scale-in no-scrollbar',
+            upward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+          )}
+        >
           {options.map((opt) => {
             const isSelected = opt.value === value;
             return (

@@ -330,32 +330,32 @@ export function CreateProcessModal({
       {step === 'describe' ? (
         <div className="space-y-4">
           {/* Mode Selector Tabs */}
-          <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-line-subtle bg-inset/50 p-1">
+          <div className="flex gap-1 rounded-xl border border-line-subtle bg-inset/50 p-1">
             <button
               type="button"
               onClick={() => setMode('ai')}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition-all',
+                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold transition-all whitespace-nowrap',
                 mode === 'ai'
                   ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-xs border border-line-subtle'
                   : 'text-ink-muted hover:text-ink'
               )}
             >
-              <Sparkles size={14} className="text-amber-500" />
-              <span>✨ Build with AI</span>
+              <Sparkles size={13} className="text-amber-500 shrink-0" />
+              <span>Build with AI</span>
             </button>
 
             <button
               type="button"
               onClick={() => setMode('curl')}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition-all',
+                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold transition-all whitespace-nowrap',
                 mode === 'curl'
                   ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-xs border border-line-subtle'
                   : 'text-ink-muted hover:text-ink'
               )}
             >
-              <Terminal size={14} />
+              <Terminal size={13} className="shrink-0" />
               <span>cURL / API</span>
             </button>
 
@@ -363,16 +363,17 @@ export function CreateProcessModal({
               type="button"
               onClick={() => setMode('github')}
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition-all',
+                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold transition-all whitespace-nowrap',
                 mode === 'github'
                   ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-xs border border-line-subtle'
                   : 'text-ink-muted hover:text-ink'
               )}
             >
-              <Github size={14} />
+              <Github size={13} className="shrink-0" />
               <span>GitHub + Vercel</span>
             </button>
           </div>
+
 
           {error && (
             <p role="alert" className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300">
@@ -604,6 +605,7 @@ export function CreateProcessModal({
                 <CustomSelect
                   value={selectedModel}
                   onChange={(val) => setSelectedModel(val)}
+                  upward
                   options={localModels.map((m) => ({
                     value: m.id,
                     label: m.name,
@@ -619,6 +621,7 @@ export function CreateProcessModal({
                 <CustomSelect
                   value={agentCount}
                   onChange={(val) => setAgentCount(val)}
+                  upward
                   options={[
                     { value: 'auto', label: '✨ Auto (AI decides optimal stages)' },
                     { value: '1', label: '1 Agent (Solo Specialist)' },
@@ -628,6 +631,7 @@ export function CreateProcessModal({
                   ]}
                 />
               </div>
+
             </div>
           </div>
         </div>

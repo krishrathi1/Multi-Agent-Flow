@@ -8,6 +8,40 @@ import { listWorkspaceFiles } from './agent-runner.service.js';
 
 const HISTORY_LIMIT = 30;
 
+/**
+ * Real per-model pricing (USD per 1M tokens, as of 2025).
+ * input  = prompt / input tokens price per 1M
+ * output = completion / output tokens price per 1M
+ */
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  // Gemini
+  'gemini-2.5-flash':         { input: 0.30,  output: 2.50  },
+  'gemini-2.5-pro':           { input: 1.25,  output: 10.00 },
+  'gemini-2.0-flash':         { input: 0.10,  output: 0.40  },
+  'gemini-2.0-flash-lite':    { input: 0.075, output: 0.30  },
+  'gemini-1.5-flash':         { input: 0.075, output: 0.30  },
+  'gemini-1.5-pro':           { input: 1.25,  output: 5.00  },
+  'gemini-3.6-flash':         { input: 0.30,  output: 2.50  }, // treat like 2.5-flash
+  // OpenAI
+  'gpt-4o':                   { input: 2.50,  output: 10.00 },
+  'gpt-4o-mini':              { input: 0.15,  output: 0.60  },
+  'gpt-4-turbo':              { input: 10.00, output: 30.00 },
+  'gpt-3.5-turbo':            { input: 0.50,  output: 1.50  },
+  // Anthropic
+  'claude-3-5-sonnet':        { input: 3.00,  output: 15.00 },
+  'claude-3-5-haiku':         { input: 0.80,  output: 4.00  },
+  'claude-3-opus':            { input: 15.00, output: 75.00 },
+};
+
+/** Calculate real USD cost from token counts and model name. */
+function calcCost(model: string, inputTokens: number, outputTokens: number): number {
+  const key = Object.keys(MODEL_PRICING).find((k) => model.toLowerCase().includes(k));
+  if (!key) return Number(((inputTokens * 0.0000003) + (outputTokens * 0.0000006)).toFixed(6));
+  const { input, output } = MODEL_PRICING[key];
+  return Number(((inputTokens * input + outputTokens * output) / 1_000_000).toFixed(6));
+}
+
+
 export interface ChatTurn {
   role: 'user' | 'assistant';
   content: string;
@@ -110,12 +144,15 @@ async function callChatLLM(params: {
           const data = (await res.json()) as any;
           const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text && typeof text === 'string' && text.trim().length > 0) {
+            // Read real token counts from Gemini usageMetadata
+            const inputTokens: number = data?.usageMetadata?.promptTokenCount ?? Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
+            const outputTokens: number = data?.usageMetadata?.candidatesTokenCount ?? Math.max(50, Math.ceil(text.length / 4));
             return {
               text: text.trim(),
               model: cleanModel,
-              inputTokens: 350,
-              outputTokens: 500,
-              costUsd: 0.00005,
+              inputTokens,
+              outputTokens,
+              costUsd: calcCost(cleanModel, inputTokens, outputTokens),
             };
           }
         } else if (res.status === 429) {
@@ -151,12 +188,15 @@ async function callChatLLM(params: {
         const data = (await ollamaRes.json()) as any;
         const text = data?.response;
         if (text && typeof text === 'string' && text.trim().length > 0) {
+          // Ollama returns prompt_eval_count and eval_count for real token counts
+          const inputTokens: number = data?.prompt_eval_count ?? Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
+          const outputTokens: number = data?.eval_count ?? Math.max(50, Math.ceil(text.length / 4));
           return {
             text: text.trim(),
             model: 'qwen2.5-coder:1.5b (Local Host)',
-            inputTokens: 250,
-            outputTokens: 400,
-            costUsd: 0,
+            inputTokens,
+            outputTokens,
+            costUsd: 0, // Local model — no API cost
           };
         }
       }
