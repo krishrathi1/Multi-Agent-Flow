@@ -599,6 +599,32 @@ async function runStep(
       })
     : null;
 
+  // Create or link a Task for this execution stage so the Kanban Board updates in real-time
+  let currentTaskRow: any = null;
+  try {
+    const defaultBoard = await prisma.board.findFirst({
+      where: { organizationId },
+      select: { id: true },
+    });
+    currentTaskRow = await prisma.task.create({
+      data: {
+        organizationId,
+        boardId: defaultBoard?.id ?? null,
+        title: `Stage ${agent.processStage}: ${agent.processRole ?? agent.displayName}`,
+        description: `Autonomous execution for stage ${agent.processStage}: ${goal.slice(0, 300)}`,
+        status: 'IN_PROGRESS',
+        priority: 'HIGH',
+        agentId: agent.id,
+        processId,
+        processStage: agent.processStage,
+      },
+      include: { agent: true },
+    });
+    emit('task:update', currentTaskRow);
+  } catch (err) {
+    logger.warn({ err }, 'Failed to create task row for running agent');
+  }
+
   const filesBefore = await listWorkspaceFiles(processId);
   const started = Date.now();
 
@@ -676,6 +702,22 @@ async function runStep(
         },
       });
     }
+    if (currentTaskRow) {
+      try {
+        const failedTask = await prisma.task.update({
+          where: { id: currentTaskRow.id },
+          data: {
+            status: isCancelled(processId) ? 'BACKLOG' : 'REVIEW',
+            description: isCancelled(processId)
+              ? `Stage ${agent.processStage} was cancelled.`
+              : `Stage ${agent.processStage} execution failed.`,
+          },
+          include: { agent: true },
+        });
+        emit('task:update', failedTask);
+      } catch { /* ignore */ }
+    }
+
     return {
       agentId: agent.id, agentName: agent.displayName, stage: agent.processStage,
       ok: false, summary: isCancelled(processId) ? 'Cancelled' : 'Run failed',
@@ -721,6 +763,20 @@ async function runStep(
       data: { status: 'IDLE', currentTask: null },
     }),
   ]);
+
+  if (currentTaskRow) {
+    try {
+      const doneTask = await prisma.task.update({
+        where: { id: currentTaskRow.id },
+        data: {
+          status: 'DONE',
+          description: `Stage ${agent.processStage} complete.` + (newFiles.length ? ` Created ${newFiles.slice(0, 5).join(', ')}.` : ''),
+        },
+        include: { agent: true },
+      });
+      emit('task:update', doneTask);
+    } catch { /* ignore */ }
+  }
 
   if (stepRow) {
     await prisma.processRunStep.update({

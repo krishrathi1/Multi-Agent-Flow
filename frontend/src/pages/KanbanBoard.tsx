@@ -20,6 +20,10 @@ export function KanbanBoard() {
 
   useEffect(() => {
     fetchTasks();
+    const interval = setInterval(() => {
+      fetchTasks();
+    }, 4000);
+    return () => clearInterval(interval);
   }, [fetchTasks]);
 
   const handleDragEnd = (result: DropResult) => {
