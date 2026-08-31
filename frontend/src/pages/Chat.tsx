@@ -481,32 +481,37 @@ export function Chat() {
 
         {/* Input Composer Bar */}
         <div className="border-t border-line-subtle bg-surface p-3 sm:p-4">
-          <div className="flex items-center gap-2 sm:gap-2.5">
-            <textarea
-              rows={1}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
+            }}
+            className="flex items-center gap-2 sm:gap-2.5"
+          >
+            <input
+              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
               placeholder={
                 selectedTarget.type === 'mother'
-                  ? 'Ask Mother Chat about progress, code, architecture…'
-                  : `Message ${selectedAgent?.displayName || 'agent'}…`
+                  ? 'Ask Mother Chat anything...'
+                  : `Message ${selectedAgent?.displayName || 'agent'}...`
               }
-              className="flex-1 resize-none rounded-xl border border-line bg-inset px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+              className="h-11 flex-1 rounded-2xl border border-line bg-inset px-4 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:border-brand-500 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500/10 transition-all"
             />
             <Button
+              type="submit"
               variant="primary"
-              size="sm"
+              className="h-11 rounded-2xl px-4 shrink-0 shadow-xs"
               icon={SendHorizontal}
               loading={sending}
-              onClick={() => handleSend()}
               disabled={!input.trim()}
             >
               Send
             </Button>
-          </div>
+          </form>
           <div className="mt-1.5 hidden sm:flex items-center justify-between text-2xs text-ink-faint px-1">
-            <span>Press <kbd className="font-mono rounded border border-line bg-inset px-1 py-0.5">Enter</kbd> to send, <kbd className="font-mono rounded border border-line bg-inset px-1 py-0.5">Shift+Enter</kbd> for newline</span>
+            <span>Press <kbd className="font-mono rounded border border-line bg-inset px-1 py-0.5">Enter</kbd> to send message</span>
             <span>Mother Chat Fleet Intelligence</span>
           </div>
         </div>
