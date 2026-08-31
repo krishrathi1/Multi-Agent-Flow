@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Activity,
+  Bot,
   CircleSlash,
+  CircleUser,
   Command,
+  LogOut,
   Radio,
   Search,
+  Settings,
   Sparkles,
   Wifi,
   WifiOff,
@@ -20,17 +24,30 @@ import { NotificationBell } from './NotificationBell';
 
 /**
  * Premium glassmorphic Topbar with live telemetry, unified search,
- * real-time socket indicator, and fast command access.
+ * real-time socket indicator, and user account dropdown.
  */
 export function Topbar() {
   const navigate = useNavigate();
   const stats = useAgentStore((s) => s.stats);
-  const user = useAuthStore((s) => s.user);
+  const { user, organization, logout } = useAuthStore();
   const socketConnected = useUiStore((s) => s.socketConnected);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Global '/' or '⌘K' keyboard shortcut to focus search / open command palette
   useEffect(() => {
@@ -59,7 +76,14 @@ export function Topbar() {
     searchRef.current?.focus();
   };
 
+  const handleLogout = async () => {
+    setMenuOpen(false);
+    await logout();
+    navigate('/login');
+  };
+
   const userInitial = user?.name?.charAt(0).toUpperCase() || 'A';
+  const orgInitial = organization?.name?.charAt(0).toUpperCase() || 'B';
 
   return (
     <header
@@ -186,9 +210,71 @@ export function Topbar() {
           <NotificationBell />
         </div>
 
-        {/* User avatar circle */}
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white shadow-xs">
-          {userInitial}
+        {/* User avatar circle with Dropdown Menu */}
+        <div ref={menuRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white shadow-xs hover:ring-2 hover:ring-blue-400/40 transition-all cursor-pointer"
+          >
+            {userInitial}
+          </button>
+
+          {menuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full mt-2 w-56 animate-scale-in origin-top-right rounded-2xl border border-line-subtle bg-surface p-1.5 shadow-e3 z-50"
+            >
+              {/* Header */}
+              <div className="flex items-center gap-2.5 p-2 border-b border-line-subtle/80">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 text-xs font-bold">
+                  {orgInitial}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold text-ink">{user?.name || 'Admin'}</p>
+                  <p className="truncate text-[11px] text-ink-muted">{user?.email || 'admin@nexus.local'}</p>
+                </div>
+              </div>
+
+              {/* Menu Links */}
+              <div className="py-1">
+                <Link
+                  to="/controls"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-xs font-medium text-ink-muted hover:bg-hover hover:text-ink transition-colors"
+                >
+                  <Settings size={14} strokeWidth={1.75} aria-hidden />
+                  <span>Settings</span>
+                </Link>
+
+                <Link
+                  to="/invitations"
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-xs font-medium text-ink-muted hover:bg-hover hover:text-ink transition-colors"
+                >
+                  <Bot size={14} strokeWidth={1.75} aria-hidden />
+                  <span>Invitations</span>
+                </Link>
+              </div>
+
+              {/* Sign out */}
+              <div className="border-t border-line-subtle/80 pt-1">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleLogout}
+                  className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                >
+                  <LogOut size={14} strokeWidth={1.75} aria-hidden />
+                  <span>Sign out</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

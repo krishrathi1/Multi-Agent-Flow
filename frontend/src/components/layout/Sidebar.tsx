@@ -249,16 +249,16 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* ---- Collapse toggle ---- */}
-      <div className={cn('shrink-0 border-t border-line-subtle py-2', collapsed ? 'px-2.5' : 'px-3')}>
+      {/* ---- Collapse toggle & Sign out ---- */}
+      <div className={cn('shrink-0 border-t border-line-subtle py-2 space-y-1', collapsed ? 'px-2' : 'px-3')}>
         <button
           type="button"
           onClick={toggleSidebar}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={cn(
-            'flex h-8 w-full items-center rounded-md text-xs font-medium',
-            'text-ink-faint transition-colors hover:wash hover:text-ink-muted',
+            'flex h-8 w-full items-center rounded-lg text-xs font-medium',
+            'text-ink-faint transition-colors hover:bg-hover hover:text-ink',
             collapsed ? 'justify-center' : 'gap-2 px-2.5',
           )}
         >
@@ -267,99 +267,25 @@ export function Sidebar() {
           ) : (
             <>
               <ChevronsLeft size={15} strokeWidth={1.75} aria-hidden />
-              Collapse
+              <span>Collapse</span>
             </>
           )}
         </button>
-      </div>
 
-      {/* ---- Account ---- */}
-      <div
-        ref={menuRef}
-        className={cn(
-          'relative shrink-0 border-t border-line-subtle',
-          collapsed ? 'p-2.5' : 'p-3',
-        )}
-      >
         <button
           type="button"
-          onClick={() => setMenuOpen((o) => !o)}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          title={collapsed ? `${user?.name} — account menu` : undefined}
+          onClick={handleLogout}
+          aria-label="Sign out"
+          title="Sign out"
           className={cn(
-            'flex w-full items-center rounded-md transition-colors duration-150',
-            'hover:wash',
-            collapsed ? 'justify-center p-1' : 'gap-2.5 p-1.5',
+            'flex h-8 w-full items-center rounded-lg text-xs font-semibold',
+            'text-rose-500 hover:bg-rose-500/10 transition-colors',
+            collapsed ? 'justify-center' : 'gap-2 px-2.5',
           )}
         >
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-brand-500/15 text-xs font-semibold text-brand-700 dark:text-brand-200">
-            {user?.name?.charAt(0).toUpperCase() ?? <CircleUser size={16} />}
-          </span>
-          {!collapsed && (
-            <span className="min-w-0 flex-1 text-left">
-              <span className="block truncate text-sm font-medium text-ink">
-                {user?.name}
-              </span>
-              <span className="block truncate text-2xs text-ink-faint">
-                {organization?.name}
-              </span>
-            </span>
-          )}
+          <LogOut size={15} strokeWidth={1.75} aria-hidden />
+          {!collapsed && <span>Sign out</span>}
         </button>
-
-        {menuOpen && (
-          <div
-            role="menu"
-            className={cn(
-              'absolute bottom-full mb-2 w-56 animate-scale-in origin-bottom-left',
-              'rounded-lg border border-line bg-overlay p-1',
-              'shadow-e4',
-              collapsed ? 'left-2.5' : 'left-3',
-            )}
-          >
-            <div className="flex items-center gap-2.5 border-b border-line-subtle px-2.5 py-2.5">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-brand-500/15 text-xs font-semibold text-brand-700 dark:text-brand-200">
-                {orgInitial}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-ink">{user?.name}</p>
-                <p className="truncate text-2xs text-ink-faint">{user?.email}</p>
-              </div>
-            </div>
-
-            <NavLink
-              to="/settings"
-              role="menuitem"
-              onClick={() => setMenuOpen(false)}
-              className="mt-1 flex h-8 items-center gap-2.5 rounded-md px-2.5 text-sm text-ink-muted transition-colors hover:wash hover:text-ink"
-            >
-              <Settings size={15} strokeWidth={1.75} aria-hidden />
-              Settings
-            </NavLink>
-            <NavLink
-              to="/invitations"
-              role="menuitem"
-              onClick={() => setMenuOpen(false)}
-              className="flex h-8 items-center gap-2.5 rounded-md px-2.5 text-sm text-ink-muted transition-colors hover:wash hover:text-ink"
-            >
-              <Bot size={15} strokeWidth={1.75} aria-hidden />
-              Invitations
-            </NavLink>
-
-            {/* Sign out sits below a divider — destructive actions stay separated. */}
-            <div className="my-1 h-px bg-line-subtle" />
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleLogout}
-              className="flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-sm text-red-300 transition-colors hover:bg-red-500/10"
-            >
-              <LogOut size={15} strokeWidth={1.75} aria-hidden />
-              Sign out
-            </button>
-          </div>
-        )}
       </div>
     </aside>
   );
