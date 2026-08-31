@@ -203,8 +203,69 @@ export function Metrics() {
   }, [tokens, timeFilter]);
 
   const hasChartData = useMemo(() => chartData.some((d) => d.cost > 0 || d.tokens > 0), [chartData]);
+  const hasSpendData = useMemo(() => chartData.some((d) => d.cost > 0), [chartData]);
 
-  // Model & Provider breakdown
+  // Use token count as Y-axis when cost data is all-zero (cost not yet computed)
+  const chartMode: 'cost' | 'tokens' = hasSpendData ? 'cost' : 'tokens';
+
+  // Spend Area Chart Options
+  const spendChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
+    chart: {
+      type: 'area',
+      height: 220,
+      toolbar: { show: false },
+      zoom: { enabled: false },
+      background: 'transparent',
+      fontFamily: 'inherit',
+      animations: { enabled: true, easing: 'easeinout', speed: 500 },
+    },
+    colors: [chartMode === 'cost' ? '#10b981' : '#6366f1'],
+    dataLabels: { enabled: false },
+    stroke: { curve: 'smooth', width: 2.5 },
+    fill: {
+      type: 'gradient',
+      gradient: {
+        shadeIntensity: 1,
+        opacityFrom: isDark ? 0.45 : 0.35,
+        opacityTo: 0.02,
+        stops: [0, 90, 100],
+      },
+    },
+    grid: {
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)',
+      strokeDashArray: 3,
+      padding: { top: 0, right: 0, bottom: 0, left: 10 },
+    },
+    xaxis: {
+      categories: chartData.map((d) => d.label),
+      labels: {
+        style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' },
+        rotate: 0,
+      },
+      axisBorder: { show: false },
+      axisTicks: { show: false },
+    },
+    yaxis: {
+      labels: {
+        formatter: (v) => chartMode === 'cost' ? formatCurrency(v) : formatCompact(v),
+        style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' },
+      },
+      min: 0,
+    },
+    tooltip: {
+      theme: isDark ? 'dark' : 'light',
+      y: { formatter: (v) => chartMode === 'cost' ? formatCurrency(v) : `${formatCompact(v)} tokens` },
+    },
+  }), [chartData, isDark, chartMode]);
+
+  const spendChartSeries = useMemo(() => [
+    {
+      name: chartMode === 'cost' ? 'Estimated Cost' : 'Token Usage',
+      data: chartMode === 'cost'
+        ? chartData.map((d) => Number(d.cost.toFixed(4)))
+        : chartData.map((d) => d.tokens),
+    },
+  ], [chartData, chartMode]);
   const modelBreakdown = useMemo(() => {
     const map = new Map<string, { model: string; tokens: number; cost: number; count: number }>();
     for (const t of tokens) {
@@ -283,57 +344,8 @@ export function Metrics() {
       .slice(0, 8);
   }, [metrics]);
 
-  // Spend Area Chart Options
-  const spendChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
-    chart: {
-      type: 'area',
-      height: 220,
-      toolbar: { show: false },
-      zoom: { enabled: false },
-      background: 'transparent',
-      fontFamily: 'inherit',
-    },
-    colors: ['#10b981'],
-    dataLabels: { enabled: false },
-    stroke: { curve: 'smooth', width: 2.5 },
-    fill: {
-      type: 'gradient',
-      gradient: {
-        shadeIntensity: 1,
-        opacityFrom: isDark ? 0.45 : 0.35,
-        opacityTo: 0.02,
-        stops: [0, 90, 100],
-      },
-    },
-    grid: {
-      borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)',
-      strokeDashArray: 3,
-      padding: { top: 0, right: 0, bottom: 0, left: 10 },
-    },
-    xaxis: {
-      categories: chartData.map((d) => d.label),
-      labels: {
-        style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' },
-        rotate: 0,
-      },
-      axisBorder: { show: false },
-      axisTicks: { show: false },
-    },
-    yaxis: {
-      labels: {
-        formatter: (v) => formatCurrency(v),
-        style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' },
-      },
-    },
-    tooltip: {
-      theme: isDark ? 'dark' : 'light',
-      y: { formatter: (v) => formatCurrency(v) },
-    },
-  }), [chartData, isDark]);
 
-  const spendChartSeries = useMemo(() => [
-    { name: 'Estimated Cost', data: chartData.map((d) => Number(d.cost.toFixed(4))) },
-  ], [chartData]);
+
 
   if (loading) {
     return (
@@ -505,12 +517,21 @@ export function Metrics() {
       <div className="rounded-3xl border border-line-subtle bg-surface p-4 sm:p-5 shadow-2xs space-y-3">
         <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <div className={cn(
+              'w-7 h-7 rounded-lg flex items-center justify-center',
+              chartMode === 'cost'
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+            )}>
               <BarChart3 size={14} />
             </div>
-            <span className="text-xs font-bold uppercase tracking-wider text-ink">Spending Trend</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-ink">
+              {chartMode === 'cost' ? 'Spending Trend' : 'Token Usage Trend'}
+            </span>
           </div>
-          <span className="text-2xs font-mono text-ink-muted">Cost over time</span>
+          <span className="text-2xs font-mono text-ink-muted">
+            {chartMode === 'cost' ? 'Estimated cost over time' : 'Tokens processed over time'}
+          </span>
         </div>
 
         <div className="w-full h-[220px]">
@@ -523,8 +544,12 @@ export function Metrics() {
               width="100%"
             />
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-4 bg-inset/40 rounded-2xl border border-dashed border-line">
-              <p className="text-xs text-ink-muted">No spend recorded for this time range.</p>
+            <div className="h-full flex flex-col items-center justify-center text-center p-4 bg-inset/40 rounded-2xl border border-dashed border-line-subtle">
+              <BarChart3 size={24} className="text-ink-faint mb-2 opacity-40" />
+              <p className="text-xs font-bold text-ink mb-1">No usage data yet</p>
+              <p className="text-2xs text-ink-muted">
+                Run agents or LLM calls to see token usage and cost trends here.
+              </p>
             </div>
           )}
         </div>
