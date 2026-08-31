@@ -105,7 +105,7 @@ export function Layout() {
   }, [pathname]);
 
   return (
-    <div className="relative min-h-dvh bg-canvas overflow-x-hidden">
+    <div className="relative min-h-dvh bg-canvas overflow-x-clip">
       {/* Ambient Glassmorphic Glow Mesh */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
         <div className="absolute -top-40 right-10 w-[550px] h-[550px] rounded-full bg-brand-500/10 dark:bg-brand-500/15 blur-[120px] transform-gpu" />
