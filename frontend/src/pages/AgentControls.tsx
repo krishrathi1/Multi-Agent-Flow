@@ -1,22 +1,21 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Activity,
+  SlidersHorizontal,
   Bot,
-  ChevronDown,
-  Edit3,
-  Heart,
-  History,
-  MessageSquarePlus,
   Pause,
   Play,
   Plus,
-  Radio,
-  Save,
-  Send,
-  SlidersHorizontal,
-  Sparkles,
+  Search,
   Zap,
+  Clock,
+  Sparkles,
+  Radio,
+  RefreshCw,
+  Send,
+  MoreVertical,
+  Activity,
+  Layers,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { Agent, Command } from '@/types';
@@ -24,376 +23,68 @@ import { cn, timeAgo } from '@/lib/utils';
 import { agentStatusTone } from '@/lib/design';
 import { useAgentStore } from '@/stores/agent-store';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge, Chip } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
 import { Avatar } from '@/components/ui/Avatar';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
 import { useToast } from '@/components/ui/Toast';
-
-function AgentControlCard({ agent, onCommandSent }: { agent: Agent; onCommandSent: () => void }) {
-  const [soulMd, setSoulMd] = useState(agent.soulMd ?? '');
-  const [soulOpen, setSoulOpen] = useState(false);
-  const [heartbeatInterval, setHeartbeatInterval] = useState(agent.heartbeatInterval);
-  const [enabled, setEnabled] = useState(agent.enabled);
-  const [injectOpen, setInjectOpen] = useState(false);
-  const [injectText, setInjectText] = useState('');
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [commands, setCommands] = useState<Command[]>([]);
-  const [savingSoul, setSavingSoul] = useState(false);
-  const [savingHb, setSavingHb] = useState(false);
-  const [sendingCmd, setSendingCmd] = useState<string | null>(null);
-  const updateAgent = useAgentStore((s) => s.updateAgent);
-  const toast = useToast();
-
-  const fetchCommands = useCallback(async () => {
-    try {
-      const cmds = await api.commands.list(agent.id);
-      setCommands(cmds);
-    } catch (err) {
-      console.error('Failed to fetch commands:', err);
-    }
-  }, [agent.id]);
-
-  useEffect(() => {
-    if (historyOpen) fetchCommands();
-  }, [historyOpen, fetchCommands]);
-
-  useEffect(() => {
-    setEnabled(agent.enabled);
-    setHeartbeatInterval(agent.heartbeatInterval);
-  }, [agent.enabled, agent.heartbeatInterval]);
-
-  const handleToggleEnabled = async () => {
-    const newVal = !enabled;
-    setEnabled(newVal);
-    try {
-      await api.agents.updateConfig(agent.id, { enabled: newVal });
-      updateAgent({ id: agent.id, enabled: newVal });
-      toast.success(newVal ? 'Agent enabled' : 'Agent disabled', `${agent.displayName} is now ${newVal ? 'active' : 'disabled'}`);
-    } catch (err) {
-      setEnabled(!newVal);
-      toast.error('Failed to toggle', (err as Error).message);
-    }
-  };
-
-  const handleSaveSoul = async () => {
-    setSavingSoul(true);
-    try {
-      await api.agents.updateConfig(agent.id, { soulMd });
-      updateAgent({ id: agent.id, soulMd });
-      toast.success('SOUL.md updated', `Personality and instructions saved for ${agent.displayName}`);
-      setSoulOpen(false);
-    } catch (err) {
-      toast.error('Failed to save SOUL.md', (err as Error).message);
-    } finally {
-      setSavingSoul(false);
-    }
-  };
-
-  const handleUpdateHeartbeat = async () => {
-    setSavingHb(true);
-    try {
-      await api.agents.updateConfig(agent.id, { heartbeatInterval });
-      updateAgent({ id: agent.id, heartbeatInterval });
-      toast.success('Heartbeat updated', `Set to ${heartbeatInterval} min`);
-    } catch (err) {
-      toast.error('Failed to update heartbeat', (err as Error).message);
-    } finally {
-      setSavingHb(false);
-    }
-  };
-
-  const handleSendCommand = async (type: string, payload?: Record<string, unknown>) => {
-    setSendingCmd(type);
-    try {
-      await api.commands.send({ agentId: agent.id, type, payload });
-      toast.success(`Command "${type}" dispatched`, `Sent to ${agent.displayName}`);
-      onCommandSent();
-      if (historyOpen) fetchCommands();
-    } catch (err) {
-      toast.error('Command failed', (err as Error).message);
-    } finally {
-      setSendingCmd(null);
-    }
-  };
-
-  const handleInject = async () => {
-    if (!injectText.trim()) return;
-    await handleSendCommand('INJECT', { message: injectText.trim() });
-    setInjectText('');
-    setInjectOpen(false);
-  };
-
-  const tone = agentStatusTone[agent.status] || 'neutral';
-
-  return (
-    <Card padding="none" className="flex flex-col overflow-hidden border-line rounded-2xl shadow-2xs hover:shadow-xs transition-all">
-      {/* Header Bar */}
-      <div className="border-b border-line-subtle bg-raised/40 p-3.5 sm:p-4 space-y-2.5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0 flex-1">
-            <Avatar name={agent.displayName} emoji={agent.avatar} size="md" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm font-bold text-ink truncate">{agent.displayName}</h3>
-                <Badge tone={tone} dot pulse={agent.status === 'ONLINE'}>
-                  {agent.status.toLowerCase()}
-                </Badge>
-              </div>
-              <div className="mt-0.5 text-xs text-ink-muted">
-                {agent.processRole ? (
-                  <p className="font-medium text-brand-600 dark:text-brand-400 line-clamp-2 leading-tight">
-                    {agent.processRole} {agent.processStage != null ? `(Stage ${agent.processStage})` : ''}
-                  </p>
-                ) : (
-                  <span>Autonomous Agent</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Toggle Switch + Edit Profile */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Link
-              to={`/agents/${agent.id}/edit`}
-              className="inline-flex items-center gap-1 rounded-xl border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-ink-subtle hover:border-line-strong hover:text-ink transition-colors shadow-2xs"
-            >
-              <Edit3 size={11} />
-              <span>Edit</span>
-            </Link>
-
-            <button
-              type="button"
-              role="switch"
-              aria-checked={enabled}
-              onClick={handleToggleEnabled}
-              className={cn(
-                'relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 shadow-2xs',
-                enabled ? 'bg-emerald-500' : 'bg-line-strong dark:bg-surface-700'
-              )}
-            >
-              <span
-                className={cn(
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out',
-                  enabled ? 'translate-x-5' : 'translate-x-0'
-                )}
-              />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Card Body */}
-      <div className="p-3.5 sm:p-4 space-y-3.5 flex-1 flex flex-col justify-between">
-        {/* Current Task if any */}
-        {agent.currentTask ? (
-          <div className="rounded-xl border border-line-subtle bg-inset p-3">
-            <span className="text-2xs font-bold text-ink-faint uppercase tracking-wider block">Current Task</span>
-            <p className="text-xs text-ink mt-0.5 font-medium leading-relaxed break-words">{agent.currentTask}</p>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-line-subtle/50 bg-inset/40 p-2.5 text-2xs text-ink-faint italic">
-            Standing by for pipeline task dispatch...
-          </div>
-        )}
-
-        {/* Quick Command Buttons: 3 Columns Grid on Mobile */}
-        <div className="grid grid-cols-3 gap-2 pt-1">
-          <Button
-            variant="secondary"
-            size="xs"
-            icon={Pause}
-            loading={sendingCmd === 'PAUSE'}
-            onClick={() => handleSendCommand('PAUSE')}
-            className="hover:text-amber-600 dark:hover:text-amber-400 w-full justify-center"
-          >
-            Pause
-          </Button>
-
-          <Button
-            variant="secondary"
-            size="xs"
-            icon={Play}
-            loading={sendingCmd === 'RESUME'}
-            onClick={() => handleSendCommand('RESUME')}
-            className="hover:text-emerald-600 dark:hover:text-emerald-400 w-full justify-center"
-          >
-            Resume
-          </Button>
-
-          <Button
-            variant="secondary"
-            size="xs"
-            icon={Zap}
-            onClick={() => setInjectOpen(!injectOpen)}
-            className="hover:text-brand-600 dark:hover:text-brand-400 w-full justify-center truncate"
-          >
-            Inject
-          </Button>
-        </div>
-
-        {/* Inject Input */}
-        {injectOpen && (
-          <div className="flex gap-1.5 rounded-lg border border-brand-500/30 bg-brand-500/5 p-2 transition-all">
-            <input
-              type="text"
-              value={injectText}
-              onChange={(e) => setInjectText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleInject()}
-              placeholder="Inject direct instruction to agent memory..."
-              className="flex-1 rounded-md border border-line bg-surface px-2.5 py-1 text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-            <Button
-              variant="primary"
-              size="xs"
-              icon={Send}
-              loading={sendingCmd === 'INJECT'}
-              onClick={handleInject}
-              disabled={!injectText.trim()}
-            >
-              Inject
-            </Button>
-          </div>
-        )}
-
-        {/* Heartbeat Controller */}
-        <div className="flex items-center justify-between gap-2 border-t border-line-subtle pt-3 text-xs">
-          <span className="flex items-center gap-1.5 font-medium text-ink-muted text-xs">
-            <Radio size={13} className="text-brand-500" />
-            Heartbeat:
-          </span>
-          <div className="flex items-center gap-1.5">
-            <input
-              type="number"
-              min={1}
-              max={120}
-              value={heartbeatInterval}
-              onChange={(e) => setHeartbeatInterval(parseInt(e.target.value) || 1)}
-              className="w-16 rounded-md border border-line bg-surface px-2 py-0.5 text-center text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-            <span className="text-2xs text-ink-faint">min</span>
-            <Button
-              variant="ghost"
-              size="xs"
-              loading={savingHb}
-              disabled={heartbeatInterval === agent.heartbeatInterval}
-              onClick={handleUpdateHeartbeat}
-            >
-              Update
-            </Button>
-          </div>
-        </div>
-
-        {/* Collapsible SOUL.md & Command History */}
-        <div className="space-y-1.5 pt-1">
-          {/* SOUL.md */}
-          <div className="rounded-lg border border-line-subtle bg-inset/50 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setSoulOpen(!soulOpen)}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-ink-muted hover:bg-raised/60 hover:text-ink transition-colors"
-            >
-              <span className="flex items-center gap-1.5">
-                <Sparkles size={12} className="text-accent-500" />
-                SOUL.md Directives
-              </span>
-              <ChevronDown size={14} className={cn('transition-transform duration-150', soulOpen && 'rotate-180')} />
-            </button>
-            {soulOpen && (
-              <div className="border-t border-line-subtle p-3 space-y-2 bg-surface">
-                <textarea
-                  value={soulMd}
-                  onChange={(e) => setSoulMd(e.target.value)}
-                  rows={6}
-                  className="w-full rounded-md border border-line bg-inset p-2 font-mono text-2xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed resize-y"
-                  placeholder="Agent directives, tone, and cognitive policies..."
-                />
-                <div className="flex justify-end">
-                  <Button variant="primary" size="xs" icon={Save} loading={savingSoul} onClick={handleSaveSoul}>
-                    Save SOUL
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Command History */}
-          <div className="rounded-lg border border-line-subtle bg-inset/50 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setHistoryOpen(!historyOpen)}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-ink-muted hover:bg-raised/60 hover:text-ink transition-colors"
-            >
-              <span className="flex items-center gap-1.5">
-                <History size={12} className="text-ink-faint" />
-                Command History ({commands.length})
-              </span>
-              <ChevronDown size={14} className={cn('transition-transform duration-150', historyOpen && 'rotate-180')} />
-            </button>
-            {historyOpen && (
-              <div className="border-t border-line-subtle p-2 max-h-40 overflow-y-auto space-y-1.5 bg-surface">
-                {commands.length === 0 ? (
-                  <p className="text-2xs text-ink-faint py-1.5 text-center italic">No commands dispatched yet</p>
-                ) : (
-                  commands.map((cmd) => (
-                    <div key={cmd.id} className="flex items-center justify-between rounded border border-line-subtle bg-inset px-2 py-1 text-2xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold uppercase text-brand-600 dark:text-brand-400">{cmd.type}</span>
-                        {cmd.payload != null && (cmd.payload as Record<string, unknown>).message != null && (
-                          <span className="truncate max-w-[140px] text-ink-muted">
-                            {String((cmd.payload as Record<string, unknown>).message)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge tone={cmd.status === 'COMPLETED' ? 'success' : cmd.status === 'PENDING' ? 'warning' : 'info'}>
-                          {cmd.status.toLowerCase()}
-                        </Badge>
-                        <span className="text-ink-faint">{timeAgo(cmd.createdAt)}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
-}
+import { AgentDetailSheet } from '@/components/agent/AgentDetailSheet';
 
 export function AgentControls() {
   const { agents, fetchAgents } = useAgentStore();
   const [allCommands, setAllCommands] = useState<Command[]>([]);
   const [sendingAll, setSendingAll] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ONLINE' | 'IDLE' | 'OFFLINE' | 'ERROR'>('ALL');
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [loading, setLoading] = useState(false);
   const toast = useToast();
 
-  useEffect(() => {
-    fetchAgents();
-    fetchAllCommands();
-  }, [fetchAgents]);
-
-  const fetchAllCommands = async () => {
+  const fetchAllCommands = useCallback(async () => {
     try {
       const cmds = await api.commands.list();
       setAllCommands(cmds);
     } catch (err) {
       console.error('Failed to fetch commands:', err);
     }
+  }, []);
+
+  const handleRefresh = async () => {
+    setLoading(true);
+    await Promise.all([fetchAgents(), fetchAllCommands()]);
+    setLoading(false);
   };
 
+  useEffect(() => {
+    handleRefresh();
+  }, []);
+
   const pendingCount = allCommands.filter((c) => c.status === 'PENDING').length;
+  const onlineCount = agents.filter((a) => a.status === 'ONLINE').length;
+  const idleCount = agents.filter((a) => a.status === 'IDLE').length;
+
+  const filteredAgents = useMemo(() => {
+    return agents.filter((a) => {
+      const matchesSearch =
+        a.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (a.processRole && a.processRole.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      if (!matchesSearch) return false;
+      if (statusFilter === 'ALL') return true;
+      return a.status === statusFilter;
+    });
+  }, [agents, searchQuery, statusFilter]);
 
   const handlePauseAll = async () => {
+    if (!window.confirm('Pause all running agents in the fleet?')) return;
     setSendingAll('PAUSE');
     try {
       await Promise.all(
         agents.filter((a) => a.enabled).map((a) => api.commands.send({ agentId: a.id, type: 'PAUSE' }))
       );
       toast.success('Fleet paused', 'All active agents set to idle');
-      fetchAllCommands();
+      handleRefresh();
     } catch (err) {
       toast.error('Failed to pause fleet', (err as Error).message);
     } finally {
@@ -408,7 +99,7 @@ export function AgentControls() {
         agents.filter((a) => a.enabled).map((a) => api.commands.send({ agentId: a.id, type: 'RESUME' }))
       );
       toast.success('Fleet resumed', 'All active agents brought online');
-      fetchAllCommands();
+      handleRefresh();
     } catch (err) {
       toast.error('Failed to resume fleet', (err as Error).message);
     } finally {
@@ -417,83 +108,200 @@ export function AgentControls() {
   };
 
   return (
-    <>
-      <PageHeader
-        icon={SlidersHorizontal}
-        title="Agent Controls"
-        description="Human-in-the-loop command center — pause, resume, inject instructions, and update cognitive directives in real time."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={Pause}
-              loading={sendingAll === 'PAUSE'}
-              onClick={handlePauseAll}
-            >
-              Pause All
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={Play}
-              loading={sendingAll === 'RESUME'}
-              onClick={handleResumeAll}
-            >
-              Resume All
-            </Button>
-            <Link to="/agents/new">
-              <Button variant="primary" size="sm" icon={Plus}>
-                Create Agent
-              </Button>
-            </Link>
+    <div className="space-y-4 sm:space-y-6 max-w-5xl mx-auto pb-16">
+      {/* Mobile Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+            <SlidersHorizontal size={17} />
           </div>
-        }
-      />
-
-      {/* Quick Status Bar */}
-      <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-4 shadow-2xs">
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-          <div className="flex items-center gap-2">
-            <Bot size={16} className="text-brand-500" />
-            <span className="text-xs font-bold text-ink">{agents.length} Total Agents</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              {agents.filter((a) => a.status === 'ONLINE').length} Online / Active
-            </span>
+          <div>
+            <h1 className="text-base sm:text-lg font-bold text-ink tracking-tight flex items-center gap-2">
+              Agent Control
+              <Badge tone="brand" size="sm">
+                {agents.length} Agents
+              </Badge>
+            </h1>
+            <p className="text-2xs text-ink-muted">Operational fleet command, directives, and real-time execution</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {pendingCount > 0 ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-2xs font-bold text-amber-600 dark:text-amber-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
-              {pendingCount} Pending Commands
-            </span>
-          ) : (
-            <span className="text-2xs font-semibold text-ink-muted">✓ All commands delivered</span>
-          )}
+        {/* Global Fleet Actions */}
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+          <Button
+            variant="secondary"
+            size="xs"
+            icon={Pause}
+            loading={sendingAll === 'PAUSE'}
+            onClick={handlePauseAll}
+          >
+            Pause All
+          </Button>
+          <Button
+            variant="secondary"
+            size="xs"
+            icon={Play}
+            loading={sendingAll === 'RESUME'}
+            onClick={handleResumeAll}
+          >
+            Resume All
+          </Button>
+          <Link to="/agents/new">
+            <Button variant="primary" size="xs" icon={Plus}>
+              New Agent
+            </Button>
+          </Link>
         </div>
       </div>
 
-      {/* Agents Grid */}
-      {agents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <HourglassLoader size={48} label="Loading fleet agents..." />
+      {/* KPI Metric Summary Strip (4-Column) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5">
+        <div className="p-3 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+          <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted block">Total Fleet</span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-ink">{agents.length}</div>
+          <span className="text-[10px] text-ink-faint font-mono block">Registered agents</span>
         </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {agents.map((agent) => (
-            <AgentControlCard
-              key={agent.id}
-              agent={agent}
-              onCommandSent={fetchAllCommands}
-            />
+
+        <div className="p-3 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+          <span className="text-2xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">Online</span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{onlineCount}</div>
+          <span className="text-[10px] text-ink-faint font-mono block">Executing & ready</span>
+        </div>
+
+        <div className="p-3 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+          <span className="text-2xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">Idle / Paused</span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-ink">{idleCount}</div>
+          <span className="text-[10px] text-ink-faint font-mono block">Awaiting triggers</span>
+        </div>
+
+        <div className="p-3 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+          <span className="text-2xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 block">Pending Cmds</span>
+          <div className="text-lg sm:text-xl font-bold font-mono text-purple-600 dark:text-purple-400">{pendingCount}</div>
+          <span className="text-[10px] text-ink-faint font-mono block">In flight</span>
+        </div>
+      </div>
+
+      {/* Search & Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+        {/* Search */}
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search agents by name, role, or stage..."
+            className="w-full rounded-2xl border border-line bg-surface pl-9 pr-3.5 py-2 text-xs text-ink placeholder:text-ink-muted shadow-2xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+          />
+        </div>
+
+        {/* Status Filter Chips */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          {(
+            [
+              { id: 'ALL', label: 'All' },
+              { id: 'ONLINE', label: 'Online' },
+              { id: 'IDLE', label: 'Idle' },
+              { id: 'OFFLINE', label: 'Offline' },
+              { id: 'ERROR', label: 'Error' },
+            ] as const
+          ).map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              onClick={() => setStatusFilter(filter.id)}
+              className={cn(
+                'shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                statusFilter === filter.id
+                  ? 'bg-brand-600 text-white shadow-xs'
+                  : 'border border-line bg-surface text-ink-muted hover:text-ink hover:bg-hover'
+              )}
+            >
+              {filter.label}
+            </button>
           ))}
         </div>
+      </div>
+
+      {/* Agents List (Scannable Cards with 4-box scroll container) */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <HourglassLoader size={48} label="Loading fleet telemetry..." />
+        </div>
+      ) : filteredAgents.length === 0 ? (
+        <div className="py-16 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle p-6">
+          <Bot size={32} className="mx-auto mb-2 text-ink-faint opacity-50" />
+          <p className="font-bold text-ink mb-1">No agents found</p>
+          <p className="text-2xs text-ink-muted max-w-xs mx-auto">
+            {searchQuery || statusFilter !== 'ALL'
+              ? 'Try changing your search or filter settings.'
+              : 'Create a new autonomous agent to start orchestrating.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {filteredAgents.map((agent) => {
+            const tone = agentStatusTone[agent.status] || 'neutral';
+            return (
+              <div
+                key={agent.id}
+                onClick={() => setSelectedAgent(agent)}
+                className="w-full rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line hover:bg-hover/30 transition-all flex items-center justify-between gap-3 text-left cursor-pointer active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 flex items-center justify-center text-base shrink-0">
+                    {agent.avatar ? agent.avatar : '🤖'}
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs sm:text-sm font-bold text-ink truncate">
+                        {agent.displayName}
+                      </span>
+                      <Badge tone={tone} size="sm" dot pulse={agent.status === 'ONLINE'}>
+                        {agent.status.toLowerCase()}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-[11px] text-ink-muted font-mono mt-0.5 truncate">
+                      {agent.processRole ? (
+                        <span className="text-brand-600 dark:text-brand-400 font-semibold truncate">
+                          {agent.processRole} {agent.processStage != null ? `(Stage ${agent.processStage})` : ''}
+                        </span>
+                      ) : (
+                        <span>Autonomous Persona</span>
+                      )}
+                      <span>•</span>
+                      <span>Heartbeat: {timeAgo(agent.lastHeartbeat)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Direct Action Indicator */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedAgent(agent);
+                    }}
+                  >
+                    Directives
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
-    </>
+
+      {/* Agent Detail Sheet */}
+      <AgentDetailSheet
+        agent={selectedAgent}
+        onClose={() => setSelectedAgent(null)}
+        onCommandSent={fetchAllCommands}
+      />
+    </div>
   );
 }

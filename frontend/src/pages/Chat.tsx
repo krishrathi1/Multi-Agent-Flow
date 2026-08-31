@@ -7,190 +7,60 @@ import {
   Sparkles,
   Layers,
   FileCode,
-  ShieldCheck,
-  Server,
-  Activity,
-  ChevronDown,
-  Info,
-  CheckCircle2,
-  Cpu,
-  CornerDownLeft,
   Globe,
   Zap,
   Check,
   Copy,
-  Terminal,
   Clock,
   ThumbsUp,
   ThumbsDown,
   Share2,
   RotateCw,
-  MoreHorizontal,
+  Cpu,
+  ChevronDown,
+  Info,
 } from 'lucide-react';
-import { api } from '../lib/api';
-import { getSocket } from '../lib/socket';
-import { cn, timeAgo } from '../lib/utils';
-import { agentStatusLabel, agentStatusTone } from '../lib/design';
-import { useProcessStore } from '../stores/process-store';
-import { useAuthStore } from '../stores/auth-store';
-import { Avatar } from '../components/ui/Avatar';
-import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
-import { LiveBrainIcon, LiveWaveform, LiveRadarBeacon } from '../components/ui/LiveIcon';
-import { LottieAnimation } from '../components/ui/LottieAnimation';
-import { HourglassLoader } from '../components/ui/HourglassLoader';
-import type { Agent, ChatMessage, AgentStatus, Process } from '../types';
-
-function FormattedMessage({ text }: { text: string }) {
-  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-
-  const copyCode = (code: string, idx: number) => {
-    navigator.clipboard.writeText(code);
-    setCopiedIdx(idx);
-    setTimeout(() => setCopiedIdx(null), 2000);
-  };
-
-  // Check for code blocks ```
-  const codeBlockRegex = /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g;
-  const parts: Array<{ type: 'text' | 'code'; lang?: string; content: string }> = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = codeBlockRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ type: 'text', content: text.slice(lastIndex, match.index) });
-    }
-    parts.push({ type: 'code', lang: match[1] || 'text', content: match[2].trimEnd() });
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < text.length) {
-    parts.push({ type: 'text', content: text.slice(lastIndex) });
-  }
-
-  return (
-    <div className="space-y-2.5 leading-relaxed text-xs sm:text-[13px]">
-      {parts.map((part, pIdx) => {
-        if (part.type === 'code') {
-          return (
-            <div key={pIdx} className="my-2.5 rounded-xl border border-line bg-inset overflow-hidden shadow-2xs">
-              <div className="flex items-center justify-between px-3.5 py-1.5 bg-raised border-b border-line text-[11px] font-mono text-ink-muted">
-                <span className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">
-                  <Terminal size={12} />
-                  {part.lang || 'code'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => copyCode(part.content, pIdx)}
-                  className="flex items-center gap-1 hover:text-ink transition-colors cursor-pointer"
-                >
-                  {copiedIdx === pIdx ? (
-                    <>
-                      <Check size={12} className="text-emerald-500" />
-                      <span className="text-emerald-500 font-bold">Copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={12} />
-                      <span>Copy</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <pre className="p-3.5 overflow-x-auto font-mono text-xs text-ink leading-relaxed no-scrollbar">
-                <code>{part.content}</code>
-              </pre>
-            </div>
-          );
-        }
-
-        const lines = part.content.split('\n');
-        return (
-          <div key={pIdx} className="space-y-1.5">
-            {lines.map((line, idx) => {
-              const trimmed = line.trim();
-              if (!trimmed) return <div key={idx} className="h-1" />;
-
-              if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-                return (
-                  <div key={idx} className="flex items-start gap-2 ml-1">
-                    <span className="text-brand-500 font-bold">•</span>
-                    <span>{renderInlineFormatting(trimmed.substring(2))}</span>
-                  </div>
-                );
-              }
-
-              return <p key={idx}>{renderInlineFormatting(line)}</p>;
-            })}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function renderInlineFormatting(content: string) {
-  const parts = content.split(/(\*\*.*?\*\*|`.*?`)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
-      return (
-        <strong key={i} className="font-bold text-ink">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
-      return (
-        <code key={i} className="rounded-md bg-inset px-1.5 py-0.5 font-mono text-[11px] font-bold text-brand-600 dark:text-brand-400 border border-line-subtle">
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    return part;
-  });
-}
+import { api } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
+import { cn, timeAgo } from '@/lib/utils';
+import { useProcessStore } from '@/stores/process-store';
+import { useAuthStore } from '@/stores/auth-store';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { LiveBrainIcon, LiveWaveform, LiveRadarBeacon } from '@/components/ui/LiveIcon';
+import { HourglassLoader } from '@/components/ui/HourglassLoader';
+import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
+import type { Agent, ChatMessage, AgentStatus, Process } from '@/types';
 
 export function Chat() {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedTarget, setSelectedTarget] = useState<{ type: 'mother'; processId?: string } | { type: 'agent'; agentId: string }>({
-    type: 'mother',
-  });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedProcessId, setSelectedProcessId] = useState<string>('all');
+  const [selectedTarget, setSelectedTarget] = useState<{ type: 'mother' | 'agent'; agentId?: string; processId?: string }>({
+    type: 'mother',
+  });
+  const [processDropdownOpen, setProcessDropdownOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'chat' | 'agents'>('chat');
-  const [feedback, setFeedback] = useState<Record<number, 'up' | 'down'>>({});
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
-
-  const user = useAuthStore((s) => s.user);
-  const userName = user?.name ? user.name.split(' ')[0] : 'Krish';
-  const userInitials = user?.name
-    ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'OP';
+  const [feedback, setFeedback] = useState<Record<number, 'up' | 'down'>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  const { processes, fetchProcesses } = useProcessStore();
-  const [selectedProcessId, setSelectedProcessId] = useState<string>('all');
-  const [processDropdownOpen, setProcessDropdownOpen] = useState(false);
   const processDropdownRef = useRef<HTMLDivElement>(null);
 
-  const activeProcess: Process | undefined = useMemo(() => {
-    return processes.find((p) => p.id === selectedProcessId);
-  }, [processes, selectedProcessId]);
+  const { processes, fetchProcesses } = useProcessStore();
+  const user = useAuthStore((s) => s.user);
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (processDropdownRef.current && !processDropdownRef.current.contains(e.target as Node)) {
-        setProcessDropdownOpen(false);
-      }
-    }
-    if (processDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [processDropdownOpen]);
+  const userName = user?.name ? user.name.split(' ')[0] : 'Engineer';
+  const userInitials = user?.name ? user.name.slice(0, 2).toUpperCase() : 'ME';
+
+  const activeProcess = useMemo(() => {
+    if (selectedProcessId === 'all') return null;
+    return processes.find((p) => p.id === selectedProcessId) || null;
+  }, [processes, selectedProcessId]);
 
   useEffect(() => {
     fetchProcesses();
@@ -244,7 +114,7 @@ export function Chat() {
             },
           ]);
         }
-      } else {
+      } else if (selectedTarget.agentId) {
         const data = await api.chat.history(selectedTarget.agentId);
         setMessages(data.messages || []);
       }
@@ -278,7 +148,7 @@ export function Chat() {
           timestamp: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
-      } else {
+      } else if (selectedTarget.agentId) {
         const response = await api.chat.send(selectedTarget.agentId, text);
         const assistantMessage: ChatMessage = {
           role: 'assistant',
@@ -349,7 +219,7 @@ export function Chat() {
             </div>
           </div>
 
-          {/* Glassmorphic Production Selector Dropdown */}
+          {/* Production Selector Dropdown */}
           <div className="space-y-1.5" ref={processDropdownRef}>
             <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
               Production Scope
@@ -371,7 +241,7 @@ export function Chat() {
                   )}
                   <span className="truncate">
                     {selectedProcessId === 'all'
-                      ? 'All Production Chains (Fleet View)'
+                      ? 'All Production Chains'
                       : activeProcess?.name || 'Selected Production'}
                   </span>
                 </div>
@@ -384,9 +254,9 @@ export function Chat() {
                 />
               </button>
 
-              {/* Floating Glass Options Menu */}
+              {/* Options Menu */}
               {processDropdownOpen && (
-                <div className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-2xl border border-line bg-surface/95 backdrop-blur-2xl p-1.5 shadow-2xl space-y-1 animate-scale-in">
+                <div className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-2xl border border-line bg-surface p-1.5 shadow-2xl space-y-1 animate-scale-in">
                   <button
                     type="button"
                     onClick={() => {
@@ -403,7 +273,7 @@ export function Chat() {
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <Globe size={14} className="shrink-0 text-brand-500" />
-                      <span className="truncate">All Production Chains (Fleet View)</span>
+                      <span className="truncate">All Production Chains</span>
                     </div>
                     {selectedProcessId === 'all' && (
                       <Check size={13} className="shrink-0 text-brand-600 dark:text-brand-400" />
@@ -446,108 +316,84 @@ export function Chat() {
 
         {/* Target Hierarchy List */}
         <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-2 no-scrollbar">
-          {/* Primary Mother Chat Hub */}
+          {/* Mother Chat Card */}
           <button
             type="button"
             onClick={() => {
-              setSelectedTarget({ type: 'mother', processId: selectedProcessId === 'all' ? undefined : selectedProcessId });
+              setSelectedTarget({ type: 'mother', processId: activeProcess?.id });
               setMobileTab('chat');
             }}
             className={cn(
-              'relative flex w-full items-start gap-3 rounded-2xl p-3 text-left transition-all border cursor-pointer',
+              'flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-all cursor-pointer shadow-2xs',
               selectedTarget.type === 'mother'
-                ? 'bg-brand-500/10 border-brand-500/40 text-ink shadow-xs ring-1 ring-brand-500/20'
-                : 'bg-surface border-line-subtle text-ink-muted hover:border-line hover:bg-raised'
+                ? 'border-brand-500 bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold ring-1 ring-brand-500/20'
+                : 'border-line-subtle bg-surface text-ink hover:border-line hover:bg-hover'
             )}
           >
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 text-white shadow-xs shrink-0 overflow-hidden border border-brand-400/30">
-              <LottieAnimation type="aiBrain" size={28} />
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-600 text-white shadow-xs">
+              <Brain size={16} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="truncate text-xs font-bold text-ink">Mother Core</span>
-                <span className="px-1.5 py-0.2 text-[10px] font-bold uppercase rounded bg-brand-500/15 text-brand-600 dark:text-brand-400 border border-brand-500/20">Supervisor</span>
-              </div>
-              <p className="mt-1 text-2xs text-ink-muted line-clamp-1 leading-relaxed">
-                {activeProcess ? `Direct supervisor for "${activeProcess.name}"` : 'Supreme Supervisor for all agents'}
-              </p>
+              <span className="truncate text-xs font-bold block">Mother Core</span>
+              <span className="text-[10px] text-ink-muted font-normal block truncate">
+                Central Orchestration Bot
+              </span>
             </div>
           </button>
 
-          {/* Supervised Sub-Agents Header */}
-          <div className="pt-2 px-1 flex items-center justify-between text-2xs font-bold uppercase tracking-wider text-ink-muted">
-            <span>Supervised Agents ({filteredAgents.length})</span>
-            <span className="text-2xs font-medium lowercase text-brand-600 dark:text-brand-400">Telemetry link</span>
+          {/* Individual Agent Targets */}
+          <div className="pt-2">
+            <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted px-2 block mb-1">
+              Sub-Agents ({filteredAgents.length})
+            </span>
+            <div className="space-y-1">
+              {filteredAgents.map((agent) => {
+                const isSelected = selectedTarget.type === 'agent' && selectedTarget.agentId === agent.id;
+                return (
+                  <button
+                    key={agent.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTarget({ type: 'agent', agentId: agent.id });
+                      setMobileTab('chat');
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-all cursor-pointer',
+                      isSelected
+                        ? 'border-brand-500 bg-brand-500/10 font-bold text-brand-600 dark:text-brand-400'
+                        : 'border-transparent hover:bg-hover text-ink'
+                    )}
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-inset border border-line flex items-center justify-center text-xs shrink-0">
+                      {agent.avatar || '🤖'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="truncate text-xs font-semibold block">{agent.displayName}</span>
+                      <span className="text-[10px] text-ink-muted truncate block">
+                        {agent.processRole || 'Autonomous Agent'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-
-          {/* Sub-Agents List */}
-          {filteredAgents.map((agent) => {
-            const isSelected = selectedTarget.type === 'agent' && selectedTarget.agentId === agent.id;
-            return (
-              <button
-                key={agent.id}
-                type="button"
-                onClick={() => {
-                  setSelectedTarget({ type: 'agent', agentId: agent.id });
-                  setMobileTab('chat');
-                }}
-                className={cn(
-                  'relative flex w-full items-center gap-2.5 rounded-xl p-2.5 text-left transition-all border cursor-pointer',
-                  isSelected
-                    ? 'bg-inset border-brand-500 text-ink shadow-xs ring-1 ring-brand-500/30'
-                    : 'bg-surface border-line-subtle text-ink-muted hover:border-line hover:bg-raised'
-                )}
-              >
-                <Avatar
-                  name={agent.displayName}
-                  emoji={agent.avatar}
-                  size="sm"
-                  status={agentStatusTone[agent.status]}
-                  statusLabel={agentStatusLabel[agent.status]}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="truncate text-xs font-bold text-ink">{agent.displayName}</span>
-                    <span className="text-2xs font-mono font-bold text-ink-muted bg-inset px-1.5 py-0.2 rounded border border-line-subtle">
-                      Stage {agent.processStage || 1}
-                    </span>
-                  </div>
-                  <p className="text-2xs text-ink-muted truncate mt-0.5">{agent.processRole || agent.name}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Network Protocol Info */}
-        <div className="border-t border-line-subtle p-3 bg-inset/50 text-2xs text-ink-muted flex items-center gap-2">
-          <Info size={13} className="shrink-0 text-brand-500" />
-          <span>Mother Chat coordinates multi-agent consensus and deliverables.</span>
         </div>
       </aside>
 
-      {/* ── Right Chat Area: Mother Core Conversation & Live Telemetry ── */}
-      <div
+      {/* ── Main Chat Conversation View ── */}
+      <main
         className={cn(
-          'flex min-w-0 flex-1 flex-col bg-canvas',
+          'flex flex-1 flex-col overflow-hidden bg-canvas',
           mobileTab === 'chat' ? 'flex' : 'hidden md:flex'
         )}
       >
-        {/* Conversation Header */}
-        <header className="flex shrink-0 items-center justify-between border-b border-line-subtle bg-surface px-4 sm:px-6 py-3 shadow-xs">
+        {/* Header */}
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-line-subtle bg-surface px-4 sm:px-6 shadow-2xs">
           <div className="flex items-center gap-3 min-w-0">
-            {selectedTarget.type === 'mother' ? (
-              <div className="relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 text-white shadow-sm overflow-hidden border border-brand-400/30">
-                <LottieAnimation type="aiBrain" size={32} />
-              </div>
-            ) : (
-              <Avatar
-                name={selectedAgent?.displayName || 'Agent'}
-                emoji={selectedAgent?.avatar}
-                size="md"
-                status={selectedAgent ? agentStatusTone[selectedAgent.status] : 'neutral'}
-              />
-            )}
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-600 text-white shadow-xs">
+              {selectedTarget.type === 'mother' ? <Brain size={17} /> : <Bot size={17} />}
+            </div>
 
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -562,7 +408,7 @@ export function Chat() {
                 <Cpu size={11} className="text-brand-500 shrink-0" />
                 <span className="truncate">
                   {activeProcess
-                    ? `Production: "${activeProcess.name}"`
+                    ? `Scope: "${activeProcess.name}"`
                     : 'Global Fleet Workspace • Telemetry Active'}
                 </span>
               </p>
@@ -582,8 +428,8 @@ export function Chat() {
           </div>
         </header>
 
-        {/* Conversation Message Feed */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 no-scrollbar">
+        {/* Message Feed */}
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 no-scrollbar">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <HourglassLoader size={48} label="Syncing telemetry conversation..." />
@@ -597,13 +443,13 @@ export function Chat() {
                     key={index}
                     className="flex items-start gap-2.5 max-w-2xl ml-auto flex-row-reverse animate-scale-in"
                   >
-                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-600 text-white text-2xs font-bold shadow-xs border border-white/10 uppercase">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-600 text-white text-2xs font-bold shadow-xs uppercase">
                       {userInitials}
                     </div>
 
                     <div className="flex flex-col items-end max-w-[85%] sm:max-w-lg">
-                      <div className="rounded-[22px] rounded-br-xs px-4.5 py-2.5 bg-blue-600 dark:bg-blue-600 text-white shadow-sm text-xs sm:text-[13px] font-medium leading-relaxed break-words">
-                        <FormattedMessage text={msg.content} />
+                      <div className="rounded-2xl rounded-br-xs px-4 py-2.5 bg-blue-600 text-white shadow-sm text-xs sm:text-[13px] font-medium leading-relaxed break-words">
+                        <MarkdownRenderer content={msg.content} />
                       </div>
                       {msg.timestamp && (
                         <div className="mt-1 text-[10px] font-mono text-ink-muted flex items-center gap-1 opacity-70 px-1">
@@ -621,13 +467,13 @@ export function Chat() {
                   key={index}
                   className="group flex items-start gap-2.5 max-w-3xl mr-auto animate-scale-in"
                 >
-                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-600 to-indigo-700 text-white text-xs font-bold shadow-xs border border-brand-400/30">
+                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-600 to-indigo-700 text-white text-xs font-bold shadow-xs">
                     {selectedTarget.type === 'mother' ? <Brain size={15} /> : <Bot size={15} />}
                   </div>
 
                   <div className="flex flex-col items-start min-w-0 space-y-1 max-w-[90%] sm:max-w-2xl">
-                    <div className="rounded-2xl sm:rounded-[22px] sm:rounded-tl-xs p-4 text-xs sm:text-[13px] leading-relaxed shadow-xs border border-line-subtle bg-surface text-ink font-sans w-full">
-                      <FormattedMessage text={msg.content} />
+                    <div className="rounded-2xl sm:rounded-2xl sm:rounded-tl-xs p-3.5 sm:p-4 text-xs sm:text-[13px] leading-relaxed shadow-xs border border-line-subtle bg-surface text-ink font-sans w-full">
+                      <MarkdownRenderer content={msg.content} />
                       {msg.timestamp && (
                         <div className="mt-2 text-[10px] font-mono text-ink-muted flex items-center gap-1 opacity-60">
                           <Clock size={10} />
@@ -636,9 +482,8 @@ export function Chat() {
                       )}
                     </div>
 
-                    {/* Interactive Action Bar (Matching Image 3) */}
-                    <div className="flex items-center gap-1 pt-0.5 px-1 text-ink-muted transition-opacity">
-                      {/* Copy */}
+                    {/* Action Bar */}
+                    <div className="flex items-center gap-1 pt-0.5 px-1 text-ink-muted">
                       <button
                         type="button"
                         title="Copy message"
@@ -647,68 +492,45 @@ export function Chat() {
                           setCopiedMsgIdx(index);
                           setTimeout(() => setCopiedMsgIdx(null), 1800);
                         }}
-                        className="p-1.5 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer"
+                        className="p-1 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer"
                       >
-                        {copiedMsgIdx === index ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                        {copiedMsgIdx === index ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
                       </button>
 
-                      {/* Thumbs Up */}
                       <button
                         type="button"
-                        title="Good response"
+                        title="Thumbs up"
                         onClick={() => setFeedback((prev) => ({ ...prev, [index]: prev[index] === 'up' ? undefined! : 'up' }))}
                         className={cn(
-                          'p-1.5 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer',
+                          'p-1 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer',
                           feedback[index] === 'up' && 'text-brand-500 bg-brand-500/10 font-bold'
                         )}
                       >
-                        <ThumbsUp size={14} />
+                        <ThumbsUp size={13} />
                       </button>
 
-                      {/* Thumbs Down */}
                       <button
                         type="button"
-                        title="Poor response"
+                        title="Thumbs down"
                         onClick={() => setFeedback((prev) => ({ ...prev, [index]: prev[index] === 'down' ? undefined! : 'down' }))}
                         className={cn(
-                          'p-1.5 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer',
+                          'p-1 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer',
                           feedback[index] === 'down' && 'text-rose-500 bg-rose-500/10 font-bold'
                         )}
                       >
-                        <ThumbsDown size={14} />
+                        <ThumbsDown size={13} />
                       </button>
 
-                      {/* Share / Export */}
                       <button
                         type="button"
-                        title="Share / Export snippet"
-                        onClick={() => {
-                          const blob = new Blob([msg.content], { type: 'text/markdown' });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `mother-chat-turn-${index + 1}.md`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }}
-                        className="p-1.5 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer"
-                      >
-                        <Share2 size={14} />
-                      </button>
-
-                      {/* Regenerate */}
-                      <button
-                        type="button"
-                        title="Regenerate turn"
+                        title="Regenerate"
                         onClick={() => {
                           const prevUserMsg = [...messages.slice(0, index)].reverse().find((m) => m.role === 'user');
-                          if (prevUserMsg) {
-                            handleSend(prevUserMsg.content);
-                          }
+                          if (prevUserMsg) handleSend(prevUserMsg.content);
                         }}
-                        className="p-1.5 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer"
+                        className="p-1 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer"
                       >
-                        <RotateCw size={14} />
+                        <RotateCw size={13} />
                       </button>
                     </div>
                   </div>
@@ -722,14 +544,14 @@ export function Chat() {
               <div className="w-6 h-6 rounded-lg bg-brand-500/10 text-brand-600 flex items-center justify-center">
                 <Brain size={14} className="animate-spin" />
               </div>
-              <span>Mother Chat is inspecting agent telemetry and deliverables…</span>
+              <span>Mother Chat is orchestrating fleet execution…</span>
             </div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Quick Question Suggestions */}
+        {/* Quick Suggestion Chips */}
         {selectedTarget.type === 'mother' && (
           <div className="px-3.5 sm:px-6 py-2 border-t border-line-subtle bg-surface/40 flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth">
             <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted shrink-0 flex items-center gap-1">
@@ -754,47 +576,40 @@ export function Chat() {
           </div>
         )}
 
-        {/* Modern Prompt Composer Bar */}
-        <div className="border-t border-line-subtle bg-surface p-3 sm:p-4">
+        {/* Chat Composer */}
+        <div className="border-t border-line-subtle bg-surface p-3 sm:p-4 shadow-lg">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSend();
             }}
-            className="flex items-center gap-2 bg-inset rounded-2xl p-1.5 border border-line focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 transition-all shadow-inner min-h-[46px]"
+            className="flex items-end gap-2"
           >
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                selectedTarget.type === 'mother'
-                  ? 'Ask Mother about agents, code, or runs...'
-                  : `Message ${selectedAgent?.displayName || 'agent'}...`
-              }
-              className="w-full bg-transparent px-3 py-1.5 text-xs sm:text-[13px] text-ink placeholder:text-ink-muted placeholder:truncate resize-none border-0 outline-none ring-0 focus:outline-none focus:ring-0 focus:border-0 leading-normal max-h-24 overflow-y-auto no-scrollbar"
-            />
+            <div className="relative flex-1">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask Mother about agents, code, or runs..."
+                rows={1}
+                className="w-full resize-none rounded-2xl border border-line bg-inset px-3.5 py-2.5 text-xs sm:text-sm text-ink placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-brand-500 max-h-32 min-h-[46px] no-scrollbar leading-normal"
+              />
+            </div>
+
             <Button
               type="submit"
               variant="primary"
-              className="h-8.5 sm:h-9 px-3.5 rounded-xl shrink-0 shadow-xs cursor-pointer"
+              size="md"
               icon={SendHorizontal}
               loading={sending}
-              disabled={!input.trim()}
+              disabled={!input.trim() || sending}
+              className="rounded-2xl h-[46px] px-4"
             >
               Send
             </Button>
           </form>
-
-          <div className="mt-2 hidden sm:flex items-center justify-between text-2xs text-ink-muted px-1">
-            <span>Press <kbd className="font-mono rounded bg-inset border border-line px-1 py-0.5 text-[10px]">Enter</kbd> to send, <kbd className="font-mono rounded bg-inset border border-line px-1 py-0.5 text-[10px]">Shift+Enter</kbd> for newline</span>
-            <span className="font-semibold text-brand-600 dark:text-brand-400">Mother Core Live Intelligence</span>
-          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
-
