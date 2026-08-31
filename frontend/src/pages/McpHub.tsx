@@ -274,63 +274,63 @@ export function McpHub() {
         }
       />
 
-      {/* ── Telemetry Deck: 4 Options in 1 Single Line ── */}
-      <div className="grid grid-cols-4 gap-2 sm:gap-3.5">
+      {/* ── Telemetry Deck: Responsive Horizontal Deck ── */}
+      <div className="flex sm:grid sm:grid-cols-4 gap-2.5 sm:gap-3.5 overflow-x-auto no-scrollbar pb-1">
         {/* Connected Servers */}
-        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3 sm:p-4 shadow-2xs hover:border-emerald-500/40 transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1 mb-1">
-            <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 truncate">
+        <div className="min-w-[140px] sm:min-w-0 flex-1 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3 sm:p-4 shadow-2xs hover:border-emerald-500/40 transition-all flex flex-col justify-between shrink-0">
+          <div className="flex items-center justify-between gap-1.5 mb-1.5">
+            <span className="text-[11px] sm:text-2xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
               Connected MCP
             </span>
             <LiveRadarBeacon size={8} tone="emerald" />
           </div>
-          <p className="text-base sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1">
+          <p className="text-xl sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1 font-mono">
             {connectedCount}
-            <span className="text-[10px] sm:text-xs font-normal text-ink-muted truncate hidden xs:inline">/ {servers.length} online</span>
+            <span className="text-[11px] sm:text-xs font-normal text-ink-muted whitespace-nowrap">/ {servers.length} online</span>
           </p>
         </div>
 
         {/* Discovered Tools */}
-        <div className="rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1 mb-1">
-            <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted truncate">
+        <div className="min-w-[140px] sm:min-w-0 flex-1 rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between shrink-0">
+          <div className="flex items-center justify-between gap-1.5 mb-1.5">
+            <span className="text-[11px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted whitespace-nowrap">
               Discovered Tools
             </span>
             <Wrench size={13} className="text-brand-500 shrink-0" />
           </div>
-          <p className="text-base sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1">
+          <p className="text-xl sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1 font-mono">
             {totalToolsCount}
-            <span className="text-[10px] sm:text-xs font-normal text-ink-muted truncate hidden xs:inline">active functions</span>
+            <span className="text-[11px] sm:text-xs font-normal text-ink-muted whitespace-nowrap">active tools</span>
           </p>
         </div>
 
         {/* Attached Agents */}
-        <div className="rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1 mb-1">
-            <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted truncate">
+        <div className="min-w-[140px] sm:min-w-0 flex-1 rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between shrink-0">
+          <div className="flex items-center justify-between gap-1.5 mb-1.5">
+            <span className="text-[11px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted whitespace-nowrap">
               Attached Agents
             </span>
             <Bot size={13} className="text-indigo-500 shrink-0" />
           </div>
-          <p className="text-base sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1">
+          <p className="text-xl sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1 font-mono">
             {new Set(servers.map((s) => s.agentId)).size}
-            <span className="text-[10px] sm:text-xs font-normal text-ink-muted truncate hidden xs:inline">agents powered</span>
+            <span className="text-[11px] sm:text-xs font-normal text-ink-muted whitespace-nowrap">agents linked</span>
           </p>
         </div>
 
         {/* Protocol Transports */}
-        <div className="rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1 mb-1">
-            <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted truncate">
+        <div className="min-w-[140px] sm:min-w-0 flex-1 rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between shrink-0">
+          <div className="flex items-center justify-between gap-1.5 mb-1.5">
+            <span className="text-[11px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted whitespace-nowrap">
               Transport Stack
             </span>
             <LiveWaveform color="bg-brand-500" />
           </div>
-          <p className="text-xs sm:text-sm font-bold text-ink flex items-center gap-1 mt-0.5 flex-wrap">
-            <span className="px-1.5 py-0.5 rounded-md bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 text-[10px] font-mono font-bold">
+          <p className="text-xs sm:text-sm font-bold text-ink flex items-center gap-1.5 mt-0.5">
+            <span className="px-2 py-0.5 rounded-md bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 text-[10px] font-mono font-bold">
               SSE
             </span>
-            <span className="px-1.5 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-[10px] font-mono font-bold">
+            <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-[10px] font-mono font-bold">
               STDIO
             </span>
           </p>
