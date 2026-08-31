@@ -84,8 +84,8 @@ export function ActivityFeed() {
         </Card>
       ) : (
         <ul className="space-y-2">
-          {activities.map((activity) => (
-            <li key={activity.id}>
+          {activities.map((activity, idx) => (
+            <li key={activity.id || `feed-act-${idx}-${activity.createdAt || Date.now()}`}>
               <ActivityItem activity={activity} />
             </li>
           ))}

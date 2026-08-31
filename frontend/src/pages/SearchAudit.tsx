@@ -351,12 +351,12 @@ export function SearchAudit() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <Avatar
-                      name={activity.agent.displayName}
-                      emoji={activity.agent.avatar}
+                      name={activity.agent?.displayName || 'System'}
+                      emoji={activity.agent?.avatar}
                       size="xs"
                     />
                     <span className="text-sm font-medium text-ink">
-                      {activity.agent.displayName}
+                      {activity.agent?.displayName || 'System'}
                     </span>
                     <span
                       className={cn(

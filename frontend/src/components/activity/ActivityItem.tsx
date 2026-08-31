@@ -7,6 +7,8 @@ export function ActivityItem({ activity }: { activity: Activity }) {
   const tone = activityToneFor(activity.type);
   const Icon = activityIconFor(activity.type);
   const t = tones[tone];
+  const agentName = activity.agent?.displayName || 'System / Mother Core';
+  const agentAvatar = activity.agent?.avatar;
 
   return (
     <div
@@ -31,12 +33,12 @@ export function ActivityItem({ activity }: { activity: Activity }) {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <Avatar
-              name={activity.agent.displayName}
-              emoji={activity.agent.avatar}
+              name={agentName}
+              emoji={agentAvatar}
               size="xs"
             />
             <span className="text-xs sm:text-sm font-bold text-ink truncate">
-              {activity.agent.displayName}
+              {agentName}
             </span>
           </div>
 

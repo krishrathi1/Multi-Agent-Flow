@@ -125,14 +125,14 @@ export function SystemHealth() {
             </div>
           ) : (
             <ul className="space-y-1.5">
-              {items.map((activity) => {
+              {items.map((activity, idx) => {
                 const tone = activityToneFor(activity.type);
                 const Icon = activityIconFor(activity.type);
                 const t = tones[tone];
 
                 return (
                   <li
-                    key={activity.id}
+                    key={activity.id || `act-${idx}-${activity.createdAt || Date.now()}`}
                     className="flex items-start gap-2.5 rounded-lg border border-line-subtle/70 bg-surface p-2.5 transition-all hover:border-line hover:shadow-2xs"
                   >
                     <span
