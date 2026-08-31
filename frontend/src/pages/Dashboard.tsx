@@ -10,6 +10,7 @@ import {
   Layers,
   LayoutDashboard,
   MessagesSquare,
+  MoreVertical,
   Pause,
   Play,
   Plus,
@@ -248,23 +249,19 @@ function ProductionBlockCard({
   busy: boolean;
   onToggleRun: () => void;
 }) {
-  const t = tones[processTone(process.color)];
   const agents = process.agents ?? [];
   const stages = [...new Set(agents.map((a) => a.processStage || 1))].sort((a, b) => a - b);
   const isRunning = process.status === 'ACTIVE';
 
   return (
-    <Card padding="none" className="overflow-hidden border border-line shadow-sm hover:shadow-md transition-shadow">
-      {/* Top Accent Strip */}
-      <div className={cn('h-1.5 w-full', t.solid)} aria-hidden />
-
+    <Card padding="none" className="overflow-hidden border border-line-subtle bg-surface shadow-xs hover:shadow-sm transition-all rounded-2xl">
       {/* Block Header */}
-      <div className="border-b border-line-subtle bg-surface/60 px-5 py-4 backdrop-blur-sm">
+      <div className="border-b border-line-subtle px-5 py-4 bg-surface">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2.5">
-              <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-lg text-xs font-bold text-white shadow-xs', t.solid)}>
-                <Factory size={14} />
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="rounded bg-inset px-2 py-0.5 text-2xs font-semibold text-ink-muted border border-line-subtle">
+                Repo
               </span>
               <Link
                 to={`/processes`}
@@ -272,13 +269,18 @@ function ProductionBlockCard({
               >
                 {process.name}
               </Link>
-              <Badge tone={statusTone[process.status]} dot pulse={isRunning}>
-                {process.status.toLowerCase()}
-              </Badge>
+              <span className={cn(
+                'rounded-full px-2.5 py-0.5 text-[11px] font-semibold',
+                isRunning
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+              )}>
+                {isRunning ? 'Active' : 'Completed'}
+              </span>
             </div>
 
             {process.summary && (
-              <p className="mt-1.5 text-xs text-ink-muted leading-relaxed line-clamp-2">
+              <p className="mt-1.5 text-xs text-ink-muted leading-relaxed">
                 {process.summary}
               </p>
             )}
@@ -288,7 +290,7 @@ function ProductionBlockCard({
           <div className="flex items-center gap-2">
             <Button
               size="xs"
-              variant={isRunning ? 'secondary' : 'primary'}
+              variant="primary"
               icon={isRunning ? Pause : Play}
               loading={busy}
               onClick={onToggleRun}
@@ -298,7 +300,7 @@ function ProductionBlockCard({
             <ButtonLink
               to={`/activity?processId=${process.id}`}
               size="xs"
-              variant="ghost"
+              variant="secondary"
               icon={Activity}
               title="View Production Activity"
             >
@@ -307,24 +309,31 @@ function ProductionBlockCard({
             <ButtonLink
               to={`/processes`}
               size="xs"
-              variant="ghost"
+              variant="secondary"
               icon={ExternalLink}
               title="Open Pipeline Canvas"
             >
               Canvas
             </ButtonLink>
+            <button
+              type="button"
+              className="grid h-7 w-7 place-items-center rounded-lg text-ink-muted hover:bg-hover hover:text-ink transition-colors"
+              title="More options"
+            >
+              <MoreVertical size={14} />
+            </button>
           </div>
         </div>
       </div>
 
       {/* Pipeline Stage Visualization */}
-      <div className="p-5 bg-surface space-y-4">
+      <div className="p-5 bg-surface space-y-3">
         <div className="flex items-center justify-between text-xs text-ink-muted font-medium">
-          <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5 font-semibold text-ink-muted">
             <Workflow size={13} className="text-brand-500" />
             <span>Agent Pipeline Stages ({stages.length} {stages.length === 1 ? 'stage' : 'stages'})</span>
           </span>
-          <span className="tabular-nums">
+          <span className="text-xs text-ink-faint">
             {agents.length} agent{agents.length === 1 ? '' : 's'} in block
           </span>
         </div>
@@ -337,19 +346,16 @@ function ProductionBlockCard({
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             {stages.map((stageNum) => {
               const stageAgents = agents.filter((a) => (a.processStage || 1) === stageNum);
               return (
                 <div
                   key={stageNum}
-                  className="rounded-xl border border-line-subtle bg-inset/40 p-3 flex flex-col gap-2.5"
+                  className="rounded-xl border border-line-subtle bg-inset/30 p-3 flex flex-col gap-2"
                 >
-                  <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-ink-muted">
-                    <span>Stage {stageNum}</span>
-                    <span className="rounded bg-surface px-1.5 py-0.5 text-2xs font-semibold text-ink shadow-2xs">
-                      {stageAgents.length} {stageAgents.length === 1 ? 'Agent' : 'Agents'}
-                    </span>
+                  <div className="text-[11px] font-bold text-ink-muted">
+                    Stage {stageNum}
                   </div>
 
                   <div className="space-y-2">
@@ -365,24 +371,24 @@ function ProductionBlockCard({
       </div>
 
       {/* Block Footer */}
-      <div className="flex items-center justify-between border-t border-line-subtle bg-inset/30 px-5 py-2.5 text-xs text-ink-muted">
+      <div className="flex items-center justify-between border-t border-line-subtle px-5 py-3 text-xs text-ink-muted bg-surface">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
-            <span className="tabular-nums font-semibold text-ink">
+            <span className="font-semibold text-ink">
               {agents.filter((a) => a.status === 'ONLINE').length}
             </span>{' '}
             online
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-amber-500 inline-block" />
-            <span className="tabular-nums font-semibold text-ink">
+            <span className="font-semibold text-ink">
               {agents.filter((a) => a.status === 'IDLE').length}
             </span>{' '}
             idle
           </span>
           {process.budgetUsd && (
-            <span className="text-2xs text-ink-faint">
+            <span className="text-xs text-ink-muted">
               Budget: <strong className="text-ink">${process.budgetUsd}</strong>
             </span>
           )}
@@ -392,8 +398,7 @@ function ProductionBlockCard({
           to="/processes"
           className="flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
         >
-          <span>Pipeline Details</span>
-          <ChevronRight size={13} />
+          <span>Pipeline Details →</span>
         </Link>
       </div>
     </Card>
@@ -404,52 +409,35 @@ function ProductionBlockCard({
  * Mini interactive row for an agent inside a stage
  */
 function AgentMiniRow({ agent }: { agent: Agent }) {
-  const isOnline = agent.status === 'ONLINE';
-  const isError = agent.status === 'ERROR';
+  const initials = agent.displayName
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
-    <div className="group flex items-center justify-between gap-2.5 rounded-lg border border-line/60 bg-surface p-2 shadow-2xs hover:border-brand-500/40 hover:shadow-xs transition-all">
-      <div className="flex items-center gap-2 min-w-0 flex-1">
-        <div className="relative">
-          <Avatar name={agent.displayName} emoji={agent.avatar} size="xs" />
-          <span
-            className={cn(
-              'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-surface',
-              isOnline ? 'bg-emerald-500' : isError ? 'bg-rose-500' : 'bg-amber-500',
-            )}
-          />
-        </div>
+    <div className="group flex items-center justify-between gap-3 rounded-xl border border-line-subtle bg-surface p-3 shadow-2xs hover:border-line-strong transition-all">
+      <div className="flex items-start gap-2.5 min-w-0 flex-1">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[11px] font-bold">
+          {initials || 'AG'}
+        </span>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <Link
-              to={`/agents/${agent.id}`}
-              className="truncate text-xs font-bold text-ink hover:text-brand-500 transition-colors"
-            >
-              {agent.displayName}
-            </Link>
-          </div>
-          <p className="truncate text-[10px] text-ink-muted">
-            {agent.processRole || agent.name}
+          <Link
+            to={`/agents/${agent.id}`}
+            className="truncate text-xs font-bold text-ink hover:text-brand-500 transition-colors block"
+          >
+            {agent.displayName}
+          </Link>
+          <p className="text-[11px] text-ink-muted leading-relaxed line-clamp-2 mt-0.5">
+            {agent.description || agent.processRole || agent.name}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-        <Link
-          to={`/chat?agentId=${agent.id}`}
-          className="grid h-6 w-6 place-items-center rounded-md text-ink-faint hover:bg-hover hover:text-ink transition-colors"
-          title={`Chat with ${agent.displayName}`}
-        >
-          <MessagesSquare size={12} />
-        </Link>
-        <Link
-          to={`/agents/${agent.id}`}
-          className="grid h-6 w-6 place-items-center rounded-md text-ink-faint hover:bg-hover hover:text-ink transition-colors"
-          title={`View ${agent.displayName} Profile`}
-        >
-          <ExternalLink size={12} />
-        </Link>
+      <div className="shrink-0 flex items-center">
+        <CheckCircle2 size={16} className="text-emerald-500" />
       </div>
     </div>
   );

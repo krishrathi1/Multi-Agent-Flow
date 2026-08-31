@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useAgentStore } from '../../stores/agent-store';
+import { useAuthStore } from '../../stores/auth-store';
 import { useUiStore } from '../../stores/ui-store';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
@@ -24,16 +25,18 @@ import { NotificationBell } from './NotificationBell';
 export function Topbar() {
   const navigate = useNavigate();
   const stats = useAgentStore((s) => s.stats);
+  const user = useAuthStore((s) => s.user);
   const socketConnected = useUiStore((s) => s.socketConnected);
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Global '/' keyboard shortcut to focus search
+  // Global '/' or '⌘K' keyboard shortcut to focus search / open command palette
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
-        e.key === '/' &&
+        (e.key === '/' || (e.key === 'k' && (e.metaKey || e.ctrlKey))) &&
         document.activeElement?.tagName !== 'INPUT' &&
         document.activeElement?.tagName !== 'TEXTAREA'
       ) {
@@ -56,21 +59,31 @@ export function Topbar() {
     searchRef.current?.focus();
   };
 
-  const hasErrors = (stats?.error ?? 0) > 0;
+  const userInitial = user?.name?.charAt(0).toUpperCase() || 'A';
 
   return (
     <header
       className={cn(
         'sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3',
-        'border-b border-line/60 bg-canvas/75 px-5 backdrop-blur-xl',
+        'border-b border-line-subtle bg-surface px-5 backdrop-blur-md',
         'transition-colors duration-200',
       )}
     >
-      {/* Ambient bottom gradient border glow */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-brand-500/25 to-transparent" />
+      {/* ---- Left: Sidebar Toggle & Search ---- */}
+      <div className="flex flex-1 items-center gap-3 max-w-xl">
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label="Toggle sidebar navigation"
+          className="grid h-8 w-8 place-items-center rounded-lg text-ink-muted hover:bg-hover hover:text-ink transition-colors"
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="4" x2="20" y1="12" y2="12" />
+            <line x1="4" x2="20" y1="6" y2="6" />
+            <line x1="4" x2="20" y1="18" y2="18" />
+          </svg>
+        </button>
 
-      {/* ---- Left: Search & Quick Commands ---- */}
-      <div className="flex flex-1 items-center gap-2.5 max-w-xl">
         {/* Search input capsule */}
         <form
           onSubmit={submitSearch}
@@ -78,10 +91,10 @@ export function Topbar() {
           role="search"
         >
           <label htmlFor="global-search" className="sr-only">
-            Search activity, agents and audit log
+            Search missions, agents, logs
           </label>
           <Search
-            size={15}
+            size={14}
             strokeWidth={2}
             className={cn(
               'pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 transition-colors duration-200',
@@ -97,14 +110,14 @@ export function Topbar() {
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search missions, logs, agents…"
+            placeholder="Search missions, agents, logs..."
             className={cn(
-              'h-8.5 w-full rounded-xl border bg-surface/60 backdrop-blur-md',
-              'pl-9 pr-9 text-xs text-ink placeholder:text-ink-faint shadow-xs',
+              'h-8.5 w-full rounded-xl border bg-inset/40',
+              'pl-8.5 pr-9 text-xs text-ink placeholder:text-ink-faint shadow-2xs',
               'transition-all duration-200',
               isFocused
-                ? 'border-brand-500/60 bg-surface ring-4 ring-brand-500/10 shadow-e2'
-                : 'border-line/70 hover:border-line-strong hover:bg-surface/90',
+                ? 'border-brand-500/60 bg-surface ring-2 ring-brand-500/10'
+                : 'border-line/70 hover:border-line-strong hover:bg-surface',
             )}
           />
 
@@ -119,134 +132,64 @@ export function Topbar() {
               <X size={13} strokeWidth={2} />
             </button>
           ) : (
-            <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center justify-center rounded-md border border-line-subtle bg-raised/70 px-1.5 py-0.5 font-mono text-[10px] text-ink-faint shadow-2xs">
-              /
+            <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center justify-center rounded border border-line-subtle bg-surface px-1.5 py-0.5 font-mono text-[9px] font-medium text-ink-faint shadow-2xs">
+              ⌘K
             </kbd>
           )}
         </form>
-
-        {/* Command palette trigger pill */}
-        <button
-          type="button"
-          onClick={() =>
-            window.dispatchEvent(
-              new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }),
-            )
-          }
-          aria-label="Open command palette (Ctrl+K or ⌘K)"
-          className={cn(
-            'group hidden h-8.5 items-center gap-2 rounded-xl border border-line-strong/70',
-            'bg-surface px-2.5 text-xs font-semibold text-ink shadow-xs',
-            'transition-all duration-150 hover:border-brand-500 hover:bg-brand-500/5 hover:text-brand-600 dark:hover:text-brand-400 hover:shadow-e1 active:scale-[0.98] lg:flex',
-          )}
-        >
-          <Command
-            size={13}
-            strokeWidth={2.25}
-            className="text-brand-500 transition-transform duration-200 group-hover:scale-110"
-            aria-hidden
-          />
-          <span className="font-medium text-ink">Commands</span>
-          <span className="flex items-center gap-0.5">
-            <kbd className="rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-[10px] font-bold text-ink shadow-2xs">
-              ⌘
-            </kbd>
-            <kbd className="rounded border border-line bg-raised px-1.5 py-0.5 font-mono text-[10px] font-bold text-ink shadow-2xs">
-              K
-            </kbd>
-          </span>
-        </button>
       </div>
 
       {/* ---- Right: Telemetry & Actions ---- */}
-      <div className="flex items-center gap-2 sm:gap-2.5">
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Live Socket Gateway Indicator */}
+        <div
+          className={cn(
+            'flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold backdrop-blur-sm shadow-2xs',
+            socketConnected
+              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',
+          )}
+        >
+          <span className={cn('h-1.5 w-1.5 rounded-full', socketConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500')} />
+          <span>{socketConnected ? 'Live' : 'Offline'}</span>
+        </div>
+
         {/* Fleet telemetry deck */}
         {stats && (
-          <div className="hidden items-center gap-1.5 rounded-xl border border-line/60 bg-surface/40 px-2 py-1 backdrop-blur-md shadow-2xs md:flex">
-            {/* Online Agents Pill */}
-            <div
-              className={cn(
-                'flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-xs font-medium transition-colors',
-                stats.online > 0
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                  : 'text-ink-faint',
-              )}
-            >
-              <span className="relative flex h-2 w-2">
-                {stats.online > 0 && (
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                )}
-                <span
-                  className={cn(
-                    'relative inline-flex h-2 w-2 rounded-full',
-                    stats.online > 0 ? 'bg-emerald-500' : 'bg-ink-faint/50',
-                  )}
-                />
-              </span>
-              <span>{stats.online} online</span>
+          <div className="hidden items-center gap-3 text-xs md:flex">
+            {/* Online Agents */}
+            <div className="flex items-center gap-1.5 text-ink-muted">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
+              <span className="font-semibold text-ink tabular-nums">{stats.online}</span>
+              <span>online</span>
             </div>
 
-            {/* Idle Agents Pill */}
-            {stats.idle > 0 && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                <span>{stats.idle} idle</span>
-              </div>
-            )}
-
-            {/* Errors Pill */}
-            {hasErrors && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-rose-500/10 border border-rose-500/25 px-2 py-0.5 text-xs font-medium text-rose-600 dark:text-rose-400">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
-                </span>
-                <span>{stats.error} error</span>
-              </div>
-            )}
+            {/* Idle Agents */}
+            <div className="flex items-center gap-1.5 text-ink-muted">
+              <span className="h-2 w-2 rounded-full bg-amber-500 inline-block" />
+              <span className="font-semibold text-ink tabular-nums">{stats.idle}</span>
+              <span>idle</span>
+            </div>
 
             {/* Active Tasks Counter */}
-            <div className="flex items-center gap-1.5 pl-1.5 pr-1 text-xs text-ink-faint">
-              <Activity size={12} strokeWidth={2} className="text-brand-500 shrink-0" />
-              <span className="font-semibold tabular-nums text-ink">
-                {stats.activeTasks}
-              </span>
-              <span className="hidden lg:inline text-ink-muted">active tasks</span>
+            <div className="flex items-center gap-1.5 text-ink-muted">
+              <Activity size={13} strokeWidth={2} className="text-brand-500 shrink-0" />
+              <span className="font-semibold text-ink tabular-nums">{stats.activeTasks}</span>
+              <span>active tasks</span>
             </div>
           </div>
         )}
 
-        {/* Divider */}
-        <div className="hidden h-5 w-px bg-line/60 sm:block" />
-
-        {/* Live Socket Gateway Indicator */}
-        <div
-          title={socketConnected ? 'Real-time WebSocket connection active' : 'Live updates disconnected'}
-          className={cn(
-            'flex h-8.5 items-center gap-1.5 rounded-xl border px-2 text-xs font-medium backdrop-blur-sm transition-all shadow-xs',
-            socketConnected
-              ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-              : 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
-          )}
-        >
-          {socketConnected ? (
-            <>
-              <Radio size={13} strokeWidth={2.25} className="animate-pulse text-emerald-500" />
-              <span className="hidden xl:inline text-[11px] font-semibold">LIVE</span>
-            </>
-          ) : (
-            <>
-              <WifiOff size={13} strokeWidth={2} className="text-amber-500" />
-              <span className="hidden xl:inline text-[11px] font-semibold">RECONNECTING</span>
-            </>
-          )}
+        {/* Action icons */}
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <NotificationBell />
         </div>
 
-        {/* Theme Picker */}
-        <ThemeToggle />
-
-        {/* Notification Bell */}
-        <NotificationBell />
+        {/* User avatar circle */}
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white shadow-xs">
+          {userInitial}
+        </div>
       </div>
     </header>
   );
