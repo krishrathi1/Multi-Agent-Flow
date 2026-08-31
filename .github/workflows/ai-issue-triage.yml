@@ -1,0 +1,58 @@
+name: AI Issue Triage & Auto-Labeler
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    name: AI Issue Classification
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Triage Issue Content
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            
+            const labels = [];
+            if (title.includes('bug') || body.includes('error') || body.includes('crash') || body.includes('fails')) {
+              labels.push('bug', 'priority: high');
+            } else if (title.includes('feat') || body.includes('add') || body.includes('support')) {
+              labels.push('enhancement');
+            } else if (title.includes('doc') || body.includes('readme') || body.includes('guide')) {
+              labels.push('documentation');
+            }
+            
+            if (body.includes('backend') || body.includes('prisma') || body.includes('gateway') || body.includes('api')) {
+              labels.push('backend');
+            }
+            if (body.includes('frontend') || body.includes('ui') || body.includes('page') || body.includes('react')) {
+              labels.push('frontend');
+            }
+            
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+            }
+            
+            const ackComment = `👋 Thanks for opening this issue! 
+            
+Our **Nexus AI Triage Agent** has automatically reviewed and tagged this report with: ${labels.map(l => `\`${l}\``).join(', ')}.
+A maintainer or Sweep.dev automation agent will inspect this shortly.`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: ackComment
+            });

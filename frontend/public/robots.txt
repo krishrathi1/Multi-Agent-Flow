@@ -1,0 +1,25 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /agents
+Disallow: /chat
+Disallow: /gateways
+Disallow: /boards
+Disallow: /approvals
+Disallow: /activity
+Disallow: /comms
+Disallow: /timeline
+Disallow: /topology
+Disallow: /controls
+Disallow: /metrics
+Disallow: /alerts
+Disallow: /search
+Disallow: /tasks
+Disallow: /settings
+Disallow: /skills
+Disallow: /soul-templates
+Disallow: /custom-fields
+Disallow: /invitations
+Disallow: /api/
+
+Sitemap: https://nexus.blostem.com/sitemap.xml

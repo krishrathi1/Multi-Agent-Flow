@@ -1,0 +1,438 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap');
+@import "tailwindcss";
+
+/* `dark:` follows the class the theme layer stamps on <html>, not the raw OS
+   media query — otherwise the in-app toggle couldn't override the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ============================================================================
+   NEXUS DESIGN SYSTEM
+
+   Two themes, one set of semantic roles. `@theme` maps Tailwind utility names
+   onto indirection variables (`--c-*`); the theme blocks below re-point those
+   variables. So `bg-surface` is written once and is correct in both modes.
+
+   Light and dark are each *selected* — dark is not an inverted light.
+   ========================================================================= */
+
+@theme {
+  /* ---- Brand ramp (shared; steps chosen to read on both surfaces) ------- */
+  --color-brand-50: #eef6ff;
+  --color-brand-100: #d9ebff;
+  --color-brand-200: #bcdcff;
+  --color-brand-300: #8ec6ff;
+  --color-brand-400: #59a6ff;
+  --color-brand-500: #3585fb;
+  --color-brand-600: #1f66ef;
+  --color-brand-700: #1a51db;
+  --color-brand-800: #1c43b0;
+  --color-brand-900: #1c3c8b;
+  --color-brand-950: #152554;
+
+  /* ---- Surfaces (elevation ladder) -------------------------------------
+     canvas < inset < surface < raised < overlay.
+     Named `canvas` rather than `base` so `text-base` stays a font size.
+     ---------------------------------------------------------------------- */
+  --color-canvas: var(--c-canvas);
+  --color-inset: var(--c-inset);
+  --color-surface: var(--c-surface);
+  --color-raised: var(--c-raised);
+  --color-overlay: var(--c-overlay);
+  --color-hover: var(--c-hover);
+
+  /* ---- Borders --------------------------------------------------------- */
+  --color-line-subtle: var(--c-line-subtle);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+
+  /* ---- Text ------------------------------------------------------------ */
+  --color-ink: var(--c-ink);
+  --color-ink-muted: var(--c-ink-muted);
+  --color-ink-subtle: var(--c-ink-subtle);
+  --color-ink-faint: var(--c-ink-faint);
+
+  /* ---- Type ------------------------------------------------------------ */
+  --font-sans: "Inter var", "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
+    Menlo, Consolas, "Liberation Mono", monospace;
+
+  --text-2xs: 0.6875rem;   /* 11px */
+  --text-xs: 0.75rem;      /* 12px */
+  --text-sm: 0.8125rem;    /* 13px */
+  --text-base: 0.875rem;   /* 14px — body default */
+  --text-md: 1rem;         /* 16px */
+  --text-lg: 1.125rem;     /* 18px */
+  --text-xl: 1.375rem;     /* 22px */
+  --text-2xl: 1.75rem;     /* 28px */
+  --text-3xl: 2.125rem;    /* 34px */
+
+  /* ---- Radii ----------------------------------------------------------- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+
+  /* ---- Elevation ------------------------------------------------------- */
+  --shadow-e1: var(--c-shadow-e1);
+  --shadow-e2: var(--c-shadow-e2);
+  --shadow-e3: var(--c-shadow-e3);
+  --shadow-e4: var(--c-shadow-e4);
+
+  /* ---- Motion ---------------------------------------------------------- */
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ---- Compatibility aliases -------------------------------------------
+     Screens not yet migrated still use `nexus-*` / `surface-*`.
+     ---------------------------------------------------------------------- */
+  --color-nexus-50: var(--color-brand-50);
+  --color-nexus-100: var(--color-brand-100);
+  --color-nexus-200: var(--color-brand-200);
+  --color-nexus-300: var(--color-brand-300);
+  --color-nexus-400: var(--color-brand-400);
+  --color-nexus-500: var(--color-brand-500);
+  --color-nexus-600: var(--color-brand-600);
+  --color-nexus-700: var(--color-brand-700);
+  --color-nexus-800: var(--color-brand-800);
+  --color-nexus-900: var(--color-brand-900);
+  --color-nexus-950: var(--color-brand-950);
+
+  --color-surface-50: var(--c-inset);
+  --color-surface-100: var(--c-inset);
+  --color-surface-200: var(--c-line);
+  --color-surface-700: var(--c-overlay);
+  --color-surface-800: var(--c-surface);
+  --color-surface-850: var(--c-surface);
+  --color-surface-900: var(--c-surface);
+  --color-surface-950: var(--c-canvas);
+}
+
+/* ============================================================================
+   THEME DEFINITIONS
+
+   Light is the bare `:root` default. Dark applies when the root is explicitly
+   stamped `data-theme="dark"`, OR when the OS prefers dark and the root has
+   not been explicitly stamped light. That ordering lets the in-app toggle win
+   in both directions.
+   ========================================================================= */
+
+:root {
+  color-scheme: light;
+
+  --c-canvas: #f4f6f9;
+  --c-inset: #eceff4;
+  --c-surface: #ffffff;
+  --c-raised: #ffffff;
+  --c-overlay: #ffffff;
+  --c-hover: #f2f4f8;
+
+  --c-line-subtle: #e7eaf0;
+  --c-line: #d9dee7;
+  --c-line-strong: #bcc4d1;
+
+  /* Contrast on #ffffff: ink 17.4:1 · muted 9.1:1 · subtle 5.9:1 · faint 4.6:1 */
+  --c-ink: #101623;
+  --c-ink-muted: #414b5c;
+  --c-ink-subtle: #59637a;
+  --c-ink-faint: #6b7488;
+
+  --c-shadow-e1: 0 1px 2px 0 rgb(16 24 40 / 0.05);
+  --c-shadow-e2: 0 2px 6px -1px rgb(16 24 40 / 0.08), 0 1px 3px -1px rgb(16 24 40 / 0.05);
+  --c-shadow-e3: 0 8px 24px -6px rgb(16 24 40 / 0.12), 0 2px 8px -2px rgb(16 24 40 / 0.07);
+  --c-shadow-e4: 0 20px 48px -12px rgb(16 24 40 / 0.18), 0 4px 12px -4px rgb(16 24 40 / 0.10);
+
+  /* Neutral wash used where dark mode uses white/alpha overlays. */
+  --c-wash-weak: rgb(16 24 40 / 0.035);
+  --c-wash: rgb(16 24 40 / 0.06);
+  --c-wash-strong: rgb(16 24 40 / 0.09);
+
+  --c-scrim: rgb(16 24 40 / 0.45);
+  --c-chart-surface: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --c-canvas: #090b10;
+    --c-inset: #0c0f15;
+    --c-surface: #11151c;
+    --c-raised: #171c25;
+    --c-overlay: #1c222d;
+    --c-hover: #1f2632;
+
+    --c-line-subtle: #1a202a;
+    --c-line: #232b37;
+    --c-line-strong: #333c4b;
+
+    /* Contrast on #11151c: ink 14.8:1 · muted 7.3:1 · subtle 5.0:1 · faint 4.6:1 */
+    --c-ink: #e8ecf3;
+    --c-ink-muted: #a2acbd;
+    --c-ink-subtle: #8792a4;
+    --c-ink-faint: #7d8798;
+
+    --c-shadow-e1: 0 1px 2px 0 rgb(0 0 0 / 0.30);
+    --c-shadow-e2: 0 2px 6px -1px rgb(0 0 0 / 0.40), 0 1px 3px -1px rgb(0 0 0 / 0.30);
+    --c-shadow-e3: 0 8px 24px -6px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.35);
+    --c-shadow-e4: 0 20px 48px -12px rgb(0 0 0 / 0.70), 0 4px 12px -4px rgb(0 0 0 / 0.40);
+
+    --c-wash-weak: rgb(255 255 255 / 0.035);
+    --c-wash: rgb(255 255 255 / 0.06);
+    --c-wash-strong: rgb(255 255 255 / 0.09);
+
+    --c-scrim: rgb(0 0 0 / 0.65);
+    --c-chart-surface: #11151c;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --c-canvas: #090b10;
+  --c-inset: #0c0f15;
+  --c-surface: #11151c;
+  --c-raised: #171c25;
+  --c-overlay: #1c222d;
+  --c-hover: #1f2632;
+
+  --c-line-subtle: #1a202a;
+  --c-line: #232b37;
+  --c-line-strong: #333c4b;
+
+  --c-ink: #e8ecf3;
+  --c-ink-muted: #a2acbd;
+  --c-ink-subtle: #8792a4;
+  --c-ink-faint: #7d8798;
+
+  --c-shadow-e1: 0 1px 2px 0 rgb(0 0 0 / 0.30);
+  --c-shadow-e2: 0 2px 6px -1px rgb(0 0 0 / 0.40), 0 1px 3px -1px rgb(0 0 0 / 0.30);
+  --c-shadow-e3: 0 8px 24px -6px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.35);
+  --c-shadow-e4: 0 20px 48px -12px rgb(0 0 0 / 0.70), 0 4px 12px -4px rgb(0 0 0 / 0.40);
+
+  --c-wash-weak: rgb(255 255 255 / 0.035);
+  --c-wash: rgb(255 255 255 / 0.06);
+  --c-wash-strong: rgb(255 255 255 / 0.09);
+
+  --c-scrim: rgb(0 0 0 / 0.65);
+  --c-chart-surface: #11151c;
+}
+
+/* ============================================================================
+   BASE
+   ========================================================================= */
+html {
+  -webkit-text-size-adjust: 100%;
+  scrollbar-gutter: stable;
+  background: var(--c-canvas);
+}
+
+body {
+  background: var(--c-canvas);
+  color: var(--c-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
+  transition: background-color 0.2s var(--ease-out-soft),
+    color 0.2s var(--ease-out-soft);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.014em;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+p { text-wrap: pretty; }
+
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+:focus:not(:focus-visible) { outline: none; }
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+summary,
+label[for],
+select:not(:disabled) {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:disabled,
+[aria-disabled="true"] { cursor: not-allowed; }
+
+/* ---- Scrollbars -------------------------------------------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-line-strong) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background-color: var(--c-line-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: var(--c-ink-faint); }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--c-ink);
+  -webkit-box-shadow: 0 0 0 1000px var(--c-inset) inset;
+  caret-color: var(--c-ink);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-brand-500) 30%, transparent);
+}
+
+/* ============================================================================
+   UTILITIES
+   ========================================================================= */
+
+/* Theme-aware neutral washes — replace hard-coded white/alpha, which is
+   invisible on a light surface. */
+.wash-weak { background-color: var(--c-wash-weak); }
+.wash { background-color: var(--c-wash); }
+.wash-strong { background-color: var(--c-wash-strong); }
+.hover\:wash-weak:hover { background-color: var(--c-wash-weak); }
+.hover\:wash:hover { background-color: var(--c-wash); }
+.hover\:wash-strong:hover { background-color: var(--c-wash-strong); }
+.active\:wash-strong:active { background-color: var(--c-wash-strong); }
+.group:hover .group-hover\:wash-weak { background-color: var(--c-wash-weak); }
+
+.bg-scrim { background-color: var(--c-scrim); }
+
+.bg-grid {
+  background-image:
+    linear-gradient(to right, var(--c-line-subtle) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--c-line-subtle) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.mask-fade-b {
+  -webkit-mask-image: linear-gradient(to bottom, #000 85%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 85%, transparent 100%);
+}
+
+.tnum { font-variant-numeric: tabular-nums; }
+
+.line-clamp-1, .line-clamp-2, .line-clamp-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.line-clamp-1 { -webkit-line-clamp: 1; }
+.line-clamp-2 { -webkit-line-clamp: 2; }
+.line-clamp-3 { -webkit-line-clamp: 3; }
+
+/* ============================================================================
+   MOTION
+   ========================================================================= */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes ping-ring {
+  0% { transform: scale(1); opacity: 0.55; }
+  70%, 100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.animate-fade-in { animation: fade-in 0.2s var(--ease-out-soft) both; }
+.animate-rise-in { animation: rise-in 0.22s var(--ease-out-soft) both; }
+.animate-scale-in { animation: scale-in 0.18s var(--ease-out-soft) both; }
+.animate-slide-in-right { animation: slide-in-right 0.22s var(--ease-out-soft) both; }
+.animate-breathe { animation: breathe 2.4s var(--ease-in-out-soft) infinite; }
+.animate-ping-ring { animation: ping-ring 2.4s var(--ease-out-soft) infinite; }
+.animate-spin-slow { animation: spin 1s linear infinite; }
+
+.stagger > * { animation: rise-in 0.24s var(--ease-out-soft) both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(6) { animation-delay: 200ms; }
+.stagger > *:nth-child(7) { animation-delay: 240ms; }
+.stagger > *:nth-child(n + 8) { animation-delay: 280ms; }
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--c-inset) 25%,
+    var(--c-hover) 37%,
+    var(--c-inset) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Legacy landing-page animations. */
+.animate-float { animation: float 6s ease-in-out infinite; }
+.animate-float-slow { animation: float 8s ease-in-out infinite; }
+.animate-float-fast { animation: float 4s ease-in-out infinite; }
+.animate-gradient { background-size: 200% 200%; animation: gradient-shift 8s ease infinite; }
+.animate-fade-in-up { animation: fade-in-up 0.8s ease-out forwards; }
+.animate-fade-in-up-delay-1 { opacity: 0; animation: fade-in-up 0.8s ease-out 0.1s forwards; }
+.animate-fade-in-up-delay-2 { opacity: 0; animation: fade-in-up 0.8s ease-out 0.2s forwards; }
+.animate-fade-in-up-delay-3 { opacity: 0; animation: fade-in-up 0.8s ease-out 0.3s forwards; }
+.animate-pulse-dot { animation: breathe 2.4s var(--ease-in-out-soft) infinite; }
+.animate-slide-in { animation: rise-in 0.22s var(--ease-out-soft) both; }
+.animate-glow { animation: none; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .skeleton { animation: none; background: var(--c-inset); }
+}
+
+@media print {
+  body { background: #fff; color: #000; }
+  .no-print { display: none !important; }
+}

@@ -1,0 +1,15 @@
+{
+  "cookies": [
+    {
+      "name": "nxrt",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3YWE1MWRhNi0zY2EzLTRhZDgtOTNhYS1mNTU2NzA5Y2ZmOGMiLCJlbWFpbCI6InRlc3RAbmV4dXMubG9jYWwiLCJpYXQiOjE3NzE3NTc3OTMsImV4cCI6MTc3MjM2MjU5M30.uy_Wu9dZvwtQamSUrhYWWq7UcFzoGr7bGMKKdvNjU_I",
+      "domain": "localhost",
+      "path": "/api/auth",
+      "expires": 1772362593.730413,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Strict"
+    }
+  ],
+  "origins": []
+}

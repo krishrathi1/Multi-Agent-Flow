@@ -1,0 +1,744 @@
+{
+  "title": "Nexus - Node.js Runtime",
+  "description": "Event loop, V8 heap memory, and garbage collection metrics",
+  "tags": ["nexus", "runtime", "nodejs"],
+  "version": "v4",
+  "uploadedGrafana": false,
+  "panelMap": {},
+  "variables": {},
+  "layout": [
+    { "i": "6cdc4321-507e-4ccc-9d55-43bb2854c7ef", "x": 0, "y": 0, "w": 6, "h": 5 },
+    { "i": "0bf8b6ca-35ff-42d2-b544-8cd264aeb92d", "x": 6, "y": 0, "w": 6, "h": 5 },
+    { "i": "2f9b2150-e747-47a2-a8a9-1edb5184a658", "x": 0, "y": 5, "w": 6, "h": 5 },
+    { "i": "aade5148-5042-47dc-8e40-5a86e806bb80", "x": 6, "y": 5, "w": 6, "h": 5 },
+    { "i": "6ccbde26-78c1-4c94-8699-da864d6eff7b", "x": 0, "y": 10, "w": 6, "h": 5 },
+    { "i": "7eae33a0-2686-4445-845c-4a9a775c949d", "x": 6, "y": 10, "w": 6, "h": 5 },
+    { "i": "4118a35b-122e-4b97-aef7-fda817953214", "x": 0, "y": 15, "w": 3, "h": 4 },
+    { "i": "127832b3-83de-4b17-9bf6-ebac3bb8cb2c", "x": 3, "y": 15, "w": 3, "h": 4 },
+    { "i": "aecde533-1caa-47ab-927f-33ce461b4596", "x": 6, "y": 15, "w": 3, "h": 4 },
+    { "i": "d8764217-945a-4327-809d-323bceffbfbf", "x": 9, "y": 15, "w": 3, "h": 4 }
+  ],
+  "widgets": [
+    {
+      "id": "6cdc4321-507e-4ccc-9d55-43bb2854c7ef",
+      "title": "Event Loop Delay (P50/P90/P99)",
+      "panelTypes": "graph",
+      "yAxisUnit": "ms",
+      "query": {
+        "queryType": "builder",
+        "id": "d72c4ea4-41e1-4eac-bd59-f129e67cfbd4",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "avg",
+              "aggregateAttribute": {
+                "key": "nodejs.eventloop.delay.p50",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "nodejs.eventloop.delay.p50--float64--Gauge--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "p50",
+              "timeAggregation": "avg",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            },
+            {
+              "queryName": "B",
+              "dataSource": "metrics",
+              "aggregateOperator": "avg",
+              "aggregateAttribute": {
+                "key": "nodejs.eventloop.delay.p90",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "nodejs.eventloop.delay.p90--float64--Gauge--true"
+              },
+              "expression": "B",
+              "disabled": false,
+              "legend": "p90",
+              "timeAggregation": "avg",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            },
+            {
+              "queryName": "C",
+              "dataSource": "metrics",
+              "aggregateOperator": "avg",
+              "aggregateAttribute": {
+                "key": "nodejs.eventloop.delay.p99",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "nodejs.eventloop.delay.p99--float64--Gauge--true"
+              },
+              "expression": "C",
+              "disabled": false,
+              "legend": "p99",
+              "timeAggregation": "avg",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "promql": []
+      }
+    },
+    {
+      "id": "0bf8b6ca-35ff-42d2-b544-8cd264aeb92d",
+      "title": "Event Loop Utilization",
+      "panelTypes": "graph",
+      "yAxisUnit": "percentunit",
+      "query": {
+        "queryType": "builder",
+        "id": "8792e469-a4b9-4f35-9d5e-f62c9a08f554",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "avg",
+              "aggregateAttribute": {
+                "key": "nodejs.eventloop.utilization",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "nodejs.eventloop.utilization--float64--Gauge--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "utilization",
+              "timeAggregation": "avg",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "promql": []
+      }
+    },
+    {
+      "id": "2f9b2150-e747-47a2-a8a9-1edb5184a658",
+      "title": "Heap Memory Used",
+      "panelTypes": "graph",
+      "yAxisUnit": "bytes",
+      "query": {
+        "queryType": "builder",
+        "id": "c23732d6-1099-47d3-b2a7-f2087ebc8a9f",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "latest",
+              "aggregateAttribute": {
+                "key": "v8js.memory.heap.used",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "v8js.memory.heap.used--float64--Gauge--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "heap used",
+              "timeAggregation": "latest",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "latest",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "promql": []
+      }
+    },
+    {
+      "id": "aade5148-5042-47dc-8e40-5a86e806bb80",
+      "title": "Heap Memory Limit",
+      "panelTypes": "graph",
+      "yAxisUnit": "bytes",
+      "query": {
+        "queryType": "builder",
+        "id": "8058b068-578c-4168-92c1-319222dbe7b5",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "latest",
+              "aggregateAttribute": {
+                "key": "v8js.memory.heap.used",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "v8js.memory.heap.used--float64--Gauge--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "heap used",
+              "timeAggregation": "latest",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "latest",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            },
+            {
+              "queryName": "B",
+              "dataSource": "metrics",
+              "aggregateOperator": "latest",
+              "aggregateAttribute": {
+                "key": "v8js.memory.heap.limit",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "v8js.memory.heap.limit--float64--Gauge--true"
+              },
+              "expression": "B",
+              "disabled": false,
+              "legend": "heap limit",
+              "timeAggregation": "latest",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "latest",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "promql": []
+      }
+    },
+    {
+      "id": "6ccbde26-78c1-4c94-8699-da864d6eff7b",
+      "title": "GC Duration",
+      "panelTypes": "graph",
+      "yAxisUnit": "ms",
+      "query": {
+        "queryType": "builder",
+        "id": "95b99b75-7ab7-48d5-89eb-faca450d4646",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {
+                "key": "v8js.gc.duration.sum",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "v8js.gc.duration.sum--float64--Sum--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{v8js_gc_type}}",
+              "timeAggregation": "rate",
+              "spaceAggregation": "sum",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [
+                {
+                  "key": "v8js_gc_type",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": false,
+                  "isJSON": false,
+                  "id": "v8js_gc_type--string--tag--false"
+                }
+              ],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "promql": []
+      }
+    },
+    {
+      "id": "7eae33a0-2686-4445-845c-4a9a775c949d",
+      "title": "GC Count",
+      "panelTypes": "graph",
+      "yAxisUnit": "",
+      "query": {
+        "queryType": "builder",
+        "id": "48a3e2ad-ccea-4f0a-99bc-381d9ce02b5f",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {
+                "key": "v8js.gc.duration.count",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "v8js.gc.duration.count--float64--Sum--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{v8js_gc_type}}",
+              "timeAggregation": "rate",
+              "spaceAggregation": "sum",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [
+                {
+                  "key": "v8js_gc_type",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": false,
+                  "isJSON": false,
+                  "id": "v8js_gc_type--string--tag--false"
+                }
+              ],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "promql": []
+      }
+    },
+    {
+      "id": "4118a35b-122e-4b97-aef7-fda817953214",
+      "title": "Current Event Loop Delay",
+      "panelTypes": "value",
+      "yAxisUnit": "ms",
+      "query": {
+        "queryType": "builder",
+        "id": "7302b627-911a-4501-8950-3f79709f5b9f",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "latest",
+              "aggregateAttribute": {
+                "key": "nodejs.eventloop.delay.mean",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "nodejs.eventloop.delay.mean--float64--Gauge--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "",
+              "timeAggregation": "latest",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "latest",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "promql": []
+      }
+    },
+    {
+      "id": "127832b3-83de-4b17-9bf6-ebac3bb8cb2c",
+      "title": "Max Event Loop Delay",
+      "panelTypes": "value",
+      "yAxisUnit": "ms",
+      "query": {
+        "queryType": "builder",
+        "id": "8f9c0c03-c95d-4b1b-b479-507c717faf0e",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "max",
+              "aggregateAttribute": {
+                "key": "nodejs.eventloop.delay.max",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "nodejs.eventloop.delay.max--float64--Gauge--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "",
+              "timeAggregation": "max",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "max",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "promql": []
+      }
+    },
+    {
+      "id": "aecde533-1caa-47ab-927f-33ce461b4596",
+      "title": "Current Heap Used",
+      "panelTypes": "value",
+      "yAxisUnit": "bytes",
+      "query": {
+        "queryType": "builder",
+        "id": "7936311e-ad6e-4f39-b062-3151632a95a8",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "latest",
+              "aggregateAttribute": {
+                "key": "v8js.memory.heap.used",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "v8js.memory.heap.used--float64--Gauge--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "",
+              "timeAggregation": "latest",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "latest",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "promql": []
+      }
+    },
+    {
+      "id": "d8764217-945a-4327-809d-323bceffbfbf",
+      "title": "Heap Limit",
+      "panelTypes": "value",
+      "yAxisUnit": "bytes",
+      "query": {
+        "queryType": "builder",
+        "id": "1e21dbd0-014d-491d-bac5-8f955d0a7585",
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "latest",
+              "aggregateAttribute": {
+                "key": "v8js.memory.heap.limit",
+                "dataType": "float64",
+                "type": "Gauge",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "v8js.memory.heap.limit--float64--Gauge--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "",
+              "timeAggregation": "latest",
+              "spaceAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "latest",
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "resource",
+                      "isColumn": false,
+                      "isJSON": false
+                    },
+                    "op": "=",
+                    "value": "nexus-backend",
+                    "id": "service_name--string--resource--false"
+                  }
+                ]
+              },
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "promql": []
+      }
+    }
+  ]
+}

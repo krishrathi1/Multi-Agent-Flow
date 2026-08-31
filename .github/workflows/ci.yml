@@ -1,0 +1,61 @@
+name: CI - Build, Test & Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: nexus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Verify Backend Types
+        run: |
+          cd backend
+          npx tsc --noEmit
+
+      - name: Verify Frontend Types & Build
+        run: |
+          cd frontend
+          npm run build:no-prerender
+
+      - name: Run Backend Unit Tests
+        env:
+          DATABASE_URL: "postgresql://postgres:password@localhost:5432/nexus_test"
+          JWT_SECRET: "test-secret-at-least-32-characters-long-key"
+          JWT_REFRESH_SECRET: "test-refresh-secret-at-least-32-characters-long"
+          ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        run: |
+          cd backend
+          npx prisma db push --skip-generate
+          npm test

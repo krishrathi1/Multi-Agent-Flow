@@ -1,0 +1,768 @@
+{
+  "title": "Nexus - Application Performance",
+  "description": "HTTP request rates, latencies, error rates, and endpoint performance",
+  "tags": ["nexus", "performance"],
+  "version": "v4",
+  "uploadedGrafana": false,
+  "panelMap": {},
+  "variables": {},
+  "layout": [
+    { "i": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c01", "w": 6, "h": 5, "x": 0, "y": 0 },
+    { "i": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c02", "w": 6, "h": 5, "x": 6, "y": 0 },
+    { "i": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c03", "w": 6, "h": 5, "x": 0, "y": 5 },
+    { "i": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c04", "w": 6, "h": 5, "x": 6, "y": 5 },
+    { "i": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c05", "w": 3, "h": 5, "x": 0, "y": 10 },
+    { "i": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c06", "w": 3, "h": 5, "x": 3, "y": 10 },
+    { "i": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c07", "w": 3, "h": 5, "x": 6, "y": 10 },
+    { "i": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c08", "w": 3, "h": 5, "x": 9, "y": 10 }
+  ],
+  "widgets": [
+    {
+      "id": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c01",
+      "title": "Request Rate",
+      "description": "Rate of HTTP requests per minute, grouped by method",
+      "panelTypes": "graph",
+      "query": {
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {
+                "key": "http.server.duration.count",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "http.server.duration.count--float64--Sum--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{http_method}}",
+              "spaceAggregation": "sum",
+              "timeAggregation": "rate",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "limit": null,
+              "offset": null,
+              "groupBy": [
+                {
+                  "key": "http_method",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": false,
+                  "isJSON": false,
+                  "id": "http_method--string--tag--false"
+                }
+              ],
+              "orderBy": [],
+              "having": [],
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-01",
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "service_name--string--tag--false"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  }
+                ]
+              },
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "promql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "id": "query-d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c01",
+        "queryType": "builder"
+      },
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "columnUnits": {},
+      "fillSpans": false,
+      "isStacked": false,
+      "mergeAllActiveQueries": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMax": 0,
+      "softMin": 0,
+      "stackedBarChart": false,
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "yAxisUnit": "reqps"
+    },
+    {
+      "id": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c02",
+      "title": "Average Response Time",
+      "description": "Average response time in milliseconds",
+      "panelTypes": "graph",
+      "query": {
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {
+                "key": "http.server.duration.sum",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "http.server.duration.sum--float64--Sum--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "duration_sum",
+              "spaceAggregation": "sum",
+              "timeAggregation": "rate",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "limit": null,
+              "offset": null,
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-02a",
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "service_name--string--tag--false"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  }
+                ]
+              },
+              "functions": []
+            },
+            {
+              "queryName": "B",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {
+                "key": "http.server.duration.count",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "http.server.duration.count--float64--Sum--true"
+              },
+              "expression": "B",
+              "disabled": false,
+              "legend": "duration_count",
+              "spaceAggregation": "sum",
+              "timeAggregation": "rate",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "limit": null,
+              "offset": null,
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-02b",
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "service_name--string--tag--false"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  }
+                ]
+              },
+              "functions": []
+            }
+          ],
+          "queryFormulas": [
+            {
+              "queryName": "F1",
+              "expression": "A / B",
+              "disabled": false,
+              "legend": "avg response time"
+            }
+          ]
+        },
+        "clickhouse_sql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "promql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "id": "query-d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c02",
+        "queryType": "builder"
+      },
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "columnUnits": {},
+      "fillSpans": false,
+      "isStacked": false,
+      "mergeAllActiveQueries": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMax": 0,
+      "softMin": 0,
+      "stackedBarChart": false,
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "yAxisUnit": "ms"
+    },
+    {
+      "id": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c03",
+      "title": "Error Rate %",
+      "description": "Percentage of 4xx/5xx responses over total requests",
+      "panelTypes": "graph",
+      "query": {
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {
+                "key": "signoz_calls_total",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "signoz_calls_total--float64--Sum--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "error_requests",
+              "spaceAggregation": "sum",
+              "timeAggregation": "rate",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "limit": null,
+              "offset": null,
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-03a",
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "service_name--string--tag--false"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-status-03a",
+                    "key": {
+                      "key": "status_code",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "status_code--string--tag--false"
+                    },
+                    "op": ">=",
+                    "value": "400"
+                  }
+                ]
+              },
+              "functions": []
+            },
+            {
+              "queryName": "B",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {
+                "key": "signoz_calls_total",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "signoz_calls_total--float64--Sum--true"
+              },
+              "expression": "B",
+              "disabled": false,
+              "legend": "total_requests",
+              "spaceAggregation": "sum",
+              "timeAggregation": "rate",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "limit": null,
+              "offset": null,
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-03b",
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "service_name--string--tag--false"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  }
+                ]
+              },
+              "functions": []
+            }
+          ],
+          "queryFormulas": [
+            {
+              "queryName": "F1",
+              "expression": "(A / B) * 100",
+              "disabled": false,
+              "legend": "error rate %"
+            }
+          ]
+        },
+        "clickhouse_sql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "promql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "id": "query-d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c03",
+        "queryType": "builder"
+      },
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "columnUnits": {},
+      "fillSpans": false,
+      "isStacked": false,
+      "mergeAllActiveQueries": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMax": 0,
+      "softMin": 0,
+      "stackedBarChart": false,
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "yAxisUnit": "percent"
+    },
+    {
+      "id": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c04",
+      "title": "Request Count by Status Code",
+      "description": "Stacked bar chart of requests grouped by HTTP status code",
+      "panelTypes": "graph",
+      "query": {
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {
+                "key": "http.server.duration.count",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "http.server.duration.count--float64--Sum--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{http_status_code}}",
+              "spaceAggregation": "sum",
+              "timeAggregation": "rate",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "limit": null,
+              "offset": null,
+              "groupBy": [
+                {
+                  "key": "http_status_code",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": false,
+                  "isJSON": false,
+                  "id": "http_status_code--string--tag--false"
+                }
+              ],
+              "orderBy": [],
+              "having": [],
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-04",
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "service_name--string--tag--false"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  }
+                ]
+              },
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "promql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "id": "query-d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c04",
+        "queryType": "builder"
+      },
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "columnUnits": {},
+      "fillSpans": false,
+      "isStacked": true,
+      "mergeAllActiveQueries": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMax": 0,
+      "softMin": 0,
+      "stackedBarChart": true,
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "yAxisUnit": "short"
+    },
+    {
+      "id": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c05",
+      "title": "P50 Latency",
+      "description": "50th percentile response time",
+      "panelTypes": "value",
+      "query": {
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "p50",
+              "aggregateAttribute": {
+                "key": "signoz_latency.bucket",
+                "dataType": "float64",
+                "type": "Histogram",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "signoz_latency.bucket--float64--Histogram--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "p50",
+              "spaceAggregation": "p50",
+              "timeAggregation": "p50",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "limit": null,
+              "offset": null,
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-05",
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "service_name--string--tag--false"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  }
+                ]
+              },
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "promql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "id": "query-d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c05",
+        "queryType": "builder"
+      },
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "columnUnits": {},
+      "fillSpans": false,
+      "isStacked": false,
+      "mergeAllActiveQueries": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMax": 0,
+      "softMin": 0,
+      "stackedBarChart": false,
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "yAxisUnit": "ms"
+    },
+    {
+      "id": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c06",
+      "title": "P95 Latency",
+      "description": "95th percentile response time",
+      "panelTypes": "value",
+      "query": {
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "p95",
+              "aggregateAttribute": {
+                "key": "signoz_latency.bucket",
+                "dataType": "float64",
+                "type": "Histogram",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "signoz_latency.bucket--float64--Histogram--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "p95",
+              "spaceAggregation": "p95",
+              "timeAggregation": "p95",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "limit": null,
+              "offset": null,
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-06",
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "service_name--string--tag--false"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  }
+                ]
+              },
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "promql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "id": "query-d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c06",
+        "queryType": "builder"
+      },
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "columnUnits": {},
+      "fillSpans": false,
+      "isStacked": false,
+      "mergeAllActiveQueries": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMax": 0,
+      "softMin": 0,
+      "stackedBarChart": false,
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "yAxisUnit": "ms"
+    },
+    {
+      "id": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c07",
+      "title": "P99 Latency",
+      "description": "99th percentile response time",
+      "panelTypes": "value",
+      "query": {
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "p99",
+              "aggregateAttribute": {
+                "key": "signoz_latency.bucket",
+                "dataType": "float64",
+                "type": "Histogram",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "signoz_latency.bucket--float64--Histogram--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "p99",
+              "spaceAggregation": "p99",
+              "timeAggregation": "p99",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "limit": null,
+              "offset": null,
+              "groupBy": [],
+              "orderBy": [],
+              "having": [],
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-07",
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "service_name--string--tag--false"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  }
+                ]
+              },
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "promql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "id": "query-d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c07",
+        "queryType": "builder"
+      },
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "columnUnits": {},
+      "fillSpans": false,
+      "isStacked": false,
+      "mergeAllActiveQueries": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMax": 0,
+      "softMin": 0,
+      "stackedBarChart": false,
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "yAxisUnit": "ms"
+    },
+    {
+      "id": "d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c08",
+      "title": "Slowest Endpoints",
+      "description": "Table of slowest endpoints by average latency",
+      "panelTypes": "table",
+      "query": {
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "avg",
+              "aggregateAttribute": {
+                "key": "signoz_latency.sum",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "signoz_latency.sum--float64--Sum--true"
+              },
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{operation}}",
+              "spaceAggregation": "avg",
+              "timeAggregation": "avg",
+              "stepInterval": 60,
+              "reduceTo": "avg",
+              "limit": 10,
+              "offset": null,
+              "groupBy": [
+                {
+                  "key": "operation",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": false,
+                  "isJSON": false,
+                  "id": "operation--string--tag--false"
+                }
+              ],
+              "orderBy": [
+                {
+                  "columnName": "A",
+                  "order": "desc"
+                }
+              ],
+              "having": [],
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-08",
+                    "key": {
+                      "key": "service_name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": false,
+                      "isJSON": false,
+                      "id": "service_name--string--tag--false"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  }
+                ]
+              },
+              "functions": []
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "promql": [{ "disabled": false, "legend": "", "name": "A", "query": "" }],
+        "id": "query-d7b3c8a1-1f4e-4a2b-9c6d-3e5f7a8b9c08",
+        "queryType": "builder"
+      },
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "columnUnits": {},
+      "fillSpans": false,
+      "isStacked": false,
+      "mergeAllActiveQueries": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMax": 0,
+      "softMin": 0,
+      "stackedBarChart": false,
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "yAxisUnit": "ms"
+    }
+  ]
+}

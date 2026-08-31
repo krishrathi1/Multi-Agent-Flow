@@ -1,0 +1,971 @@
+{
+  "title": "Nexus - Business Operations",
+  "description": "Auth, Gateway, Board, Task, Approval, MCP, and LLM operation tracking",
+  "tags": ["nexus", "operations", "business"],
+  "version": "v4",
+  "uploadedGrafana": false,
+  "panelMap": {},
+  "variables": {},
+  "layout": [
+    {
+      "i": "a1b2c3d4-1001-4000-8000-100000000001",
+      "x": 0,
+      "y": 0,
+      "w": 6,
+      "h": 5
+    },
+    {
+      "i": "a1b2c3d4-1001-4000-8000-100000000002",
+      "x": 6,
+      "y": 0,
+      "w": 6,
+      "h": 5
+    },
+    {
+      "i": "a1b2c3d4-1001-4000-8000-100000000003",
+      "x": 0,
+      "y": 5,
+      "w": 6,
+      "h": 5
+    },
+    {
+      "i": "a1b2c3d4-1001-4000-8000-100000000004",
+      "x": 6,
+      "y": 5,
+      "w": 6,
+      "h": 5
+    },
+    {
+      "i": "a1b2c3d4-1001-4000-8000-100000000005",
+      "x": 0,
+      "y": 10,
+      "w": 6,
+      "h": 5
+    },
+    {
+      "i": "a1b2c3d4-1001-4000-8000-100000000006",
+      "x": 6,
+      "y": 10,
+      "w": 6,
+      "h": 5
+    },
+    {
+      "i": "a1b2c3d4-1001-4000-8000-100000000007",
+      "x": 0,
+      "y": 15,
+      "w": 6,
+      "h": 5
+    },
+    {
+      "i": "a1b2c3d4-1001-4000-8000-100000000008",
+      "x": 6,
+      "y": 15,
+      "w": 6,
+      "h": 5
+    },
+    {
+      "i": "a1b2c3d4-1001-4000-8000-100000000009",
+      "x": 0,
+      "y": 20,
+      "w": 4,
+      "h": 4
+    },
+    {
+      "i": "a1b2c3d4-1001-4000-8000-100000000010",
+      "x": 4,
+      "y": 20,
+      "w": 4,
+      "h": 4
+    }
+  ],
+  "widgets": [
+    {
+      "id": "a1b2c3d4-1001-4000-8000-100000000001",
+      "title": "Auth Operations Rate",
+      "description": "",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "stepInterval": 60,
+              "dataSource": "traces",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-1",
+                    "key": {
+                      "key": "serviceName",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "serviceName--string--tag--true"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-op-1",
+                    "key": {
+                      "key": "name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "name--string--tag--true"
+                    },
+                    "op": "in",
+                    "value": ["auth.login", "auth.signup", "auth.refresh", "auth.logout"]
+                  }
+                ]
+              },
+              "groupBy": [
+                {
+                  "key": "name",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": true,
+                  "isJSON": false,
+                  "id": "name--string--tag--true"
+                }
+              ],
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{name}}",
+              "limit": 0,
+              "offset": 0,
+              "orderBy": [],
+              "having": [],
+              "reduceTo": "sum"
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "id": "q-a1b2c3d4-2001-4000-8000-100000000001"
+      },
+      "isStacked": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMin": null,
+      "softMax": null,
+      "yAxisUnit": "",
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "fillSpans": false,
+      "selectedLogFields": [],
+      "selectedTracesFields": []
+    },
+    {
+      "id": "a1b2c3d4-1001-4000-8000-100000000002",
+      "title": "Auth Error Rate",
+      "description": "",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "stepInterval": 60,
+              "dataSource": "traces",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-2",
+                    "key": {
+                      "key": "serviceName",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "serviceName--string--tag--true"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-err-2",
+                    "key": {
+                      "key": "hasError",
+                      "dataType": "bool",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "hasError--bool--tag--true"
+                    },
+                    "op": "=",
+                    "value": true
+                  },
+                  {
+                    "id": "filter-op-2",
+                    "key": {
+                      "key": "name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "name--string--tag--true"
+                    },
+                    "op": "contains",
+                    "value": "auth."
+                  }
+                ]
+              },
+              "groupBy": [
+                {
+                  "key": "name",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": true,
+                  "isJSON": false,
+                  "id": "name--string--tag--true"
+                }
+              ],
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{name}}",
+              "limit": 0,
+              "offset": 0,
+              "orderBy": [],
+              "having": [],
+              "reduceTo": "sum"
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "id": "q-a1b2c3d4-2001-4000-8000-100000000002"
+      },
+      "isStacked": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMin": null,
+      "softMax": null,
+      "yAxisUnit": "",
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "fillSpans": false,
+      "selectedLogFields": [],
+      "selectedTracesFields": []
+    },
+    {
+      "id": "a1b2c3d4-1001-4000-8000-100000000003",
+      "title": "Gateway Operations",
+      "description": "",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "stepInterval": 60,
+              "dataSource": "traces",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-3",
+                    "key": {
+                      "key": "serviceName",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "serviceName--string--tag--true"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-op-3",
+                    "key": {
+                      "key": "name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "name--string--tag--true"
+                    },
+                    "op": "in",
+                    "value": ["gateway.create", "gateway.healthCheck"]
+                  }
+                ]
+              },
+              "groupBy": [
+                {
+                  "key": "name",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": true,
+                  "isJSON": false,
+                  "id": "name--string--tag--true"
+                }
+              ],
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{name}}",
+              "limit": 0,
+              "offset": 0,
+              "orderBy": [],
+              "having": [],
+              "reduceTo": "sum"
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "id": "q-a1b2c3d4-2001-4000-8000-100000000003"
+      },
+      "isStacked": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMin": null,
+      "softMax": null,
+      "yAxisUnit": "",
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "fillSpans": false,
+      "selectedLogFields": [],
+      "selectedTracesFields": []
+    },
+    {
+      "id": "a1b2c3d4-1001-4000-8000-100000000004",
+      "title": "Board & Task Operations",
+      "description": "",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "stepInterval": 60,
+              "dataSource": "traces",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-4",
+                    "key": {
+                      "key": "serviceName",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "serviceName--string--tag--true"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-op-4",
+                    "key": {
+                      "key": "name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "name--string--tag--true"
+                    },
+                    "op": "in",
+                    "value": [
+                      "board.create",
+                      "board.update",
+                      "board.delete",
+                      "task.create",
+                      "task.update",
+                      "task.delete"
+                    ]
+                  }
+                ]
+              },
+              "groupBy": [
+                {
+                  "key": "name",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": true,
+                  "isJSON": false,
+                  "id": "name--string--tag--true"
+                }
+              ],
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{name}}",
+              "limit": 0,
+              "offset": 0,
+              "orderBy": [],
+              "having": [],
+              "reduceTo": "sum"
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "id": "q-a1b2c3d4-2001-4000-8000-100000000004"
+      },
+      "isStacked": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMin": null,
+      "softMax": null,
+      "yAxisUnit": "",
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "fillSpans": false,
+      "selectedLogFields": [],
+      "selectedTracesFields": []
+    },
+    {
+      "id": "a1b2c3d4-1001-4000-8000-100000000005",
+      "title": "Approval Operations",
+      "description": "",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "stepInterval": 60,
+              "dataSource": "traces",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-5",
+                    "key": {
+                      "key": "serviceName",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "serviceName--string--tag--true"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-op-5",
+                    "key": {
+                      "key": "name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "name--string--tag--true"
+                    },
+                    "op": "in",
+                    "value": ["approval.create", "approval.resolve"]
+                  }
+                ]
+              },
+              "groupBy": [
+                {
+                  "key": "name",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": true,
+                  "isJSON": false,
+                  "id": "name--string--tag--true"
+                }
+              ],
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{name}}",
+              "limit": 0,
+              "offset": 0,
+              "orderBy": [],
+              "having": [],
+              "reduceTo": "sum"
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "id": "q-a1b2c3d4-2001-4000-8000-100000000005"
+      },
+      "isStacked": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMin": null,
+      "softMax": null,
+      "yAxisUnit": "",
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "fillSpans": false,
+      "selectedLogFields": [],
+      "selectedTracesFields": []
+    },
+    {
+      "id": "a1b2c3d4-1001-4000-8000-100000000006",
+      "title": "MCP & LLM Operations",
+      "description": "",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "stepInterval": 60,
+              "dataSource": "traces",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-6",
+                    "key": {
+                      "key": "serviceName",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "serviceName--string--tag--true"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-op-6",
+                    "key": {
+                      "key": "name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "name--string--tag--true"
+                    },
+                    "op": "in",
+                    "value": [
+                      "mcp.addServer",
+                      "mcp.deleteServer",
+                      "mcp.refreshTools",
+                      "llm.upsertProvider",
+                      "llm.deleteProvider"
+                    ]
+                  }
+                ]
+              },
+              "groupBy": [
+                {
+                  "key": "name",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": true,
+                  "isJSON": false,
+                  "id": "name--string--tag--true"
+                }
+              ],
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{name}}",
+              "limit": 0,
+              "offset": 0,
+              "orderBy": [],
+              "having": [],
+              "reduceTo": "sum"
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "id": "q-a1b2c3d4-2001-4000-8000-100000000006"
+      },
+      "isStacked": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMin": null,
+      "softMax": null,
+      "yAxisUnit": "",
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "fillSpans": false,
+      "selectedLogFields": [],
+      "selectedTracesFields": []
+    },
+    {
+      "id": "a1b2c3d4-1001-4000-8000-100000000007",
+      "title": "All Operations Latency (P95)",
+      "description": "",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "stepInterval": 60,
+              "dataSource": "traces",
+              "aggregateOperator": "p95",
+              "aggregateAttribute": {
+                "key": "duration",
+                "dataType": "float64",
+                "type": "",
+                "isColumn": true,
+                "isJSON": false,
+                "id": "duration--float64----true"
+              },
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-7",
+                    "key": {
+                      "key": "serviceName",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "serviceName--string--tag--true"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-op-7",
+                    "key": {
+                      "key": "name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "name--string--tag--true"
+                    },
+                    "op": "nin",
+                    "value": ["GET", "POST"]
+                  }
+                ]
+              },
+              "groupBy": [
+                {
+                  "key": "name",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": true,
+                  "isJSON": false,
+                  "id": "name--string--tag--true"
+                }
+              ],
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{name}}",
+              "limit": 0,
+              "offset": 0,
+              "orderBy": [],
+              "having": [],
+              "reduceTo": "sum"
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "id": "q-a1b2c3d4-2001-4000-8000-100000000007"
+      },
+      "isStacked": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMin": null,
+      "softMax": null,
+      "yAxisUnit": "ns",
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "fillSpans": false,
+      "selectedLogFields": [],
+      "selectedTracesFields": []
+    },
+    {
+      "id": "a1b2c3d4-1001-4000-8000-100000000008",
+      "title": "Failed Operations",
+      "description": "",
+      "panelTypes": "graph",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "stepInterval": 60,
+              "dataSource": "traces",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-8",
+                    "key": {
+                      "key": "serviceName",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "serviceName--string--tag--true"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-err-8",
+                    "key": {
+                      "key": "hasError",
+                      "dataType": "bool",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "hasError--bool--tag--true"
+                    },
+                    "op": "=",
+                    "value": true
+                  }
+                ]
+              },
+              "groupBy": [
+                {
+                  "key": "name",
+                  "dataType": "string",
+                  "type": "tag",
+                  "isColumn": true,
+                  "isJSON": false,
+                  "id": "name--string--tag--true"
+                }
+              ],
+              "expression": "A",
+              "disabled": false,
+              "legend": "{{name}}",
+              "limit": 0,
+              "offset": 0,
+              "orderBy": [],
+              "having": [],
+              "reduceTo": "sum"
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "id": "q-a1b2c3d4-2001-4000-8000-100000000008"
+      },
+      "isStacked": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMin": null,
+      "softMax": null,
+      "yAxisUnit": "",
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "fillSpans": false,
+      "selectedLogFields": [],
+      "selectedTracesFields": []
+    },
+    {
+      "id": "a1b2c3d4-1001-4000-8000-100000000009",
+      "title": "Total Operations Today",
+      "description": "",
+      "panelTypes": "value",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "stepInterval": 60,
+              "dataSource": "traces",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-9",
+                    "key": {
+                      "key": "serviceName",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "serviceName--string--tag--true"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-op-9",
+                    "key": {
+                      "key": "name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "name--string--tag--true"
+                    },
+                    "op": "nin",
+                    "value": ["GET", "POST"]
+                  }
+                ]
+              },
+              "groupBy": [],
+              "expression": "A",
+              "disabled": false,
+              "legend": "",
+              "limit": 0,
+              "offset": 0,
+              "orderBy": [],
+              "having": [],
+              "reduceTo": "sum"
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "id": "q-a1b2c3d4-2001-4000-8000-100000000009"
+      },
+      "isStacked": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMin": null,
+      "softMax": null,
+      "yAxisUnit": "",
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "fillSpans": false,
+      "selectedLogFields": [],
+      "selectedTracesFields": []
+    },
+    {
+      "id": "a1b2c3d4-1001-4000-8000-100000000010",
+      "title": "Error Count Today",
+      "description": "",
+      "panelTypes": "value",
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "builder": {
+          "queryData": [
+            {
+              "queryName": "A",
+              "stepInterval": 60,
+              "dataSource": "traces",
+              "aggregateOperator": "count",
+              "aggregateAttribute": {},
+              "filters": {
+                "op": "AND",
+                "items": [
+                  {
+                    "id": "filter-svc-10",
+                    "key": {
+                      "key": "serviceName",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "serviceName--string--tag--true"
+                    },
+                    "op": "=",
+                    "value": "nexus-backend"
+                  },
+                  {
+                    "id": "filter-err-10",
+                    "key": {
+                      "key": "hasError",
+                      "dataType": "bool",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "hasError--bool--tag--true"
+                    },
+                    "op": "=",
+                    "value": true
+                  },
+                  {
+                    "id": "filter-op-10",
+                    "key": {
+                      "key": "name",
+                      "dataType": "string",
+                      "type": "tag",
+                      "isColumn": true,
+                      "isJSON": false,
+                      "id": "name--string--tag--true"
+                    },
+                    "op": "nin",
+                    "value": ["GET", "POST"]
+                  }
+                ]
+              },
+              "groupBy": [],
+              "expression": "A",
+              "disabled": false,
+              "legend": "",
+              "limit": 0,
+              "offset": 0,
+              "orderBy": [],
+              "having": [],
+              "reduceTo": "sum"
+            }
+          ],
+          "queryFormulas": []
+        },
+        "clickhouse_sql": [],
+        "id": "q-a1b2c3d4-2001-4000-8000-100000000010"
+      },
+      "isStacked": false,
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "softMin": null,
+      "softMax": null,
+      "yAxisUnit": "",
+      "thresholds": [],
+      "timePreferance": "GLOBAL_TIME",
+      "bucketCount": 30,
+      "bucketWidth": 0,
+      "fillSpans": false,
+      "selectedLogFields": [],
+      "selectedTracesFields": []
+    }
+  ]
+}
