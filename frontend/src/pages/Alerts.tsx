@@ -43,11 +43,13 @@ function CustomDropdown<T extends string>({
   options,
   onChange,
   placeholder,
+  align = 'left',
 }: {
   value: T;
   options: DropdownOption<T>[];
   onChange: (val: T) => void;
   placeholder?: string;
+  align?: 'left' | 'right';
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -82,7 +84,10 @@ function CustomDropdown<T extends string>({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-1.5 min-w-[160px] overflow-hidden rounded-2xl border border-line bg-surface/95 backdrop-blur-xl p-1.5 shadow-xl animate-scale-in">
+        <div className={cn(
+          'absolute z-50 mt-1.5 min-w-[160px] overflow-hidden rounded-2xl border border-line bg-surface/95 backdrop-blur-xl p-1.5 shadow-xl animate-scale-in',
+          align === 'right' ? 'right-0' : 'left-0'
+        )}>
           {options.map((opt) => {
             const isSelected = opt.value === value;
             return (
