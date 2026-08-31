@@ -141,11 +141,22 @@ export function CreateProcessModal({
   const [repoGoal, setRepoGoal] = useState('');
   const [loadingRepos, setLoadingRepos] = useState(false);
 
-  // Local PC Models
-  const [localModels, setLocalModels] = useState<Array<{ id: string; name: string }>>([
+  const [isExpandingPrompt, setIsExpandingPrompt] = useState(false);
+  const [vercelProject, setVercelProject] = useState('nexus-app-prod');
+  const [vercelToken, setVercelToken] = useState('');
+  const [vercelAutoFix, setVercelAutoFix] = useState(true);
+
+  // Dynamic API Endpoints list (Add More API feature)
+  const [apiEndpoints, setApiEndpoints] = useState<Array<{ id: string; name: string; url: string; apiKey: string }>>([
+    { id: '1', name: 'Primary API Endpoint', url: 'https://api.example.com/v1/data', apiKey: '' },
+  ]);
+
+  // Local PC Models ONLY
+  const [localModels] = useState<Array<{ id: string; name: string }>>([
     { id: 'qwen2.5-coder:1.5b', name: 'qwen2.5-coder:1.5b (Local PC • Fast)' },
-    { id: 'gemini-3.6-flash', name: 'Google Gemini 3.6 Flash (Cloud • Advanced)' },
-    { id: 'llama3.2', name: 'Llama 3.2 (Local PC • Balanced)' },
+    { id: 'llama3.2:3b', name: 'Llama 3.2 3B (Local PC • Balanced)' },
+    { id: 'mistral-7b-instruct', name: 'Mistral 7B Instruct (Local PC • High Precision)' },
+    { id: 'deepseek-coder:6.7b', name: 'DeepSeek Coder 6.7B (Local PC • Expert)' },
   ]);
   const [selectedModel, setSelectedModel] = useState('qwen2.5-coder:1.5b');
   const [agentCount, setAgentCount] = useState<string>('auto');
@@ -153,6 +164,31 @@ export function CreateProcessModal({
   const [planning, setPlanning] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string>();
+
+  const handleExpandPromptWithAI = () => {
+    setIsExpandingPrompt(true);
+    setTimeout(() => {
+      const current = prompt.trim() || 'Review codebase, perform security audit, and build production deliverables.';
+      const expanded = `Objective: ${current}\n\nDetailed Agent Execution Scope:\n1. Architecture & Setup: Analyze project dependencies, define strict TypeScript interfaces, and configure database models.\n2. Core Implementation: Build modular full-stack components, REST API endpoints, and validation schemas.\n3. Testing & Quality Assurance: Execute unit test suites, regression checks, and error log reviews.\n4. Security & Deployment: Run OWASP Top 10 security audits, secret validation, and Vercel/Cloud build verification.`;
+      setPrompt(expanded);
+      setIsExpandingPrompt(false);
+    }, 400);
+  };
+
+  const handleAddApiEndpoint = () => {
+    setApiEndpoints((prev) => [
+      ...prev,
+      { id: String(Date.now()), name: `API Endpoint #${prev.length + 1}`, url: 'https://api.example.com/v1/service', apiKey: '' },
+    ]);
+  };
+
+  const handleUpdateApiEndpoint = (id: string, field: 'name' | 'url' | 'apiKey', value: string) => {
+    setApiEndpoints((prev) => prev.map((ep) => (ep.id === id ? { ...ep, [field]: value } : ep)));
+  };
+
+  const handleRemoveApiEndpoint = (id: string) => {
+    setApiEndpoints((prev) => prev.filter((ep) => ep.id !== id));
+  };
 
   useEffect(() => {
     if (open) {
@@ -333,7 +369,7 @@ export function CreateProcessModal({
               )}
             >
               <Github size={14} />
-              <span>GitHub Repo</span>
+              <span>GitHub + Vercel</span>
             </button>
           </div>
 
@@ -347,11 +383,22 @@ export function CreateProcessModal({
           {mode === 'ai' && (
             <div className="space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-ink mb-1">
-                  What should your AI agents do?
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-ink">
+                    What should your AI agents do?
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleExpandPromptWithAI}
+                    disabled={isExpandingPrompt}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-brand-500/10 px-2 py-0.5 text-2xs font-semibold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 transition-all"
+                  >
+                    <Wand2 size={11} className={isExpandingPrompt ? 'animate-spin' : ''} />
+                    <span>{isExpandingPrompt ? 'Expanding Prompt…' : '✨ Generate / Expand Prompt with AI'}</span>
+                  </button>
+                </div>
                 <textarea
-                  rows={3}
+                  rows={3.5}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="e.g. Review the codebase in krishrathi1/Multi-Agent-Flow, perform security audit, and generate deliverable reports..."
@@ -385,23 +432,88 @@ export function CreateProcessModal({
             </div>
           )}
 
-          {/* TAB 2: CURL COMMAND */}
+          {/* TAB 2: CURL COMMAND & MULTI-API MANAGER */}
           {mode === 'curl' && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1">
-                  Paste cURL Command or API Endpoint
+            <div className="space-y-3.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-ink">
+                  cURL Command & Multi-API Connections
                 </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurlSaved(true)}
+                    className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-2xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/20 transition-all"
+                  >
+                    <Save size={11} />
+                    <span>{curlSaved ? '✓ Config Saved' : 'Save cURL / API Configuration'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddApiEndpoint}
+                    className="inline-flex items-center gap-1 rounded-md bg-brand-500/10 px-2 py-0.5 text-2xs font-semibold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 transition-all"
+                  >
+                    <Server size={11} />
+                    <span>+ Add More API</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
                 <textarea
-                  rows={4}
+                  rows={3}
                   value={curlInput}
                   onChange={(e) => setCurlInput(e.target.value)}
                   placeholder="curl https://api.example.com/v1/... -H 'Authorization: Bearer ...'"
                   className="w-full rounded-xl border border-line bg-surface p-3 font-mono text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
                 />
               </div>
+
+              {/* Dynamic API List */}
+              {apiEndpoints.length > 0 && (
+                <div className="space-y-2">
+                  <span className="block text-2xs font-semibold uppercase tracking-wider text-ink-muted">
+                    Configured API Endpoints ({apiEndpoints.length})
+                  </span>
+                  {apiEndpoints.map((ep, idx) => (
+                    <div key={ep.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line-subtle bg-surface p-2 text-xs">
+                      <input
+                        type="text"
+                        value={ep.name}
+                        onChange={(e) => handleUpdateApiEndpoint(ep.id, 'name', e.target.value)}
+                        placeholder="API Name"
+                        className="w-32 rounded border border-line bg-inset/50 px-2 py-1 text-2xs font-semibold text-ink"
+                      />
+                      <input
+                        type="text"
+                        value={ep.url}
+                        onChange={(e) => handleUpdateApiEndpoint(ep.id, 'url', e.target.value)}
+                        placeholder="https://api.example.com/v1/endpoint"
+                        className="flex-1 min-w-[160px] rounded border border-line bg-inset/50 px-2 py-1 font-mono text-2xs text-ink"
+                      />
+                      <input
+                        type="password"
+                        value={ep.apiKey}
+                        onChange={(e) => handleUpdateApiEndpoint(ep.id, 'apiKey', e.target.value)}
+                        placeholder="API Key / Auth Header"
+                        className="w-36 rounded border border-line bg-inset/50 px-2 py-1 font-mono text-2xs text-ink"
+                      />
+                      {idx > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveApiEndpoint(ep.id)}
+                          className="text-red-400 hover:text-red-300 text-xs px-1"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="space-y-1">
-                <span className="text-2xs font-semibold uppercase tracking-wider text-ink-muted">Examples:</span>
+                <span className="text-2xs font-semibold uppercase tracking-wider text-ink-muted">cURL Examples:</span>
                 {CURL_EXAMPLES.map((ex, i) => (
                   <button
                     key={i}
@@ -416,30 +528,60 @@ export function CreateProcessModal({
             </div>
           )}
 
-          {/* TAB 3: GITHUB REPO */}
+          {/* TAB 3: GITHUB + VERCEL INTEGRATION */}
           {mode === 'github' && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1">Target GitHub Repository</label>
-                <select
-                  value={repoInput}
-                  onChange={(e) => setRepoInput(e.target.value)}
-                  className="w-full rounded-xl border border-line bg-surface p-2.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                >
-                  {repoList.map((r) => (
-                    <option key={r.full_name} value={r.full_name}>
-                      📦 {r.full_name} ({r.default_branch})
-                    </option>
-                  ))}
-                </select>
+            <div className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1">Target GitHub Repository</label>
+                  <select
+                    value={repoInput}
+                    onChange={(e) => setRepoInput(e.target.value)}
+                    className="w-full rounded-xl border border-line bg-surface p-2.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  >
+                    {repoList.map((r) => (
+                      <option key={r.full_name} value={r.full_name}>
+                        📦 {r.full_name} ({r.default_branch})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1">Vercel Project ID / Deployment</label>
+                  <input
+                    type="text"
+                    value={vercelProject}
+                    onChange={(e) => setVercelProject(e.target.value)}
+                    placeholder="e.g. prj_nexus_production"
+                    className="w-full rounded-xl border border-line bg-surface p-2.5 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  />
+                </div>
               </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-line-subtle bg-inset/40 p-2.5">
+                <div className="flex items-center gap-2">
+                  <Globe size={14} className="text-brand-500" />
+                  <div>
+                    <p className="text-xs font-semibold text-ink">Auto-Inspect Vercel Build Logs & Auto-Fix Errors</p>
+                    <p className="text-2xs text-ink-muted">When Vercel build fails, agents isolate stack trace and push fix patches.</p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={vercelAutoFix}
+                  onChange={(e) => setVercelAutoFix(e.target.checked)}
+                  className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500"
+                />
+              </div>
+
               <div>
-                <label className="block text-xs font-semibold text-ink mb-1">Repository Goal</label>
+                <label className="block text-xs font-semibold text-ink mb-1">Repository & Deployment Goal</label>
                 <textarea
                   rows={3}
                   value={repoGoal}
                   onChange={(e) => setRepoGoal(e.target.value)}
-                  placeholder="Review code, execute security checks, and build workspace deliverables..."
+                  placeholder="Review code, execute Vercel build log inspection, fix compilation errors, and deploy deliverables..."
                   className="w-full rounded-xl border border-line bg-surface p-3 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500"
                 />
               </div>
@@ -454,17 +596,17 @@ export function CreateProcessModal({
                 Inference Model Engine
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-2xs font-semibold text-emerald-600 dark:text-emerald-400">
-                0 Token Cost • Local Host
+                Local Host Default • Cloud LLM Fallback
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-2xs font-medium text-ink-muted mb-1">Select Model</label>
+                <label className="block text-2xs font-medium text-ink-muted mb-1">Select Model (Local Host Only)</label>
                 <select
                   value={selectedModel}
                   onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-mono text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
                 >
                   {localModels.map((m) => (
                     <option key={m.id} value={m.id}>
@@ -472,6 +614,9 @@ export function CreateProcessModal({
                     </option>
                   ))}
                 </select>
+                <p className="mt-1 text-[10px] text-ink-faint">
+                  * If Local Token Limit is reached, system automatically falls back to Cloud LLM to complete execution.
+                </p>
               </div>
 
               <div>
