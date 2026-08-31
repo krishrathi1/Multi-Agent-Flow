@@ -15,6 +15,11 @@ import {
   SlidersHorizontal,
   Trash2,
   Workflow,
+  Sparkles,
+  Zap,
+  Radio,
+  ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn, timeAgo } from '../lib/utils';
 import { tones } from '../lib/design';
@@ -28,12 +33,12 @@ import { EditProcessModal } from '../components/process/EditProcessModal';
 import { api } from '../lib/api';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button, ButtonLink } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
 import { Badge, Chip } from '../components/ui/Badge';
 import { Avatar } from '../components/ui/Avatar';
-import { StatCard } from '../components/ui/StatCard';
-import { EmptyState, SkeletonGrid } from '../components/ui/States';
+import { EmptyState } from '../components/ui/States';
 import { ConfirmDialog } from '../components/ui/Modal';
+import { HourglassLoader } from '../components/ui/HourglassLoader';
+import { LiveWaveform } from '../components/ui/LiveIcon';
 import type { Process, ProcessStatus } from '../types';
 
 const statusTone: Record<ProcessStatus, 'success' | 'warning' | 'neutral' | 'danger' | 'info'> = {
@@ -68,81 +73,131 @@ function ProcessCard({
   busy: boolean;
   hasSite: boolean;
 }) {
-  const t = tones[processTone(process.color)];
   const agents = process.agents ?? [];
   const stages = [...new Set(agents.map((a) => a.processStage))].sort((a, b) => a - b);
   const running = process.status === 'ACTIVE';
-  // A finished or failed chain is restartable; a running one can be paused.
   const startLabel = process.status === 'PAUSED' ? 'Resume' : 'Start';
 
-  return (
-    <Card padding="none" className="flex flex-col overflow-hidden">
-      {/* Tinted rail identifies the production at a glance across the app. */}
-      <div className={cn('h-1 w-full', t.solid)} aria-hidden />
-
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="truncate text-md font-semibold text-ink">{process.name}</h3>
-            {process.summary && (
-              <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-ink-subtle">
-                {process.summary}
-              </p>
-            )}
-          </div>
-          <Badge tone={statusTone[process.status]} dot pulse={process.status === 'ACTIVE'}>
-            {process.status.toLowerCase()}
-          </Badge>
-        </div>
-
-        {/* Stage → agent pipeline */}
-        <div className="mt-4 space-y-2">
-          {stages.map((stage) => (
-            <div key={stage} className="flex items-center gap-2">
-              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-inset text-2xs font-semibold text-ink-subtle">
-                {stage}
-              </span>
-              <div className="flex min-w-0 flex-wrap items-center gap-1">
-                {agents
-                  .filter((a) => a.processStage === stage)
-                  .map((a) => (
-                    <span
-                      key={a.id}
-                      title={`${a.displayName} — ${a.processRole ?? 'agent'}`}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-inset py-0.5 pl-0.5 pr-2"
-                    >
-                      <Avatar name={a.displayName} emoji={a.avatar} size="xs" />
-                      <span className="truncate text-xs font-medium text-ink">
-                        {a.displayName}
-                      </span>
-                    </span>
-                  ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4 flex items-center justify-between border-t border-line-subtle pt-3 text-2xs text-ink-faint">
-          <span className="flex items-center gap-3">
-            <span className="flex items-center gap-1">
-              <Bot size={12} strokeWidth={1.75} aria-hidden />
-              {process.agentCount ?? agents.length}
-            </span>
-            <span className="flex items-center gap-1">
-              <ListChecks size={12} strokeWidth={1.75} aria-hidden />
-              {process.taskCount ?? 0}
-            </span>
-            <span className="flex items-center gap-1">
-              <ActivityIcon size={12} strokeWidth={1.75} aria-hidden />
-              {process.activityCount ?? 0}
-            </span>
+  const getStatusBadge = () => {
+    switch (process.status) {
+      case 'ACTIVE':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Active Chain
           </span>
-          <span>{timeAgo(process.createdAt)}</span>
+        );
+      case 'PAUSED':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            Paused
+          </span>
+        );
+      case 'COMPLETED':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/25 shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            Completed
+          </span>
+        );
+      case 'FAILED':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            Failed
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-inset text-ink-muted border border-line">
+            {process.status.toLowerCase()}
+          </span>
+        );
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all flex flex-col justify-between space-y-4">
+      <div className="space-y-3.5">
+        {/* Header: Title + Status Pill */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+              <Factory size={16} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="truncate text-xs sm:text-sm font-bold text-ink">{process.name}</h3>
+              <p className="text-[10px] font-mono text-ink-muted mt-0.5">
+                Created {timeAgo(process.createdAt)}
+              </p>
+            </div>
+          </div>
+
+          <div className="shrink-0">
+            {getStatusBadge()}
+          </div>
+        </div>
+
+        {/* Summary */}
+        {process.summary && (
+          <p className="line-clamp-2 text-xs leading-relaxed text-ink-muted">
+            {process.summary}
+          </p>
+        )}
+
+        {/* Stage → Agent Pipeline */}
+        <div className="space-y-2 pt-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">
+            Execution Pipeline Stages ({stages.length})
+          </span>
+          <div className="space-y-1.5">
+            {stages.map((stage) => (
+              <div key={stage} className="flex items-center gap-2 bg-inset/60 p-2 rounded-xl border border-line-subtle">
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-lg bg-surface text-[10px] font-mono font-bold text-brand-600 dark:text-brand-400 border border-line-subtle shadow-2xs">
+                  {stage}
+                </span>
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  {agents
+                    .filter((a) => a.processStage === stage)
+                    .map((a) => (
+                      <span
+                        key={a.id}
+                        title={`${a.displayName} — ${a.processRole ?? 'agent'}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface py-0.5 pl-1 pr-2 text-2xs font-semibold text-ink shadow-2xs"
+                      >
+                        <Avatar name={a.displayName} emoji={a.avatar} size="xs" />
+                        <span className="truncate max-w-[130px]">{a.displayName}</span>
+                      </span>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Telemetry Metrics Row */}
+        <div className="flex items-center justify-between border-t border-line-subtle pt-3 text-2xs font-mono text-ink-muted">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle">
+              <Bot size={11} className="text-brand-500" />
+              {process.agentCount ?? agents.length} agents
+            </span>
+            <span className="flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle">
+              <ListChecks size={11} className="text-emerald-500" />
+              {process.taskCount ?? 0} tasks
+            </span>
+            <span className="flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle">
+              <ActivityIcon size={11} className="text-purple-500" />
+              {process.activityCount ?? 0} events
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-subtle px-3 py-2.5">
-        {/* Primary Run Controls */}
+      {/* Action Footer */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-subtle pt-3.5 mt-2">
+        {/* Primary Controls */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {running ? (
             <Button
@@ -151,6 +206,7 @@ function ProcessCard({
               icon={Pause}
               loading={busy}
               onClick={() => onPause(process)}
+              className="text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
               aria-label={`Pause production ${process.name}`}
             >
               Pause
@@ -196,7 +252,7 @@ function ProcessCard({
           </Link>
         </div>
 
-        {/* Action Tool Group (Edit, Settings, Delete) */}
+        {/* Secondary Tool Icons */}
         <div className="flex items-center gap-0.5 shrink-0 ml-auto">
           {hasSite && (
             <ButtonLink
@@ -239,7 +295,7 @@ function ProcessCard({
           />
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -251,14 +307,12 @@ export function Processes() {
   const [showCreate, setShowCreate] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Process | null>(null);
   const [deleting, setDeleting] = useState(false);
-  // Which card is mid-transition, so only that button shows a spinner.
   const [busyId, setBusyId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [runTarget, setRunTarget] = useState<Process | null>(null);
   const [reportTarget, setReportTarget] = useState<Process | null>(null);
   const [editTarget, setEditTarget] = useState<Process | null>(null);
   const [settingsTarget, setSettingsTarget] = useState<Process | null>(null);
-  // Which chains produced an HTML artifact, so only those show a Preview link.
   const [sites, setSites] = useState<Record<string, boolean>>({});
 
   const runControl = async (p: Process, action: 'start' | 'pause') => {
@@ -278,7 +332,6 @@ export function Processes() {
     fetchStats();
   }, [fetchProcesses, fetchStats]);
 
-  // Probe each chain's artifacts once so the Preview affordance is accurate.
   useEffect(() => {
     let cancelled = false;
     Promise.all(
@@ -302,7 +355,6 @@ export function Processes() {
     if (!pendingDelete) return;
     setDeleting(true);
     try {
-      // Agents go with the production — leaving orphans behind is worse.
       await removeProcess(pendingDelete.id, true);
       setPendingDelete(null);
     } finally {
@@ -311,11 +363,11 @@ export function Processes() {
   };
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         icon={Factory}
         title="Productions"
-        description="Describe a goal and MyceliumOps builds the agent chain to deliver it."
+        description="Autonomous multi-stage agent workflows, production chains, and code review deliverables"
         actions={
           <Button variant="primary" icon={Plus} onClick={() => setShowCreate(true)}>
             New Production
@@ -323,44 +375,64 @@ export function Processes() {
         }
       />
 
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        <StatCard
-          label="Productions"
-          value={stats?.total ?? processes.length}
-          icon={Factory}
-          tone="brand"
-          muted={(stats?.total ?? processes.length) === 0}
-        />
-        <StatCard
-          label="Active"
-          value={stats?.active ?? 0}
-          icon={Workflow}
-          tone="success"
-          muted={(stats?.active ?? 0) === 0}
-        />
-        <StatCard
-          label="Agents deployed"
-          value={stats?.agentsInProcesses ?? 0}
-          icon={Bot}
-          tone="accent"
-          muted={(stats?.agentsInProcesses ?? 0) === 0}
-        />
+      {/* 3 Stats Overview Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
+        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Total Productions</span>
+            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center">
+              <Factory size={16} />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
+            {stats?.total ?? processes.length}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Configured agent chains</p>
+        </div>
+
+        <div className="rounded-2xl border border-emerald-500/20 bg-surface p-4.5 shadow-2xs hover:border-emerald-500/40 hover:shadow-xs transition-all">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Active Chains</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+              <Workflow size={16} />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold tracking-tight font-mono text-emerald-600 dark:text-emerald-400">
+            {stats?.active ?? 0}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Running & executing</p>
+        </div>
+
+        <div className="rounded-2xl border border-purple-500/20 bg-surface p-4.5 shadow-2xs hover:border-purple-500/40 hover:shadow-xs transition-all">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Deployed Agents</span>
+            <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center">
+              <Bot size={16} />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold tracking-tight font-mono text-purple-600 dark:text-purple-400">
+            {stats?.agentsInProcesses ?? 0}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Assigned stage workers</p>
+        </div>
       </div>
 
       {runError && (
         <p
           role="alert"
-          className="mt-4 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300"
+          className="rounded-xl border border-rose-500/25 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-400 font-semibold"
         >
           {runError}
         </p>
       )}
 
-      <div className="mt-6">
+      <div>
         {loading && processes.length === 0 ? (
-          <SkeletonGrid count={3} />
+          <div className="flex flex-col items-center justify-center py-20">
+            <HourglassLoader size={48} label="Loading production chains..." />
+          </div>
         ) : processes.length === 0 ? (
-          <Card padding="none">
+          <div className="rounded-2xl border border-line-subtle bg-surface p-12 text-center shadow-xs">
             <EmptyState
               animation="rocketLaunch"
               title="No productions yet"
@@ -371,9 +443,9 @@ export function Processes() {
                 </Button>
               }
             />
-          </Card>
+          </div>
         ) : (
-          <div className="stagger grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {processes.map((p) => (
               <ProcessCard
                 key={p.id}
@@ -441,6 +513,7 @@ export function Processes() {
         message={`This removes the production and its ${pendingDelete?.agentCount ?? 0} agents, along with their history. This cannot be undone.`}
         confirmLabel="Delete production"
       />
-    </>
+    </div>
   );
 }
+
