@@ -95,33 +95,25 @@ export function KanbanBoard() {
       </div>
 
       {loading && tasks.length === 0 ? (
-        <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory">
+        <div className="flex flex-col sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
           {columns.map((c) => (
-            <Skeleton key={c} className="w-[82vw] sm:w-auto shrink-0 snap-center h-[440px] rounded-xl" />
+            <Skeleton key={c} className="w-full h-[400px] rounded-2xl" />
           ))}
         </div>
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
-          {/* On Mobile: Horizontal snap scroll or single column tab view. On Desktop: Responsive multi-column grid */}
-          <div
-            className={cn(
-              'sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5',
-              activeMobileColumn === 'ALL'
-                ? 'flex overflow-x-auto snap-x snap-mandatory pb-3 no-scrollbar'
-                : 'flex flex-col'
-            )}
-          >
+          {/* On Mobile: Clean vertical full-width stack. On Desktop: Responsive 5-column grid */}
+          <div className="flex flex-col sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
             {columns
-              .filter((status) => activeMobileColumn === 'ALL' || activeMobileColumn === status)
+              .filter((status) => {
+                if (activeMobileColumn === 'ALL') {
+                  // On mobile when ALL is selected, show columns that have tasks, or at least the active workflow
+                  return true;
+                }
+                return activeMobileColumn === status;
+              })
               .map((status) => (
-                <div
-                  key={status}
-                  className={cn(
-                    activeMobileColumn === 'ALL'
-                      ? 'w-[82vw] max-w-[340px] sm:max-w-none sm:w-auto shrink-0 snap-center'
-                      : 'w-full'
-                  )}
-                >
+                <div key={status} className="w-full">
                   <Column
                     status={status}
                     tasks={grouped[status] ?? []}

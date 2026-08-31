@@ -24,19 +24,18 @@ export function TaskCard({
           {...provided.draggableProps}
           {...provided.dragHandleProps}
           className={cn(
-            'group mb-2 rounded-lg border bg-surface p-3',
-            'transition-[border-color,box-shadow,background-color] duration-150',
+            'group mb-2.5 rounded-2xl border bg-surface p-3.5 shadow-2xs',
+            'transition-all duration-150',
             snapshot.isDragging
-              ? // Lifted, not rotated — rotation reads as a glitch, not depth.
-                'border-brand-500/45 bg-raised shadow-e3'
-              : 'border-line-subtle hover:border-line-strong hover:bg-raised',
+              ? 'border-brand-500 bg-raised shadow-lg ring-2 ring-brand-500/20'
+              : 'border-line-subtle hover:border-line-strong hover:bg-hover/30',
           )}
         >
           <div className="mb-2 flex items-start justify-between gap-2">
             <span
               className={cn(
-                'inline-flex h-5 items-center rounded-full border px-2',
-                'text-2xs font-semibold uppercase tracking-[0.06em]',
+                'inline-flex items-center rounded-lg border px-2 py-0.5',
+                'text-[10px] font-bold uppercase tracking-wider',
                 pTone.soft,
                 pTone.text,
               )}
@@ -44,11 +43,10 @@ export function TaskCard({
               {priorityLabel[task.priority]}
             </span>
 
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
               <GripVertical
                 size={13}
-                strokeWidth={1.75}
-                className="text-ink-faint opacity-0 transition-opacity group-hover:opacity-100"
+                className="text-ink-muted opacity-40 group-hover:opacity-100 transition-opacity"
                 aria-hidden
               />
               <button
@@ -59,20 +57,19 @@ export function TaskCard({
                 }}
                 aria-label={`Delete task: ${task.title}`}
                 className={cn(
-                  'grid h-6 w-6 place-items-center rounded-sm text-ink-faint',
-                  'opacity-0 transition-[opacity,color,background-color] group-hover:opacity-100',
-                  'hover:bg-red-500/12 hover:text-red-300 focus-visible:opacity-100',
+                  'grid h-6 w-6 place-items-center rounded-lg text-ink-muted',
+                  'hover:bg-rose-500/10 hover:text-rose-500 transition-colors cursor-pointer',
                 )}
               >
-                <Trash2 size={13} strokeWidth={1.75} aria-hidden />
+                <Trash2 size={13} aria-hidden />
               </button>
             </div>
           </div>
 
-          <h4 className="text-base font-medium leading-snug text-ink">{task.title}</h4>
+          <h4 className="text-xs sm:text-[13px] font-bold leading-snug text-ink">{task.title}</h4>
 
           {task.description && (
-            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-ink-subtle">
+            <p className="mt-1 line-clamp-2 text-2xs leading-relaxed text-ink-muted font-medium">
               {task.description}
             </p>
           )}
@@ -85,18 +82,18 @@ export function TaskCard({
                   emoji={task.agent.avatar}
                   size="xs"
                 />
-                <span className="truncate text-xs text-ink-muted">
+                <span className="truncate text-[11px] font-semibold text-ink-muted">
                   {task.agent.displayName}
                 </span>
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 text-xs text-ink-faint">
-                <UserRound size={12} strokeWidth={1.75} aria-hidden />
+              <span className="flex items-center gap-1.5 text-[11px] text-ink-faint font-mono">
+                <UserRound size={11} aria-hidden />
                 Unassigned
               </span>
             )}
             <time
-              className="shrink-0 text-2xs tabular-nums text-ink-faint"
+              className="shrink-0 text-2xs font-mono text-ink-faint"
               dateTime={task.updatedAt}
             >
               {timeAgo(task.updatedAt)}
