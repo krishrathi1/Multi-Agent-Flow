@@ -731,16 +731,16 @@ export function Chat() {
 
         {/* Quick Question Suggestions */}
         {selectedTarget.type === 'mother' && (
-          <div className="px-4 sm:px-6 py-2 border-t border-line-subtle bg-surface/40 flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="px-3.5 sm:px-6 py-2 border-t border-line-subtle bg-surface/40 flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth">
             <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted shrink-0 flex items-center gap-1">
               <Sparkles size={11} className="text-brand-500" />
               Quick:
             </span>
             {[
-              'What has happened in this production block so far?',
-              'Show me all files & code created by agents',
-              'What was the code review audit score?',
-              'Summarize the architectural plan & components',
+              'What has happened so far?',
+              'Show created files & code',
+              'What was the audit score?',
+              'Summarize the plan & stages',
             ].map((q) => (
               <button
                 key={q}
@@ -755,13 +755,13 @@ export function Chat() {
         )}
 
         {/* Modern Prompt Composer Bar */}
-        <div className="border-t border-line-subtle bg-surface p-3.5 sm:p-4">
+        <div className="border-t border-line-subtle bg-surface p-3 sm:p-4">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSend();
             }}
-            className="flex items-center gap-2 bg-inset rounded-2xl p-1.5 border border-line focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 transition-all shadow-inner"
+            className="flex items-center gap-2 bg-inset rounded-2xl p-1.5 border border-line focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 transition-all shadow-inner min-h-[46px]"
           >
             <textarea
               ref={inputRef}
@@ -771,15 +771,15 @@ export function Chat() {
               onKeyDown={handleKeyDown}
               placeholder={
                 selectedTarget.type === 'mother'
-                  ? 'Ask Mother Chat anything about agents, processes, or deliverables...'
+                  ? 'Ask Mother about agents, code, or runs...'
                   : `Message ${selectedAgent?.displayName || 'agent'}...`
               }
-              className="w-full bg-transparent px-3 py-2 text-xs sm:text-[13px] text-ink placeholder:text-ink-muted resize-none border-0 outline-none ring-0 focus:outline-none focus:ring-0 focus:border-0 leading-relaxed max-h-24 overflow-y-auto no-scrollbar"
+              className="w-full bg-transparent px-3 py-1.5 text-xs sm:text-[13px] text-ink placeholder:text-ink-muted placeholder:truncate resize-none border-0 outline-none ring-0 focus:outline-none focus:ring-0 focus:border-0 leading-normal max-h-24 overflow-y-auto no-scrollbar"
             />
             <Button
               type="submit"
               variant="primary"
-              className="h-9 px-3.5 rounded-xl shrink-0 shadow-xs cursor-pointer"
+              className="h-8.5 sm:h-9 px-3.5 rounded-xl shrink-0 shadow-xs cursor-pointer"
               icon={SendHorizontal}
               loading={sending}
               disabled={!input.trim()}
