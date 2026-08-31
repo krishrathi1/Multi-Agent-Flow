@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Activity,
   Bot,
   CheckCircle2,
   ChevronRight,
+  Edit3,
   ExternalLink,
   Factory,
+  FileText,
+  History,
   Layers,
   LayoutDashboard,
   MessagesSquare,
@@ -18,6 +21,7 @@ import {
   Settings,
   SlidersHorizontal,
   Sparkles,
+  Trash2,
   Workflow,
   Zap,
 } from 'lucide-react';
@@ -36,6 +40,8 @@ import { Button, ButtonLink } from '../components/ui/Button';
 import { EmptyState, SkeletonCard } from '../components/ui/States';
 import { Tabs } from '../components/ui/Tabs';
 import { CreateProcessModal } from '../components/process/CreateProcessModal';
+import { EditProcessModal } from '../components/process/EditProcessModal';
+import { ProcessReportModal } from '../components/process/ProcessReportModal';
 import type { Agent, Process, ProcessStatus } from '../types';
 
 const statusTone: Record<ProcessStatus, 'success' | 'warning' | 'neutral' | 'danger' | 'info'> = {
@@ -249,82 +255,190 @@ function ProductionBlockCard({
   busy: boolean;
   onToggleRun: () => void;
 }) {
+  const navigate = useNavigate();
+  const removeProcess = useProcessStore((s) => s.removeProcess);
+  const fetchProcesses = useProcessStore((s) => s.fetchProcesses);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   const agents = process.agents ?? [];
   const stages = [...new Set(agents.map((a) => a.processStage || 1))].sort((a, b) => a - b);
   const isRunning = process.status === 'ACTIVE';
 
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
+
+  const handleDelete = async () => {
+    if (window.confirm(`Are you sure you want to delete production "${process.name}"?`)) {
+      setDeleting(true);
+      try {
+        await removeProcess(process.id, false);
+      } catch (err) {
+        console.error('Failed to delete process:', err);
+      } finally {
+        setDeleting(false);
+        setMenuOpen(false);
+      }
+    }
+  };
+
   return (
-    <Card padding="none" className="overflow-hidden border border-line-subtle bg-surface shadow-xs hover:shadow-sm transition-all rounded-2xl">
-      {/* Block Header */}
-      <div className="border-b border-line-subtle px-4 sm:px-5 py-4 bg-surface">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="rounded bg-inset px-2 py-0.5 text-2xs font-semibold text-ink-muted border border-line-subtle shrink-0">
-                Repo
-              </span>
-              <Link
-                to={`/processes`}
-                className="text-sm sm:text-base font-bold tracking-tight text-ink hover:text-brand-500 transition-colors break-words"
-              >
-                {process.name}
-              </Link>
-              <span className={cn(
-                'rounded-full px-2.5 py-0.5 text-[11px] font-semibold shrink-0',
-                isRunning
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-              )}>
-                {isRunning ? 'Active' : 'Completed'}
-              </span>
+    <>
+      <Card padding="none" className="overflow-hidden border border-line-subtle bg-surface shadow-xs hover:shadow-sm transition-all rounded-2xl">
+        {/* Block Header */}
+        <div className="border-b border-line-subtle px-4 sm:px-5 py-4 bg-surface">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="rounded bg-inset px-2 py-0.5 text-2xs font-semibold text-ink-muted border border-line-subtle shrink-0">
+                  Repo
+                </span>
+                <Link
+                  to={`/processes`}
+                  className="text-sm sm:text-base font-bold tracking-tight text-ink hover:text-brand-500 transition-colors break-words"
+                >
+                  {process.name}
+                </Link>
+                <span className={cn(
+                  'rounded-full px-2.5 py-0.5 text-[11px] font-semibold shrink-0',
+                  isRunning
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                )}>
+                  {isRunning ? 'Active' : 'Completed'}
+                </span>
+              </div>
+
+              {process.summary && (
+                <p className="mt-1.5 text-xs text-ink-muted leading-relaxed">
+                  {process.summary}
+                </p>
+              )}
             </div>
 
-            {process.summary && (
-              <p className="mt-1.5 text-xs text-ink-muted leading-relaxed">
-                {process.summary}
-              </p>
-            )}
-          </div>
+            {/* Quick Action Buttons */}
+            <div className="flex items-center gap-2 flex-wrap shrink-0 pt-1 sm:pt-0">
+              <Button
+                size="xs"
+                variant="primary"
+                icon={isRunning ? Pause : Play}
+                loading={busy}
+                onClick={onToggleRun}
+              >
+                {isRunning ? 'Pause' : 'Run Chain'}
+              </Button>
+              <ButtonLink
+                to={`/activity?processId=${process.id}`}
+                size="xs"
+                variant="secondary"
+                icon={Activity}
+                title="View Production Activity"
+              >
+                Logs
+              </ButtonLink>
+              <ButtonLink
+                to={`/processes`}
+                size="xs"
+                variant="secondary"
+                icon={ExternalLink}
+                title="Open Pipeline Canvas"
+              >
+                Canvas
+              </ButtonLink>
 
-          {/* Quick Action Buttons */}
-          <div className="flex items-center gap-2 flex-wrap shrink-0 pt-1 sm:pt-0">
-            <Button
-              size="xs"
-              variant="primary"
-              icon={isRunning ? Pause : Play}
-              loading={busy}
-              onClick={onToggleRun}
-            >
-              {isRunning ? 'Pause' : 'Run Chain'}
-            </Button>
-            <ButtonLink
-              to={`/activity?processId=${process.id}`}
-              size="xs"
-              variant="secondary"
-              icon={Activity}
-              title="View Production Activity"
-            >
-              Logs
-            </ButtonLink>
-            <ButtonLink
-              to={`/processes`}
-              size="xs"
-              variant="secondary"
-              icon={ExternalLink}
-              title="Open Pipeline Canvas"
-            >
-              Canvas
-            </ButtonLink>
-            <button
-              type="button"
-              className="grid h-7 w-7 place-items-center rounded-lg text-ink-muted hover:bg-hover hover:text-ink transition-colors cursor-pointer"
-              title="More options"
-            >
-              <MoreVertical size={14} />
-            </button>
+              {/* Functional 3-Dots Dropdown */}
+              <div className="relative" ref={menuRef}>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen(!menuOpen)}
+                  className={cn(
+                    'grid h-7 w-7 place-items-center rounded-lg border border-line-subtle bg-surface text-ink-muted hover:border-line hover:bg-hover hover:text-ink transition-all cursor-pointer shadow-2xs',
+                    menuOpen && 'border-brand-500 bg-surface text-brand-600 ring-2 ring-brand-500/10'
+                  )}
+                  title="More production options"
+                >
+                  <MoreVertical size={14} />
+                </button>
+
+                {menuOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-2xl border border-line bg-surface/95 backdrop-blur-2xl p-1.5 shadow-xl space-y-0.5 animate-scale-in">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowEdit(true);
+                        setMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-semibold text-ink-muted hover:bg-hover hover:text-ink transition-colors cursor-pointer text-left"
+                    >
+                      <Edit3 size={13} className="text-brand-500" />
+                      <span>Edit Pipeline</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowReport(true);
+                        setMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-semibold text-ink-muted hover:bg-hover hover:text-ink transition-colors cursor-pointer text-left"
+                    >
+                      <FileText size={13} className="text-emerald-500" />
+                      <span>Audit Report</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigate(`/chat?processId=${process.id}`);
+                        setMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-semibold text-ink-muted hover:bg-hover hover:text-ink transition-colors cursor-pointer text-left"
+                    >
+                      <MessagesSquare size={13} className="text-violet-500" />
+                      <span>Mother Chat</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigate(`/runs?processId=${process.id}`);
+                        setMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-semibold text-ink-muted hover:bg-hover hover:text-ink transition-colors cursor-pointer text-left"
+                    >
+                      <History size={13} className="text-amber-500" />
+                      <span>Run History</span>
+                    </button>
+
+                    <div className="my-1 border-t border-line-subtle" />
+
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={deleting}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 transition-colors cursor-pointer text-left"
+                    >
+                      <Trash2 size={13} />
+                      <span>{deleting ? 'Deleting...' : 'Delete Production'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Pipeline Stage Visualization */}
       <div className="p-4 sm:p-5 bg-surface space-y-3">
@@ -402,6 +516,25 @@ function ProductionBlockCard({
         </Link>
       </div>
     </Card>
+
+    {/* Inline Modals triggered from 3-dots dropdown */}
+    {showEdit && (
+      <EditProcessModal
+        process={process}
+        open={showEdit}
+        onClose={() => setShowEdit(false)}
+        onSaved={() => fetchProcesses()}
+      />
+    )}
+
+    {showReport && (
+      <ProcessReportModal
+        process={process}
+        open={showReport}
+        onClose={() => setShowReport(false)}
+      />
+    )}
+  </>
   );
 }
 
