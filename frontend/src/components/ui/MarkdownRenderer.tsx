@@ -203,6 +203,12 @@ export function MarkdownRenderer({
     /* ignore */
   }
 
+  // If the whole content is wrapped in ```markdown or ```md or ```text or ```
+  const outerFenceMatch = text.match(/^```(markdown|md|text|txt)?\s*([\s\S]*?)\s*```$/i);
+  if (outerFenceMatch) {
+    text = outerFenceMatch[2].trim();
+  }
+
   const rawLines = text.split('\n');
   const elements: React.ReactNode[] = [];
 
@@ -211,9 +217,9 @@ export function MarkdownRenderer({
     const line = rawLines[i];
     const trimmed = line.trim();
 
-    // 1. Fenced Code Block: ```lang ... ```
+    // 1. Fenced Code Block for real programming languages (ts, js, py, json, etc.)
     if (trimmed.startsWith('```')) {
-      const lang = trimmed.replace(/^```/, '').trim();
+      const lang = trimmed.replace(/^```/, '').trim().toLowerCase();
       const codeLines: string[] = [];
       i++;
       while (i < rawLines.length && !rawLines[i].trim().startsWith('```')) {
@@ -221,13 +227,22 @@ export function MarkdownRenderer({
         i++;
       }
       i++; // skip closing ```
-      elements.push(
-        <CodeBlock
-          key={`code-${elements.length}`}
-          code={codeLines.join('\n')}
-          language={lang || undefined}
-        />
-      );
+
+      // If it's markdown or text, don't wrap in CodeBlock, just render contents
+      if (lang === 'markdown' || lang === 'md' || lang === 'text' || lang === 'txt') {
+        const innerText = codeLines.join('\n');
+        elements.push(
+          <MarkdownRenderer key={`inner-md-${elements.length}`} content={innerText} hideScrollbar={false} />
+        );
+      } else {
+        elements.push(
+          <CodeBlock
+            key={`code-${elements.length}`}
+            code={codeLines.join('\n')}
+            language={lang || 'code'}
+          />
+        );
+      }
       continue;
     }
 
@@ -264,7 +279,7 @@ export function MarkdownRenderer({
       elements.push(
         <pre
           key={`diag-${elements.length}`}
-          className="my-2 rounded-xl border border-line bg-inset/80 p-3 font-mono text-xs text-brand-600 dark:text-brand-400 overflow-x-auto no-scrollbar whitespace-pre shadow-2xs"
+          className="my-2 rounded-xl border border-line bg-inset/80 p-3 font-mono text-xs text-brand-600 dark:text-brand-400 overflow-x-auto no-scrollbar whitespace-pre shadow-2xs leading-tight"
         >
           {diagLines.join('\n')}
         </pre>
@@ -273,15 +288,15 @@ export function MarkdownRenderer({
     }
 
     // 4. Consecutive un-fenced Code Lines (like imports, const, classes, etc.)
-    if (isCodeLine(trimmed) && trimmed.length > 3) {
+    if (isCodeLine(trimmed) && trimmed.length > 4 && !trimmed.startsWith('#')) {
       const codeBlockLines: string[] = [line];
       i++;
       while (i < rawLines.length && (isCodeLine(rawLines[i]) || !rawLines[i].trim())) {
         codeBlockLines.push(rawLines[i]);
         i++;
       }
-      // If there are at least 2 code-like lines, render as a code block
-      if (codeBlockLines.filter((l) => l.trim()).length >= 2) {
+      // If there are at least 3 code-like lines, render as a code block
+      if (codeBlockLines.filter((l) => l.trim()).length >= 3) {
         elements.push(
           <CodeBlock
             key={`auto-code-${elements.length}`}
@@ -297,31 +312,68 @@ export function MarkdownRenderer({
     }
 
     // 5. Headings / Step Titles
+    if (trimmed.startsWith('# ') || trimmed.startsWith('## ') || trimmed.startsWith('### ') || trimmed.startsWith('#### ')) {
+      const level = trimmed.match(/^#+/)?.[0].length || 1;
+      const headingText = trimmed.replace(/^#+\s*/, '');
+      if (level === 1) {
+        elements.push(
+          <h4 key={`h1-${elements.length}`} className="text-sm font-bold text-ink tracking-tight pt-2 pb-1 border-b border-line-subtle">
+            {renderInline(headingText)}
+          </h4>
+        );
+      } else if (level === 2) {
+        elements.push(
+          <h5 key={`h2-${elements.length}`} className="text-xs font-bold text-ink pt-2 pb-0.5 uppercase tracking-wider text-brand-600 dark:text-brand-400">
+            {renderInline(headingText)}
+          </h5>
+        );
+      } else {
+        elements.push(
+          <h6 key={`h3-${elements.length}`} className="text-xs font-bold text-ink/90 pt-1.5 pb-0.5">
+            {renderInline(headingText)}
+          </h6>
+        );
+      }
+      i++;
+      continue;
+    }
+
     if (
-      trimmed.startsWith('#') ||
       /^STEP\s+\d+:/i.test(trimmed) ||
       /^TABLE OF /i.test(trimmed) ||
       /^ARCHITECTURE /i.test(trimmed) ||
       /^[A-Z\s]{4,}:$/i.test(trimmed)
     ) {
-      const heading = trimmed.replace(/^#+\s*/, '');
       elements.push(
         <h5
           key={`h-${elements.length}`}
-          className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider pt-2 pb-0.5 flex items-center gap-1.5"
+          className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider pt-2.5 pb-0.5 flex items-center gap-1.5"
         >
-          {renderInline(heading)}
+          {renderInline(trimmed)}
         </h5>
       );
       i++;
       continue;
     }
 
-    // 6. Bullet lists
-    if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || /^\d+\.\s/.test(trimmed)) {
-      const textOnly = trimmed.replace(/^([-*]|\d+\.)\s*/, '');
+    // 6. Numbered and Bullet lists
+    if (/^\d+\.\s/.test(trimmed)) {
+      const numMatch = trimmed.match(/^(\d+\.)\s*(.*)$/);
       elements.push(
-        <div key={`li-${elements.length}`} className="flex items-start gap-2 ml-1 text-xs text-ink/90">
+        <div key={`num-li-${elements.length}`} className="flex items-start gap-2 pt-1 text-xs text-ink/90">
+          <span className="text-brand-600 dark:text-brand-400 font-mono font-bold shrink-0">{numMatch?.[1]}</span>
+          <span className="flex-1 leading-relaxed">{renderInline(numMatch?.[2] || '')}</span>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      const isNested = line.startsWith('  ') || line.startsWith('\t');
+      const textOnly = trimmed.substring(2).trim();
+      elements.push(
+        <div key={`li-${elements.length}`} className={cn('flex items-start gap-2 text-xs text-ink/90', isNested ? 'ml-4' : 'ml-1')}>
           <span className="text-brand-500 font-bold mt-0.5 shrink-0">•</span>
           <span className="flex-1 leading-relaxed">{renderInline(textOnly)}</span>
         </div>
@@ -349,7 +401,7 @@ export function MarkdownRenderer({
   return (
     <div
       className={cn(
-        'space-y-1.5 text-xs text-ink font-sans',
+        'space-y-1.5 text-xs text-ink font-sans pt-0.5',
         maxHeight,
         maxHeight && 'overflow-y-auto pr-1 scroll-smooth',
         hideScrollbar && 'no-scrollbar',
