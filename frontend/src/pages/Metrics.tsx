@@ -1,17 +1,5 @@
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  Legend,
-} from 'recharts';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import Chart from 'react-apexcharts';
 import {
   Bot,
   CircleDollarSign,
@@ -21,14 +9,7 @@ import {
   Timer,
   TrendingUp,
   Wrench,
-  Activity,
-  Zap,
   Clock,
-  ArrowUpRight,
-  ShieldCheck,
-  Cpu,
-  Layers,
-  Sparkles,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -38,14 +19,9 @@ import { Badge } from '@/components/ui/Badge';
 import { cn, timeAgo } from '@/lib/utils';
 import type { TokenUsage, MetricSnapshot, AgentInsight } from '@/types';
 import { formatCompact, formatCurrency, formatMs } from '@/lib/design';
-import { useChartTheme } from '@/lib/use-chart-theme';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Card, CardHeader } from '@/components/ui/Card';
-import { StatCard } from '@/components/ui/StatCard';
-import { EmptyState, Skeleton } from '@/components/ui/States';
-import { TableWrap, Table, Th, Td, Tr } from '@/components/ui/Table';
-import { LiveWaveform, LiveRadarBeacon } from '@/components/ui/LiveIcon';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
+import { LiveWaveform } from '@/components/ui/LiveIcon';
 
 interface TokenSummary {
   totalTokens: number;
@@ -75,83 +51,45 @@ interface MetricsSummary {
 
 const CHART_H = 260;
 
-/** Modern Glassmorphic Tooltip for Recharts */
-function CustomChartTooltip({
-  active,
-  payload,
-  label,
-  valueFormatter,
-}: {
-  active?: boolean;
-  payload?: any[];
-  label?: string;
-  valueFormatter?: (val: any, name?: string) => string;
-}) {
-  if (!active || !payload || !payload.length) return null;
-  return (
-    <div className="rounded-2xl border border-line bg-surface/95 backdrop-blur-xl p-3 shadow-xl text-xs space-y-1.5 min-w-[150px] animate-scale-in">
-      {label && (
-        <p className="text-[11px] font-bold text-ink-muted border-b border-line-subtle pb-1">
-          {label}
-        </p>
-      )}
-      {payload.map((item, i) => (
-        <div key={i} className="flex items-center justify-between gap-3 text-2xs font-semibold">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: item.color || item.fill || '#3b82f6' }}
-            />
-            <span className="text-ink-muted capitalize truncate">{item.name}</span>
-          </div>
-          <span className="text-ink font-mono font-bold shrink-0">
-            {valueFormatter ? valueFormatter(item.value, item.name) : typeof item.value === 'number' ? item.value.toLocaleString() : item.value}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /** Chart panel card container with consistent header and responsive body */
 function ChartPanel({
   title,
   description,
   icon: Icon,
-  empty,
-  emptyLabel,
-  action,
   children,
+  empty,
+  emptyLabel = 'No data recorded for this time range.',
+  action,
 }: {
   title: string;
   description?: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  icon: typeof Hash;
+  children: React.ReactNode;
   empty?: boolean;
   emptyLabel?: string;
   action?: React.ReactNode;
-  children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs hover:border-line-strong transition-all flex flex-col justify-between">
-      <div className="flex items-center justify-between gap-3 border-b border-line-subtle pb-3 mb-4">
+    <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs flex flex-col justify-between transition-all">
+      <div className="flex items-center justify-between border-b border-line-subtle pb-3 mb-4">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0">
             <Icon size={16} />
           </div>
           <div className="min-w-0">
             <h3 className="text-xs font-bold uppercase tracking-wider text-ink truncate">{title}</h3>
-            {description && <p className="text-[11px] text-ink-muted truncate">{description}</p>}
+            {description && (
+              <p className="text-[11px] text-ink-muted truncate">{description}</p>
+            )}
           </div>
         </div>
         {action}
       </div>
 
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 flex flex-col justify-center">
         {empty ? (
-          <div style={{ height: CHART_H }} className="flex flex-col items-center justify-center text-center p-6">
-            <Icon size={28} className="text-ink-faint mb-2 opacity-50" />
-            <p className="text-xs font-semibold text-ink">No data recorded</p>
-            <p className="text-[11px] text-ink-muted mt-0.5 max-w-xs">{emptyLabel ?? 'Metrics will populate automatically as agents process tasks.'}</p>
+          <div className="py-12 text-center text-xs text-ink-muted bg-inset/40 rounded-xl border border-dashed border-line">
+            {emptyLabel}
           </div>
         ) : (
           children
@@ -162,161 +100,117 @@ function ChartPanel({
 }
 
 export function Metrics() {
-  const [tokenUsage, setTokenUsage] = useState<TokenUsage[]>([]);
-  const [tokenSummary, setTokenSummary] = useState<TokenSummary | null>(null);
+  const [tokens, setTokens] = useState<TokenUsage[]>([]);
   const [metrics, setMetrics] = useState<MetricSnapshot[]>([]);
+  const [tokenSummary, setTokenSummary] = useState<TokenSummary | null>(null);
   const [metricsSummary, setMetricsSummary] = useState<MetricsSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const chart = useChartTheme();
-  const socketConnected = useUiStore((s) => s.socketConnected);
   const [insights, setInsights] = useState<AgentInsight[]>([]);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const inFlight = useRef(false);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const fetchData = useCallback(async (silent = false) => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    if (silent) setRefreshing(true);
-    else setLoading(true);
+  const resolvedTheme = useUiStore((s) => s.resolvedTheme);
+  const isDark = resolvedTheme === 'dark';
+
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
     try {
-      const [usage, tSummary, metricsList, mSummary, agentStats] = await Promise.all([
-        api.tokens.usage({ hours: 24 }),
-        api.tokens.summary(),
-        api.metrics.list({ limit: 1000 }),
-        api.metrics.summary(),
-        api.orchestration.agentInsights().catch(() => [] as AgentInsight[]),
+      const [tokList, metList, tokSum, metSum, insList] = await Promise.all([
+        api.tokens.usage({ hours: 24 }).catch(() => []),
+        api.metrics.list({ limit: 1000 }).catch(() => []),
+        api.tokens.summary().catch(() => null),
+        api.metrics.summary().catch(() => null),
+        api.orchestration.agentInsights().catch(() => []),
       ]);
-      setTokenUsage(usage);
-      setTokenSummary(tSummary);
-      setMetrics(metricsList);
-      setMetricsSummary(mSummary);
-      setInsights(agentStats);
-      setLastUpdated(new Date().toISOString());
+
+      setTokens(Array.isArray(tokList) ? tokList : []);
+      setMetrics(Array.isArray(metList) ? metList : []);
+      setTokenSummary(tokSum);
+      setMetricsSummary(metSum);
+      setInsights(Array.isArray(insList) ? insList : []);
+      setLastUpdated(new Date());
     } catch (err) {
-      console.error('Failed to fetch metrics data:', err);
+      console.error('Failed to load metrics:', err);
     } finally {
-      inFlight.current = false;
-      setRefreshing(false);
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
-
-  useEffect(() => {
-    const tick = () => {
-      if (document.visibilityState === 'visible') fetchData(true);
-    };
-    const interval = setInterval(tick, 15_000);
-    document.addEventListener('visibilitychange', tick);
+    const socket = getSocket();
+    const update = () => fetchData(false);
+    socket.on('activity:new', update);
+    socket.on('metrics:new', update);
+    socket.on('token:usage', update);
+    setSocketConnected(socket.connected);
+    socket.on('connect', () => setSocketConnected(true));
+    socket.on('disconnect', () => setSocketConnected(false));
     return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', tick);
-    };
-  }, [fetchData]);
-
-  useEffect(() => {
-    const s = getSocket();
-    let queued: ReturnType<typeof setTimeout> | null = null;
-    const refresh = () => {
-      if (queued) clearTimeout(queued);
-      queued = setTimeout(() => fetchData(true), 800);
-    };
-    const events = [
-      'activity:new',
-      'metrics:new',
-      'token:usage',
-      'agent:status',
-      'agent:heartbeat',
-      'process:updated',
-    ];
-    events.forEach((e) => s.on(e, refresh));
-    return () => {
-      if (queued) clearTimeout(queued);
-      events.forEach((e) => s.off(e, refresh));
+      socket.off('activity:new', update);
+      socket.off('metrics:new', update);
+      socket.off('token:usage', update);
     };
   }, [fetchData]);
 
   const stats24h = useMemo(() => {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const recent = tokenUsage.filter((t) => t.createdAt >= cutoff);
-    const totalTokens24h = recent.reduce((sum, t) => sum + t.totalTokens, 0);
-    const totalCost24h = recent.reduce((sum, t) => sum + t.cost, 0);
-
-    const recentMetrics = metrics.filter((m) => m.createdAt >= cutoff);
-    const avgResponseTime =
-      recentMetrics.length > 0
-        ? Math.round(
-            recentMetrics.reduce((sum, m) => sum + m.responseTimeMs, 0) / recentMetrics.length,
-          )
-        : 0;
-    const successCount = recentMetrics.filter((m) => m.success).length;
-    const successRate =
-      recentMetrics.length > 0
-        ? Math.round((successCount / recentMetrics.length) * 10000) / 100
-        : 0;
-
-    return { totalTokens24h, totalCost24h, avgResponseTime, successRate, calls: recentMetrics.length };
-  }, [tokenUsage, metrics]);
+    const totalTokens24h = tokenSummary?.totalTokens || tokens.reduce((a, t) => a + t.totalTokens, 0);
+    const totalCost24h = tokenSummary?.totalCost || tokens.reduce((a, t) => a + t.cost, 0);
+    const calls = metrics.length;
+    const avgResponseTime = calls > 0 ? metrics.reduce((a, m) => a + m.responseTimeMs, 0) / calls : 0;
+    const successCount = metrics.filter((m) => m.success).length;
+    const successRate = calls > 0 ? Math.round((successCount / calls) * 100) : 100;
+    return { totalTokens24h, totalCost24h, avgResponseTime, calls, successRate };
+  }, [tokens, metrics, tokenSummary]);
 
   const hourlyTokenData = useMemo(() => {
-    const now = Date.now();
-    const buckets: Array<{ hour: string; input: number; output: number; total: number }> = [];
+    const buckets: Record<string, { hour: string; input: number; output: number; total: number }> = {};
+    const now = new Date();
     for (let i = 23; i >= 0; i--) {
-      const start = now - (i + 1) * 60 * 60 * 1000;
-      const end = now - i * 60 * 60 * 1000;
-      const hourLabel = new Date(end).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      const inRange = tokenUsage.filter((t) => {
-        const ts = new Date(t.createdAt).getTime();
-        return ts >= start && ts < end;
-      });
-      const input = inRange.reduce((sum, t) => sum + t.inputTokens, 0);
-      const output = inRange.reduce((sum, t) => sum + t.outputTokens, 0);
-      buckets.push({
-        hour: hourLabel,
-        input,
-        output,
-        total: input + output,
-      });
+      const d = new Date(now.getTime() - i * 3600 * 1000);
+      const hourKey = `${String(d.getHours()).padStart(2, '0')}:00`;
+      buckets[hourKey] = { hour: hourKey, input: 0, output: 0, total: 0 };
     }
-    return buckets;
-  }, [tokenUsage]);
+    for (const t of tokens) {
+      const d = new Date(t.createdAt);
+      if (now.getTime() - d.getTime() <= 24 * 3600 * 1000) {
+        const hourKey = `${String(d.getHours()).padStart(2, '0')}:00`;
+        if (buckets[hourKey]) {
+          buckets[hourKey].input += t.inputTokens;
+          buckets[hourKey].output += t.outputTokens;
+          buckets[hourKey].total += t.totalTokens;
+        }
+      }
+    }
+    return Object.values(buckets);
+  }, [tokens]);
 
-  const hasTokenSeries = hourlyTokenData.some((b) => b.input > 0 || b.output > 0);
+  const hasTokenSeries = useMemo(() => hourlyTokenData.some((d) => d.input > 0 || d.output > 0), [hourlyTokenData]);
 
   const costByAgent = useMemo(() => {
-    if (!tokenSummary) return [];
+    if (!tokenSummary?.byAgent) return [];
     return tokenSummary.byAgent
-      .map((a) => ({
-        name: a.displayName,
-        agentName: a.agentName,
-        cost: Math.round(a.totalCost * 10000) / 10000,
-        tokens: a.totalTokens,
-      }))
+      .map((a) => ({ name: a.displayName || a.agentName, cost: a.totalCost, tokens: a.totalTokens }))
       .sort((a, b) => b.cost - a.cost);
   }, [tokenSummary]);
 
   const responseTimeByAgent = useMemo(() => {
-    if (!metricsSummary) return [];
+    if (!metricsSummary?.byAgent) return [];
     return metricsSummary.byAgent.map((a) => ({
-      name: a.displayName,
-      avg: a.avgResponseTime,
-      p95: a.p95ResponseTime,
+      name: a.displayName || a.agentName,
+      avg: Math.round(a.avgResponseTime),
+      p95: Math.round(a.p95ResponseTime),
       calls: a.totalCalls,
     }));
   }, [metricsSummary]);
 
   const successRateByAgent = useMemo(() => {
-    if (!metricsSummary) return [];
+    if (!metricsSummary?.byAgent) return [];
     return metricsSummary.byAgent.map((a) => ({
-      name: a.displayName,
-      rate: a.successRate,
+      name: a.displayName || a.agentName,
+      rate: Math.round(a.successRate),
       calls: a.totalCalls,
     }));
   }, [metricsSummary]);
@@ -324,7 +218,7 @@ export function Metrics() {
   const toolUsage = useMemo(() => {
     const toolMap = new Map<string, number>();
     for (const m of metrics) {
-      const tool = m.toolName || 'Unknown';
+      const tool = m.toolName || 'system-run';
       toolMap.set(tool, (toolMap.get(tool) || 0) + 1);
     }
     return Array.from(toolMap.entries())
@@ -333,16 +227,255 @@ export function Metrics() {
       .slice(0, 10);
   }, [metrics]);
 
+  const tokenAreaChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
+    chart: { type: 'area', height: CHART_H, toolbar: { show: false }, zoom: { enabled: false }, background: 'transparent', fontFamily: 'inherit' },
+    colors: ['#3b82f6', '#10b981'],
+    dataLabels: { enabled: false },
+    stroke: { curve: 'smooth', width: 2.5 },
+    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: isDark ? 0.45 : 0.35, opacityTo: 0.02, stops: [0, 90, 100] } },
+    grid: { borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)', strokeDashArray: 3 },
+    xaxis: { categories: hourlyTokenData.map((d) => d.hour), labels: { style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
+    yaxis: { labels: { formatter: (v) => formatCompact(v), style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
+    tooltip: { theme: isDark ? 'dark' : 'light', y: { formatter: (v) => `${formatCompact(v)} tokens` } },
+    legend: { position: 'top', horizontalAlign: 'right', fontSize: '11px', labels: { colors: isDark ? '#a1a1aa' : '#64748b' } },
+  }), [hourlyTokenData, isDark]);
+
+  const tokenAreaSeries = useMemo(() => [
+    { name: 'Input', data: hourlyTokenData.map((d) => d.input) },
+    { name: 'Output', data: hourlyTokenData.map((d) => d.output) },
+  ], [hourlyTokenData]);
+
+  const latencyChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
+    chart: { type: 'bar', height: CHART_H, toolbar: { show: false }, background: 'transparent', fontFamily: 'inherit' },
+    plotOptions: { bar: { columnWidth: '40%', borderRadius: 4 } },
+    colors: ['#3b82f6', '#f97316'],
+    dataLabels: { enabled: false },
+    grid: { borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)', strokeDashArray: 3 },
+    xaxis: { categories: responseTimeByAgent.map((d) => d.name), labels: { style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' }, trim: true } },
+    yaxis: { labels: { formatter: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`), style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
+    tooltip: { theme: isDark ? 'dark' : 'light', y: { formatter: (v) => formatMs(v) } },
+    legend: { position: 'top', horizontalAlign: 'right', fontSize: '11px', labels: { colors: isDark ? '#a1a1aa' : '#64748b' } },
+  }), [responseTimeByAgent, isDark]);
+
+  const latencySeries = useMemo(() => [
+    { name: 'Average', data: responseTimeByAgent.map((d) => d.avg) },
+    { name: 'p95', data: responseTimeByAgent.map((d) => d.p95) },
+  ], [responseTimeByAgent]);
+
+  const successRateChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
+    chart: { type: 'bar', height: CHART_H, toolbar: { show: false }, background: 'transparent', fontFamily: 'inherit' },
+    plotOptions: { bar: { horizontal: true, barHeight: '38%', borderRadius: 6 } },
+    colors: ['#10b981'],
+    dataLabels: { enabled: true, formatter: (val) => `${val}%`, style: { colors: [isDark ? '#e4e4e7' : '#18181b'] } },
+    grid: { borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)', strokeDashArray: 3 },
+    xaxis: { categories: successRateByAgent.map((d) => d.name), max: 100, labels: { style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
+    yaxis: { labels: { style: { colors: isDark ? '#a1a1aa' : '#475569', fontSize: '11px', fontWeight: 600 } } },
+    tooltip: { theme: isDark ? 'dark' : 'light', y: { formatter: (v) => `${v}% Success` } },
+  }), [successRateByAgent, isDark]);
+
+  const successRateSeries = useMemo(() => [{ name: 'Success Rate', data: successRateByAgent.map((d) => d.rate) }], [successRateByAgent]);
+
   if (loading) {
     return (
       <div className="space-y-6">
-        <PageHeader
-          icon={Gauge}
-          title="Metrics & Cost"
-          description="Real-time telemetry, model token consumption, latency, and fleet spend analysis"
-        />
+        <PageHeader icon={Gauge} title="Metrics & Cost" description="Loading telemetry..." />
         <div className="flex flex-col items-center justify-center py-24">
-          <HourglassLoader size={52} label="Compiling fleet analytics..." />
+          <HourglassLoader size={52} />
+      <div className="flex-1 flex flex-col justify-center">
+        {empty ? (
+          <div className="py-12 text-center text-xs text-ink-muted bg-inset/40 rounded-xl border border-dashed border-line">
+            {emptyLabel}
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function Metrics() {
+  const [tokens, setTokens] = useState<TokenUsage[]>([]);
+  const [metrics, setMetrics] = useState<MetricSnapshot[]>([]);
+  const [tokenSummary, setTokenSummary] = useState<TokenSummary | null>(null);
+  const [metricsSummary, setMetricsSummary] = useState<MetricsSummary | null>(null);
+  const [insights, setInsights] = useState<AgentInsight[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const resolvedTheme = useUiStore((s) => s.resolvedTheme);
+  const isDark = resolvedTheme === 'dark';
+
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    try {
+      const [tokList, metList, tokSum, metSum, insList] = await Promise.all([
+        api.tokens.usage({ hours: 24 }).catch(() => []),
+        api.metrics.list({ limit: 1000 }).catch(() => []),
+        api.tokens.summary().catch(() => null),
+        api.metrics.summary().catch(() => null),
+        api.orchestration.agentInsights().catch(() => []),
+      ]);
+
+      setTokens(Array.isArray(tokList) ? tokList : []);
+      setMetrics(Array.isArray(metList) ? metList : []);
+      setTokenSummary(tokSum);
+      setMetricsSummary(metSum);
+      setInsights(Array.isArray(insList) ? insList : []);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error('Failed to load metrics:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    const socket = getSocket();
+    const update = () => fetchData(false);
+    socket.on('activity:new', update);
+    socket.on('metrics:new', update);
+    socket.on('token:usage', update);
+    setSocketConnected(socket.connected);
+    socket.on('connect', () => setSocketConnected(true));
+    socket.on('disconnect', () => setSocketConnected(false));
+    return () => {
+      socket.off('activity:new', update);
+      socket.off('metrics:new', update);
+      socket.off('token:usage', update);
+    };
+  }, [fetchData]);
+
+  const stats24h = useMemo(() => {
+    const totalTokens24h = tokenSummary?.totalTokens || tokens.reduce((a, t) => a + t.totalTokens, 0);
+    const totalCost24h = tokenSummary?.totalCost || tokens.reduce((a, t) => a + t.cost, 0);
+    const calls = metrics.length;
+    const avgResponseTime = calls > 0 ? metrics.reduce((a, m) => a + m.responseTimeMs, 0) / calls : 0;
+    const successCount = metrics.filter((m) => m.success).length;
+    const successRate = calls > 0 ? Math.round((successCount / calls) * 100) : 100;
+    return { totalTokens24h, totalCost24h, avgResponseTime, calls, successRate };
+  }, [tokens, metrics, tokenSummary]);
+
+  const hourlyTokenData = useMemo(() => {
+    const buckets: Record<string, { hour: string; input: number; output: number; total: number }> = {};
+    const now = new Date();
+    for (let i = 23; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 3600 * 1000);
+      const hourKey = `${String(d.getHours()).padStart(2, '0')}:00`;
+      buckets[hourKey] = { hour: hourKey, input: 0, output: 0, total: 0 };
+    }
+    for (const t of tokens) {
+      const d = new Date(t.createdAt);
+      if (now.getTime() - d.getTime() <= 24 * 3600 * 1000) {
+        const hourKey = `${String(d.getHours()).padStart(2, '0')}:00`;
+        if (buckets[hourKey]) {
+          buckets[hourKey].input += t.inputTokens;
+          buckets[hourKey].output += t.outputTokens;
+          buckets[hourKey].total += t.totalTokens;
+        }
+      }
+    }
+    return Object.values(buckets);
+  }, [tokens]);
+
+  const hasTokenSeries = useMemo(() => hourlyTokenData.some((d) => d.input > 0 || d.output > 0), [hourlyTokenData]);
+
+  const costByAgent = useMemo(() => {
+    if (!tokenSummary?.byAgent) return [];
+    return tokenSummary.byAgent
+      .map((a) => ({ name: a.displayName || a.agentName, cost: a.totalCost, tokens: a.totalTokens }))
+      .sort((a, b) => b.cost - a.cost);
+  }, [tokenSummary]);
+
+  const responseTimeByAgent = useMemo(() => {
+    if (!metricsSummary?.byAgent) return [];
+    return metricsSummary.byAgent.map((a) => ({
+      name: a.displayName || a.agentName,
+      avg: Math.round(a.avgResponseTime),
+      p95: Math.round(a.p95ResponseTime),
+      calls: a.totalCalls,
+    }));
+  }, [metricsSummary]);
+
+  const successRateByAgent = useMemo(() => {
+    if (!metricsSummary?.byAgent) return [];
+    return metricsSummary.byAgent.map((a) => ({
+      name: a.displayName || a.agentName,
+      rate: Math.round(a.successRate),
+      calls: a.totalCalls,
+    }));
+  }, [metricsSummary]);
+
+  const toolUsage = useMemo(() => {
+    const toolMap = new Map<string, number>();
+    for (const m of metrics) {
+      const tool = m.toolName || 'system-run';
+      toolMap.set(tool, (toolMap.get(tool) || 0) + 1);
+    }
+    return Array.from(toolMap.entries())
+      .map(([name, calls]) => ({ name, calls }))
+      .sort((a, b) => b.calls - a.calls)
+      .slice(0, 10);
+  }, [metrics]);
+
+  const tokenAreaChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
+    chart: { type: 'area', height: CHART_H, toolbar: { show: false }, zoom: { enabled: false }, background: 'transparent', fontFamily: 'inherit' },
+    colors: ['#3b82f6', '#10b981'],
+    dataLabels: { enabled: false },
+    stroke: { curve: 'smooth', width: 2.5 },
+    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: isDark ? 0.45 : 0.35, opacityTo: 0.02, stops: [0, 90, 100] } },
+    grid: { borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)', strokeDashArray: 3 },
+    xaxis: { categories: hourlyTokenData.map((d) => d.hour), labels: { style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
+    yaxis: { labels: { formatter: (v) => formatCompact(v), style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
+    tooltip: { theme: isDark ? 'dark' : 'light', y: { formatter: (v) => `${formatCompact(v)} tokens` } },
+    legend: { position: 'top', horizontalAlign: 'right', fontSize: '11px', labels: { colors: isDark ? '#a1a1aa' : '#64748b' } },
+  }), [hourlyTokenData, isDark]);
+
+  const tokenAreaSeries = useMemo(() => [
+    { name: 'Input', data: hourlyTokenData.map((d) => d.input) },
+    { name: 'Output', data: hourlyTokenData.map((d) => d.output) },
+  ], [hourlyTokenData]);
+
+  const latencyChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
+    chart: { type: 'bar', height: CHART_H, toolbar: { show: false }, background: 'transparent', fontFamily: 'inherit' },
+    plotOptions: { bar: { columnWidth: '40%', borderRadius: 4 } },
+    colors: ['#3b82f6', '#f97316'],
+    dataLabels: { enabled: false },
+    grid: { borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)', strokeDashArray: 3 },
+    xaxis: { categories: responseTimeByAgent.map((d) => d.name), labels: { style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' }, trim: true } },
+    yaxis: { labels: { formatter: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`), style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
+    tooltip: { theme: isDark ? 'dark' : 'light', y: { formatter: (v) => formatMs(v) } },
+    legend: { position: 'top', horizontalAlign: 'right', fontSize: '11px', labels: { colors: isDark ? '#a1a1aa' : '#64748b' } },
+  }), [responseTimeByAgent, isDark]);
+
+  const latencySeries = useMemo(() => [
+    { name: 'Average', data: responseTimeByAgent.map((d) => d.avg) },
+    { name: 'p95', data: responseTimeByAgent.map((d) => d.p95) },
+  ], [responseTimeByAgent]);
+
+  const successRateChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
+    chart: { type: 'bar', height: CHART_H, toolbar: { show: false }, background: 'transparent', fontFamily: 'inherit' },
+    plotOptions: { bar: { horizontal: true, barHeight: '38%', borderRadius: 6 } },
+    colors: ['#10b981'],
+    dataLabels: { enabled: true, formatter: (val) => `${val}%`, style: { colors: [isDark ? '#e4e4e7' : '#18181b'] } },
+    grid: { borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)', strokeDashArray: 3 },
+    xaxis: { categories: successRateByAgent.map((d) => d.name), max: 100, labels: { style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
+    yaxis: { labels: { style: { colors: isDark ? '#a1a1aa' : '#475569', fontSize: '11px', fontWeight: 600 } } },
+    tooltip: { theme: isDark ? 'dark' : 'light', y: { formatter: (v) => `${v}% Success` } },
+  }), [successRateByAgent, isDark]);
+
+  const successRateSeries = useMemo(() => [{ name: 'Success Rate', data: successRateByAgent.map((d) => d.rate) }], [successRateByAgent]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader icon={Gauge} title="Metrics & Cost" description="Loading telemetry..." />
+        <div className="flex flex-col items-center justify-center py-24">
+          <HourglassLoader size={52} />
         </div>
       </div>
     );
@@ -354,26 +487,15 @@ export function Metrics() {
         icon={Gauge}
         title="Metrics & Cost"
         description="Real-time telemetry, model token consumption, latency, and fleet spend analysis"
-        badge={
-          <Badge tone={socketConnected ? 'success' : 'neutral'} dot pulse={socketConnected}>
-            {socketConnected ? 'Live Feed' : 'Offline'}
-          </Badge>
-        }
+        badge={<Badge tone={socketConnected ? 'success' : 'neutral'} dot pulse={socketConnected}>{socketConnected ? 'Live Feed' : 'Offline'}</Badge>}
         actions={
           <div className="flex items-center gap-3">
             {lastUpdated && (
               <span className="text-2xs font-semibold tabular-nums text-ink-muted flex items-center gap-1 bg-inset px-2.5 py-1 rounded-xl border border-line-subtle">
-                <Clock size={11} /> {timeAgo(lastUpdated)}
+                <Clock size={11} /> {timeAgo(lastUpdated.toISOString())}
               </span>
             )}
-            <Button
-              variant="secondary"
-              icon={RefreshCw}
-              loading={refreshing}
-              onClick={() => fetchData(true)}
-            >
-              Refresh
-            </Button>
+            <Button variant="secondary" icon={RefreshCw} loading={refreshing} onClick={() => fetchData(true)}>Refresh</Button>
           </div>
         }
       />
@@ -433,9 +555,8 @@ export function Metrics() {
         </div>
       </div>
 
-      {/* Row 1: Token Usage Gradient Area Chart & Cost by Agent */}
+      {/* Row 1: Token Usage ApexChart & Cost by Agent */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Token Usage Area Chart */}
         <ChartPanel
           icon={Hash}
           title="Token Usage Over Time"
@@ -443,72 +564,17 @@ export function Metrics() {
           empty={!hasTokenSeries}
           emptyLabel="No token activity recorded in the past 24 hours."
         >
-          <ResponsiveContainer width="100%" height={CHART_H}>
-            <AreaChart data={hourlyTokenData} margin={{ top: 8, right: 12, bottom: 0, left: -6 }}>
-              <defs>
-                <linearGradient id="tokenInputGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.45} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
-                </linearGradient>
-                <linearGradient id="tokenOutputGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.45} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--c-line-subtle)" />
-              <XAxis
-                dataKey="hour"
-                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
-                tickLine={false}
-                axisLine={{ stroke: 'var(--c-line)' }}
-                interval="preserveStartEnd"
-                minTickGap={28}
-              />
-              <YAxis
-                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
-                tickLine={false}
-                axisLine={false}
-                width={46}
-                tickFormatter={formatCompact}
-              />
-              <Tooltip
-                content={
-                  <CustomChartTooltip
-                    valueFormatter={(val, name) => `${formatCompact(val)} ${name === 'input' ? 'Input' : 'Output'}`}
-                  />
-                }
-              />
-              <Legend
-                verticalAlign="top"
-                align="right"
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: 11, fontWeight: 600, color: 'var(--c-ink-muted)', paddingBottom: 10 }}
-                formatter={(v) => (v === 'input' ? 'Input Tokens' : 'Output Tokens')}
-              />
-              <Area
-                type="monotone"
-                dataKey="input"
-                stackId="1"
-                stroke="#3b82f6"
-                strokeWidth={2.5}
-                fill="url(#tokenInputGradient)"
-                name="input"
-              />
-              <Area
-                type="monotone"
-                dataKey="output"
-                stackId="1"
-                stroke="#10b981"
-                strokeWidth={2.5}
-                fill="url(#tokenOutputGradient)"
-                name="output"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          <div className="w-full h-[260px]">
+            <Chart
+              options={tokenAreaChartOptions}
+              series={tokenAreaSeries}
+              type="area"
+              height={CHART_H}
+              width="100%"
+            />
+          </div>
         </ChartPanel>
 
-        {/* Cost by Agent Ranked List */}
         <ChartPanel
           icon={CircleDollarSign}
           title="Cost Breakdown by Agent"
@@ -538,7 +604,6 @@ export function Metrics() {
                       </span>
                     </div>
                   </div>
-                  {/* Progress Meter */}
                   <div className="w-full h-2 rounded-full bg-surface border border-line-subtle overflow-hidden">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-all duration-500"
@@ -554,118 +619,40 @@ export function Metrics() {
 
       {/* Row 2: Response Time, Success Rate, Tool Usage */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Response Latency */}
         <ChartPanel
           icon={Timer}
           title="Response Time (Latency)"
           description="Average vs. p95 tail latency per agent"
           empty={responseTimeByAgent.length === 0}
         >
-          <ResponsiveContainer width="100%" height={CHART_H}>
-            <BarChart
-              data={responseTimeByAgent}
-              margin={{ top: 8, right: 8, bottom: 42, left: -6 }}
-              barGap={4}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--c-line-subtle)" />
-              <XAxis
-                dataKey="name"
-                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
-                tickLine={false}
-                axisLine={{ stroke: 'var(--c-line)' }}
-                tickFormatter={(n: string) => n.length > 14 ? `${n.slice(0, 12)}…` : n}
-                angle={-22}
-                textAnchor="end"
-                height={42}
-                interval={0}
-              />
-              <YAxis
-                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
-                tickLine={false}
-                axisLine={false}
-                width={46}
-                tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}s` : `${v}ms`)}
-              />
-              <Tooltip
-                content={
-                  <CustomChartTooltip
-                    valueFormatter={(val, name) => `${formatMs(val)} (${name === 'avg' ? 'Avg' : 'p95'})`}
-                  />
-                }
-              />
-              <Legend
-                verticalAlign="top"
-                align="right"
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: 11, fontWeight: 600, color: 'var(--c-ink-muted)', paddingBottom: 10 }}
-                formatter={(v) => (v === 'avg' ? 'Average Latency' : 'p95 Tail Latency')}
-              />
-              <Bar dataKey="avg" fill="#3b82f6" radius={[4, 4, 0, 0]} name="avg" maxBarSize={20} />
-              <Bar dataKey="p95" fill="#f97316" radius={[4, 4, 0, 0]} name="p95" maxBarSize={20} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="w-full h-[260px]">
+            <Chart
+              options={latencyChartOptions}
+              series={latencySeries}
+              type="bar"
+              height={CHART_H}
+              width="100%"
+            />
+          </div>
         </ChartPanel>
 
-        {/* Success Rate */}
         <ChartPanel
           icon={TrendingUp}
           title="Reliability & Success Rate"
           description="Zero-error task execution benchmark"
           empty={successRateByAgent.length === 0}
         >
-          <ResponsiveContainer width="100%" height={CHART_H}>
-            <BarChart
-              data={successRateByAgent}
-              margin={{ top: 8, right: 8, bottom: 42, left: -14 }}
-              barCategoryGap="28%"
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--c-line-subtle)" />
-              <XAxis
-                dataKey="name"
-                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
-                tickLine={false}
-                axisLine={{ stroke: 'var(--c-line)' }}
-                tickFormatter={(n: string) => n.length > 14 ? `${n.slice(0, 12)}…` : n}
-                angle={-22}
-                textAnchor="end"
-                height={42}
-                interval={0}
-              />
-              <YAxis
-                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
-                tickLine={false}
-                axisLine={false}
-                width={38}
-                domain={[0, 100]}
-                tickFormatter={(v) => `${v}%`}
-              />
-              <Tooltip
-                content={
-                  <CustomChartTooltip
-                    valueFormatter={(val) => `${val}% Success`}
-                  />
-                }
-              />
-              <Bar dataKey="rate" radius={[6, 6, 0, 0]} maxBarSize={32}>
-                {successRateByAgent.map((entry, i) => (
-                  <Cell
-                    key={i}
-                    fill={
-                      entry.rate >= 95
-                        ? '#10b981'
-                        : entry.rate >= 80
-                          ? '#f59e0b'
-                          : '#ef4444'
-                    }
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="w-full h-[260px]">
+            <Chart
+              options={successRateChartOptions}
+              series={successRateSeries}
+              type="bar"
+              height={CHART_H}
+              width="100%"
+            />
+          </div>
         </ChartPanel>
 
-        {/* Tool Invocations */}
         <ChartPanel
           icon={Wrench}
           title="Top Tool Invocations"
@@ -718,8 +705,8 @@ export function Metrics() {
             <LiveWaveform color="bg-brand-500" />
           </div>
 
-          <div className="overflow-x-auto no-scrollbar">
-            <table className="w-full text-left text-xs border-collapse min-w-[620px]">
+          <div className="hidden sm:block overflow-x-auto no-scrollbar">
+            <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-line-subtle text-[11px] uppercase tracking-wider text-ink-muted font-bold">
                   <th className="py-2.5 px-3">Agent</th>
@@ -775,9 +762,49 @@ export function Metrics() {
               </tbody>
             </table>
           </div>
+
+          <div className="sm:hidden space-y-3">
+            {insights.map((agent) => (
+              <div key={agent.agentId} className="p-3.5 rounded-xl bg-inset/60 border border-line-subtle space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 rounded-lg bg-surface border border-line flex items-center justify-center text-xs shrink-0">
+                      🤖
+                    </div>
+                    <span className="font-bold text-ink text-xs truncate">{agent.agentName}</span>
+                  </div>
+                  <span className={cn(
+                    'inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0',
+                    agent.successRate >= 90
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
+                  )}>
+                    {agent.successRate}%
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-line-subtle text-[11px]">
+                  <div>
+                    <span className="text-ink-muted block text-[10px]">Spend</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(agent.totalCostUsd)}</span>
+                  </div>
+                  <div>
+                    <span className="text-ink-muted block text-[10px]">Tokens</span>
+                    <span className="font-mono text-ink">{formatCompact(agent.totalTokens)}</span>
+                  </div>
+                  <div>
+                    <span className="text-ink-muted block text-[10px]">Avg Latency</span>
+                    <span className="font-mono text-ink">{formatMs(agent.avgDurationMs)}</span>
+                  </div>
+                  <div>
+                    <span className="text-ink-muted block text-[10px]">Steps/Runs</span>
+                    <span className="font-mono text-ink">{agent.runs}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 }
-
