@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { Header } from '@/components/layout/Header';
-import { api } from '@/lib/api';
-import { cn } from '@/lib/utils';
-import type { Agent, Gateway, McpServer, McpTool, LlmProvider, SoulTemplate, MarketplaceSkill, AgentSkill, AgentIntegration, ChannelType } from '@/types';
+import { ArrowLeft, Bot, Sparkles, Plus, Trash2, Check, X, Shield, RefreshCw, Cpu, ChevronDown } from 'lucide-react';
+import { PageHeader } from '../components/ui/PageHeader';
+import { Button, ButtonLink } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
+import { api } from '../lib/api';
+import { cn } from '../lib/utils';
+import type { Agent, Gateway, McpServer, McpTool, LlmProvider, SoulTemplate, MarketplaceSkill, AgentSkill, AgentIntegration, ChannelType } from '../types';
 
 interface McpServerWithTools extends McpServer {
   tools?: McpTool[];
@@ -57,21 +61,19 @@ function EmojiPicker({ value, onChange }: { value: string; onChange: (v: string)
         type="button"
         onClick={() => setOpen(!open)}
         className={cn(
-          'w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-900 border text-sm transition-all',
-          open ? 'border-nexus-500/50' : 'border-white/10 hover:border-white/20'
+          'w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-inset border text-sm transition-all cursor-pointer shadow-2xs',
+          open ? 'border-brand-500 ring-2 ring-brand-500/10' : 'border-line hover:border-line-strong'
         )}
       >
-        <span className="text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-lg bg-surface-850">
-          {value || <span className="text-gray-600 text-base">?</span>}
+        <span className="text-xl leading-none w-8 h-8 flex items-center justify-center rounded-lg bg-surface border border-line-subtle shadow-xs shrink-0">
+          {value || <span className="text-ink-faint text-sm">?</span>}
         </span>
-        <span className="text-gray-400 text-xs">{value ? 'Change avatar' : 'Pick an avatar'}</span>
-        <svg className={cn('w-3.5 h-3.5 text-gray-500 ml-auto transition-transform', open && 'rotate-180')} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <span className="text-ink-muted text-xs font-medium">{value ? 'Change avatar' : 'Pick an avatar'}</span>
+        <ChevronDown size={14} className={cn('text-ink-muted ml-auto transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1.5 left-0 w-full rounded-lg bg-surface-900 border border-white/10 shadow-xl shadow-black/40 p-2">
-          <div className="grid grid-cols-6 gap-1">
+        <div className="absolute z-50 mt-1.5 left-0 w-full rounded-2xl bg-surface border border-line shadow-xl p-2.5">
+          <div className="grid grid-cols-6 gap-1.5">
             {EMOJI_OPTIONS.map(({ emoji, label }) => (
               <button
                 key={label}
@@ -79,8 +81,8 @@ function EmojiPicker({ value, onChange }: { value: string; onChange: (v: string)
                 onClick={() => { onChange(emoji); setOpen(false); }}
                 title={label}
                 className={cn(
-                  'w-full aspect-square rounded-lg flex items-center justify-center text-xl hover:bg-white/10 transition-colors',
-                  value === emoji ? 'bg-nexus-600/20 ring-1 ring-nexus-500/40' : ''
+                  'w-full aspect-square rounded-xl flex items-center justify-center text-xl hover:bg-hover transition-colors cursor-pointer',
+                  value === emoji ? 'bg-brand-500/15 ring-2 ring-brand-500' : ''
                 )}
               >
                 {emoji}
@@ -91,7 +93,7 @@ function EmojiPicker({ value, onChange }: { value: string; onChange: (v: string)
             <button
               type="button"
               onClick={() => { onChange(''); setOpen(false); }}
-              className="w-full mt-1.5 px-2 py-1.5 rounded text-[11px] text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-all text-center"
+              className="w-full mt-2 px-2 py-1.5 rounded-lg text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-all text-center cursor-pointer"
             >
               Remove avatar
             </button>
@@ -578,47 +580,54 @@ export function AgentCreate() {
   }
 
   return (
-    <div>
-      {/* Header with breadcrumb */}
-      <header className="py-6">
-        <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-          <Link to="/controls" className="hover:text-gray-300 transition-colors">
-            Agent Controls
-          </Link>
-          <span>/</span>
-          <span className="text-gray-400">{isEditMode ? 'Edit Agent' : 'Create Agent'}</span>
-        </div>
-        <h2 className="text-2xl font-bold text-white">
-          {isEditMode ? 'Edit Agent' : 'Create Agent'}
-        </h2>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {isEditMode
+    <div className="space-y-6">
+      {/* Header with breadcrumb & Back Button */}
+      <PageHeader
+        icon={Bot}
+        title={isEditMode ? 'Edit Agent' : 'Create Agent'}
+        description={
+          isEditMode
             ? 'Modify agent configuration, personality, and MCP server connections'
-            : 'Configure a new AI agent with personality, workspace, and tool connections'}
-        </p>
-      </header>
+            : 'Configure a new AI agent with personality, workspace, and tool connections'
+        }
+        breadcrumbs={[
+          { label: 'Fleet Controls', to: '/controls' },
+          { label: isEditMode ? 'Edit Agent' : 'Create Agent' },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <ButtonLink
+              to="/controls"
+              variant="secondary"
+              icon={ArrowLeft}
+            >
+              Back
+            </ButtonLink>
+          </div>
+        }
+      />
 
       {/* Error banner */}
       {error && (
-        <div className="mb-6 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center justify-between">
+        <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center justify-between shadow-2xs">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300 ml-4">
+          <button onClick={() => setError(null)} className="text-red-600 dark:text-red-300 font-semibold ml-4 hover:underline cursor-pointer">
             Dismiss
           </button>
         </div>
       )}
 
       <form onSubmit={handleSubmit}>
-        <div className="flex gap-6">
+        <div className="flex flex-col lg:flex-row gap-6">
           {/* Left column: Form + SOUL.md */}
-          <div className={cn('flex flex-col gap-6', isEditMode ? 'w-2/3' : 'w-full max-w-3xl')}>
+          <div className={cn('flex flex-col gap-6', isEditMode ? 'w-full lg:w-2/3' : 'w-full max-w-3xl')}>
             {/* About Your Agent — Primary Fields */}
-            <div className="rounded-xl border border-white/5 bg-surface-850 p-5">
-              <h3 className="text-sm font-semibold text-white mb-4">About Your Agent</h3>
+            <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs">
+              <h3 className="text-sm font-bold text-ink mb-4">About Your Agent</h3>
               <div className="grid grid-cols-2 gap-4">
                 {/* Display Name */}
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                  <label className="block text-xs font-semibold text-ink-muted mb-1.5">
                     Display Name
                   </label>
                   <input
@@ -626,14 +635,14 @@ export function AgentCreate() {
                     value={displayName}
                     onChange={(e) => handleDisplayNameChange(e.target.value)}
                     placeholder="My Agent"
-                    className="w-full px-3 py-2 rounded-lg bg-surface-900 border border-white/10 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-nexus-500/50"
+                    className="w-full h-10 px-3.5 py-2 rounded-xl bg-inset border border-line text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
                     required
                   />
                 </div>
 
                 {/* Avatar Emoji Picker */}
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                  <label className="block text-xs font-semibold text-ink-muted mb-1.5">
                     Avatar
                   </label>
                   <EmojiPicker value={avatar} onChange={setAvatar} />
@@ -641,7 +650,7 @@ export function AgentCreate() {
 
                 {/* Description */}
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                  <label className="block text-xs font-semibold text-ink-muted mb-1.5">
                     Description
                   </label>
                   <textarea
@@ -649,16 +658,16 @@ export function AgentCreate() {
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="What does this agent do?"
                     rows={3}
-                    className="w-full px-3 py-2 rounded-lg bg-surface-900 border border-white/10 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-nexus-500/50 resize-y"
+                    className="w-full p-3 rounded-xl bg-inset border border-line text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 resize-y leading-relaxed"
                   />
                 </div>
 
                 {/* Agent-to-Agent Toggle */}
                 <div className="col-span-2">
-                  <div className="flex items-center justify-between px-4 py-3 rounded-lg bg-surface-900 border border-white/10">
+                  <div className="flex items-center justify-between p-3.5 rounded-xl bg-inset border border-line shadow-2xs">
                     <div>
-                      <p className="text-sm font-medium text-white">Agent-to-Agent (A2A)</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <p className="text-xs font-bold text-ink">Agent-to-Agent (A2A)</p>
+                      <p className="text-[11px] text-ink-muted mt-0.5">
                         Allow this agent to discover and communicate with other A2A-enabled agents
                       </p>
                     </div>
@@ -666,13 +675,13 @@ export function AgentCreate() {
                       type="button"
                       onClick={() => setAgentToAgent(!agentToAgent)}
                       className={cn(
-                        'relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ml-4',
-                        agentToAgent ? 'bg-nexus-500' : 'bg-gray-600'
+                        'relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ml-4 cursor-pointer',
+                        agentToAgent ? 'bg-brand-600' : 'bg-line-strong'
                       )}
                     >
                       <div
                         className={cn(
-                          'absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200',
+                          'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-xs transition-transform duration-200',
                           agentToAgent ? 'translate-x-5.5' : 'translate-x-0.5'
                         )}
                       />
@@ -683,56 +692,54 @@ export function AgentCreate() {
 
               {/* Gateway warning — only when no auto-provisioning and no gateways */}
               {gatewayInfo && !gatewayInfo.hasDefaultConfig && gatewayInfo.gatewayCount === 0 && (
-                <div className="mt-4 px-3 py-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20 text-amber-400 text-xs">
+                <div className="mt-4 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs">
                   No agent connection available. Contact your admin or{' '}
-                  <Link to="/gateways" className="underline hover:text-amber-300">configure a gateway</Link>.
+                  <Link to="/gateways" className="underline font-semibold hover:text-amber-800 dark:hover:text-amber-200">configure a gateway</Link>.
                 </div>
               )}
             </div>
 
             {/* Advanced Settings — Collapsible */}
-            <div className="rounded-xl border border-white/5 bg-surface-850">
+            <div className="rounded-2xl border border-line-subtle bg-surface shadow-xs">
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="w-full flex items-center justify-between px-5 py-4 text-sm font-medium text-gray-400 hover:text-gray-200 transition-all"
+                className="w-full flex items-center justify-between px-5 py-3.5 text-xs font-bold text-ink-muted hover:text-ink transition-all cursor-pointer"
               >
                 <span>Advanced Settings</span>
-                <svg
-                  className={cn('w-4 h-4 transition-transform', showAdvanced && 'rotate-180')}
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                <ChevronDown
+                  size={15}
+                  className={cn('transition-transform duration-200', showAdvanced && 'rotate-180')}
+                />
               </button>
               {showAdvanced && (
-                <div className="px-5 pb-5 pt-0 grid grid-cols-2 gap-4 border-t border-white/5">
+                <div className="px-5 pb-5 pt-0 grid grid-cols-2 gap-4 border-t border-line-subtle">
                   {/* Internal ID (slug) */}
-                  <div className="col-span-2 sm:col-span-1">
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                  <div className="col-span-2 sm:col-span-1 pt-3">
+                    <label className="block text-xs font-semibold text-ink-muted mb-1.5">
                       Internal ID{' '}
-                      <span className="text-gray-600 font-normal">(auto-generated)</span>
+                      <span className="text-ink-faint font-normal">(auto-generated)</span>
                     </label>
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => handleNameChange(e.target.value)}
                       placeholder="my-agent"
-                      className="w-full px-3 py-2 rounded-lg bg-surface-900 border border-white/10 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-nexus-500/50 font-mono"
+                      className="w-full h-10 px-3.5 py-2 rounded-xl bg-inset border border-line text-xs text-ink placeholder:text-ink-faint font-mono shadow-2xs focus:outline-none focus:border-brand-500"
                       required
                     />
                   </div>
 
                   {/* Connection Gateway — hidden when auto-provisioned with 0-1 gateways */}
                   {!(gatewayInfo?.hasDefaultConfig && gatewayInfo.gatewayCount <= 1) && (
-                    <div className="col-span-2 sm:col-span-1">
-                      <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                    <div className="col-span-2 sm:col-span-1 pt-3">
+                      <label className="block text-xs font-semibold text-ink-muted mb-1.5">
                         Connection Gateway
                       </label>
                       <select
                         value={gatewayId}
                         onChange={(e) => setGatewayId(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-surface-900 border border-white/10 text-sm text-white focus:outline-none focus:border-nexus-500/50"
+                        className="w-full h-10 px-3 py-2 rounded-xl bg-inset border border-line text-xs text-ink shadow-2xs focus:outline-none focus:border-brand-500 cursor-pointer"
                       >
                         <option value="">Auto (default)</option>
                         {gateways.map((gw) => (
@@ -1346,7 +1353,7 @@ export function AgentCreate() {
                   ))}
                 </select>
                 {selectedTemplateId && (
-                  <p className="text-[11px] text-gray-500 mt-1">
+                  <p className="text-[11px] text-ink-muted mt-1">
                     Template content loaded. Customize it below.
                   </p>
                 )}
@@ -1356,59 +1363,67 @@ export function AgentCreate() {
                 onChange={(e) => setSoulMd(e.target.value)}
                 rows={14}
                 placeholder="# Agent Personality&#10;&#10;Define who this agent is, how it behaves, and what instructions it should follow..."
-                className="w-full px-4 py-3 rounded-lg bg-surface-900 border border-white/10 text-sm text-gray-300 font-mono resize-y focus:outline-none focus:border-nexus-500/50 leading-relaxed"
+                className="w-full p-4 rounded-xl bg-inset border border-line text-xs text-ink font-mono resize-y focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 leading-relaxed shadow-inner"
               />
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-3">
-              <button
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <Button
                 type="submit"
-                disabled={saving}
-                className="px-6 py-2.5 rounded-lg text-sm font-medium bg-nexus-600 text-white hover:bg-nexus-500 transition-all disabled:opacity-50"
+                variant="primary"
+                loading={saving}
+                className="px-6 shadow-xs"
               >
                 {saving
                   ? 'Saving...'
                   : isEditMode
                     ? 'Save Changes'
                     : 'Create Agent'}
-              </button>
-              <Link
+              </Button>
+
+              <ButtonLink
                 to="/controls"
-                className="px-6 py-2.5 rounded-lg text-sm font-medium bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-200 transition-all"
+                variant="secondary"
+                icon={ArrowLeft}
               >
-                Cancel
-              </Link>
+                Cancel / Back
+              </ButtonLink>
+
               {isEditMode && (
                 <>
                   <div className="flex-1" />
                   {showDeleteConfirm ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-red-400">Are you sure?</span>
-                      <button
+                      <span className="text-xs text-rose-600 dark:text-rose-400 font-semibold">Are you sure?</span>
+                      <Button
                         type="button"
+                        variant="danger"
+                        size="sm"
                         onClick={handleDelete}
-                        disabled={deleting}
-                        className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25 transition-all disabled:opacity-50"
+                        loading={deleting}
                       >
-                        {deleting ? 'Deleting...' : 'Yes, Delete'}
-                      </button>
-                      <button
+                        Yes, Delete
+                      </Button>
+                      <Button
                         type="button"
+                        variant="secondary"
+                        size="sm"
                         onClick={() => setShowDeleteConfirm(false)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 transition-all"
                       >
                         Cancel
-                      </button>
+                      </Button>
                     </div>
                   ) : (
-                    <button
+                    <Button
                       type="button"
+                      variant="danger"
+                      size="sm"
+                      icon={Trash2}
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25 transition-all"
                     >
                       Delete Agent
-                    </button>
+                    </Button>
                   )}
                 </>
               )}
