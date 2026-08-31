@@ -212,12 +212,23 @@ export function Spinner({
   );
 }
 
-/** Centred spinner for first paint of a whole panel. */
-export function LoadingPanel({ label = 'Loading' }: { label?: string }) {
+import { HourglassLoader } from './HourglassLoader';
+
+export { HourglassLoader };
+
+/** Centred hourglass loader for panel/page loading states. */
+export function LoadingPanel({
+  label = 'Loading...',
+  compact = false,
+  className,
+}: {
+  label?: string;
+  compact?: boolean;
+  className?: string;
+}) {
   return (
-    <div className="flex items-center justify-center gap-2.5 py-14 text-sm text-ink-subtle">
-      <Spinner />
-      {label}
+    <div className={cn('flex flex-col items-center justify-center py-12', className)}>
+      <HourglassLoader size={compact ? 36 : 48} label={label} />
     </div>
   );
 }

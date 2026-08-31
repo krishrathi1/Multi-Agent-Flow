@@ -346,6 +346,52 @@ export const lottieAnimations = {
       },
     ],
   },
+  // 6. Hourglass Sand Timer Loading Animation (LottieFiles)
+  loading: {
+    v: '5.7.4',
+    fr: 30,
+    ip: 0,
+    op: 60,
+    w: 100,
+    h: 100,
+    nm: 'Loading Hourglass',
+    ddd: 0,
+    assets: [],
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        nm: 'Hourglass Flip Group',
+        sr: 1,
+        ks: {
+          o: { k: 100 },
+          r: { k: [{ t: 0, s: [0] }, { t: 45, s: [0] }, { t: 60, s: [180] }] },
+          p: { k: [50, 50, 0] },
+          a: { k: [0, 0, 0] },
+          s: { k: [100, 100, 100] },
+        },
+        shapes: [
+          { ty: 'rc', p: { k: [0, -38] }, s: { k: [60, 8] }, r: { k: 4 } },
+          { ty: 'fl', c: { k: [0.92, 0.35, 0.05, 1] } },
+          { ty: 'rc', p: { k: [0, 38] }, s: { k: [60, 8] }, r: { k: 4 } },
+          { ty: 'fl', c: { k: [0.92, 0.35, 0.05, 1] } },
+        ],
+      },
+    ],
+  },
+  hourglassLoader: {
+    v: '5.7.4',
+    fr: 30,
+    ip: 0,
+    op: 60,
+    w: 100,
+    h: 100,
+    nm: 'Hourglass Loader',
+    ddd: 0,
+    assets: [],
+    layers: [],
+  },
 };
 
 export type AnimationType = keyof typeof lottieAnimations;
@@ -357,6 +403,8 @@ interface LottieAnimationProps {
   autoplay?: boolean;
   className?: string;
 }
+
+import { HourglassLoader } from './HourglassLoader';
 
 export function LottieAnimation({
   type,
@@ -373,6 +421,10 @@ export function LottieAnimation({
 
   if (!mounted) {
     return <div style={{ width: size, height: size }} className={cn('shrink-0', className)} />;
+  }
+
+  if (type === 'loading' || type === 'hourglassLoader') {
+    return <HourglassLoader size={typeof size === 'number' ? size : 48} className={className} />;
   }
 
   const animationData = lottieAnimations[type] || lottieAnimations.aiBrain;
