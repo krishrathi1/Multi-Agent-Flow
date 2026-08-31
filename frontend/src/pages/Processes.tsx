@@ -118,25 +118,25 @@ function ProcessCard({
   };
 
   return (
-    <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 sm:p-5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all flex flex-col justify-between space-y-4">
-      <div className="space-y-3">
+    <div className="rounded-2xl border border-line-subtle bg-surface p-4 sm:p-5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all flex flex-col justify-between space-y-4 overflow-hidden relative">
+      <div className="space-y-3 min-w-0">
         {/* Header: Title + Status Pill */}
-        <div className="flex items-start justify-between gap-2.5">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-start justify-between gap-2 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
               <Factory size={15} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h3 className="truncate text-xs sm:text-sm font-bold text-ink" title={process.name}>
                 {process.name}
               </h3>
-              <p className="text-[10px] font-mono text-ink-muted mt-0.5">
+              <p className="text-[10px] font-mono text-ink-muted mt-0.5 truncate">
                 Created {timeAgo(process.createdAt)}
               </p>
             </div>
           </div>
 
-          <div className="shrink-0">
+          <div className="shrink-0 ml-2">
             {getStatusBadge()}
           </div>
         </div>
@@ -149,27 +149,27 @@ function ProcessCard({
         )}
 
         {/* Stage → Agent Pipeline */}
-        <div className="space-y-2 pt-1">
+        <div className="space-y-2 pt-1 min-w-0">
           <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted block">
             Execution Pipeline Stages ({stages.length})
           </span>
           <div className="space-y-1.5">
             {stages.map((stage) => (
-              <div key={stage} className="flex items-center gap-2 bg-inset/50 p-2 rounded-xl border border-line-subtle">
+              <div key={stage} className="flex items-center gap-2 bg-inset/50 p-2 rounded-xl border border-line-subtle min-w-0">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-lg bg-surface text-[10px] font-mono font-bold text-brand-600 dark:text-brand-400 border border-line-subtle shadow-2xs">
                   {stage}
                 </span>
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
                   {agents
                     .filter((a) => a.processStage === stage)
                     .map((a) => (
                       <span
                         key={a.id}
                         title={`${a.displayName} — ${a.processRole ?? 'agent'}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-line-subtle bg-surface py-0.5 pl-1.5 pr-2.5 text-2xs font-semibold text-ink shadow-2xs"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-line-subtle bg-surface py-0.5 pl-1.5 pr-2.5 text-2xs font-semibold text-ink shadow-2xs max-w-full"
                       >
                         <Avatar name={a.displayName} emoji={a.avatar} size="xs" />
-                        <span className="truncate max-w-[140px]">{a.displayName}</span>
+                        <span className="truncate max-w-[110px] sm:max-w-[140px]">{a.displayName}</span>
                       </span>
                     ))}
                 </div>
@@ -180,7 +180,7 @@ function ProcessCard({
 
         {/* Telemetry Metrics Row */}
         <div className="flex items-center justify-between border-t border-line-subtle pt-3 text-2xs font-mono text-ink-muted">
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
             <span className="flex items-center gap-1 bg-inset px-2 py-0.5 rounded-lg border border-line-subtle">
               <Bot size={11} className="text-brand-500" />
               {process.agentCount ?? agents.length} agents
@@ -200,7 +200,7 @@ function ProcessCard({
       {/* Action Footer */}
       <div className="flex items-center justify-between gap-2 border-t border-line-subtle pt-3 mt-1 flex-wrap">
         {/* Primary Controls */}
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
           {running ? (
             <Button
               variant="secondary"
@@ -248,7 +248,7 @@ function ProcessCard({
 
           <Link
             to={`/activity?processId=${process.id}`}
-            className="inline-flex items-center gap-1 rounded-xl border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-ink-muted hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-500/30 transition-all shadow-2xs"
+            className="inline-flex items-center gap-1 rounded-xl border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-ink-muted hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-500/30 transition-all shadow-2xs shrink-0"
           >
             <ActivityIcon size={12} className="text-brand-500" />
             <span>Activity</span>
