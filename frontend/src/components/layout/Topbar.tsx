@@ -88,18 +88,18 @@ export function Topbar() {
   return (
     <header
       className={cn(
-        'sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3',
-        'border-b border-line-subtle bg-surface px-5 backdrop-blur-md',
+        'sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 sm:gap-3',
+        'border-b border-line-subtle bg-surface px-3 sm:px-5 backdrop-blur-md',
         'transition-colors duration-200',
       )}
     >
       {/* ---- Left: Sidebar Toggle & Search ---- */}
-      <div className="flex flex-1 items-center gap-3 max-w-xl">
+      <div className="flex flex-1 items-center gap-2 sm:gap-3 max-w-xl min-w-0">
         <button
           type="button"
           onClick={toggleSidebar}
           aria-label="Toggle sidebar navigation"
-          className="grid h-8 w-8 place-items-center rounded-lg text-ink-muted hover:bg-hover hover:text-ink transition-colors"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-muted hover:bg-hover hover:text-ink transition-colors cursor-pointer"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="4" x2="20" y1="12" y2="12" />
@@ -111,17 +111,17 @@ export function Topbar() {
         {/* Search input capsule */}
         <form
           onSubmit={submitSearch}
-          className="relative w-full max-w-sm group"
+          className="relative w-full max-w-[160px] sm:max-w-sm group"
           role="search"
         >
           <label htmlFor="global-search" className="sr-only">
             Search missions, agents, logs
           </label>
           <Search
-            size={14}
+            size={13}
             strokeWidth={2}
             className={cn(
-              'pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 transition-colors duration-200',
+              'pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 transition-colors duration-200',
               isFocused ? 'text-brand-500' : 'text-ink-faint group-hover:text-ink-muted',
             )}
             aria-hidden
@@ -134,10 +134,10 @@ export function Topbar() {
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search missions, agents, logs..."
+            placeholder="Search..."
             className={cn(
-              'h-8.5 w-full rounded-xl border bg-inset/40',
-              'pl-8.5 pr-9 text-xs text-ink placeholder:text-ink-faint shadow-2xs',
+              'h-8 w-full rounded-xl border bg-inset/40',
+              'pl-7 pr-7 sm:pl-8.5 sm:pr-9 text-xs text-ink placeholder:text-ink-faint shadow-2xs',
               'transition-all duration-200',
               isFocused
                 ? 'border-brand-500/60 bg-surface ring-2 ring-brand-500/10'
@@ -151,9 +151,9 @@ export function Topbar() {
               type="button"
               onClick={clearSearch}
               aria-label="Clear search"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-ink-faint hover:bg-hover hover:text-ink transition-colors"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-ink-faint hover:bg-hover hover:text-ink transition-colors"
             >
-              <X size={13} strokeWidth={2} />
+              <X size={12} strokeWidth={2} />
             </button>
           ) : (
             <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center justify-center rounded border border-line-subtle bg-surface px-1.5 py-0.5 font-mono text-[9px] font-medium text-ink-faint shadow-2xs">
@@ -164,11 +164,11 @@ export function Topbar() {
       </div>
 
       {/* ---- Right: Telemetry & Actions ---- */}
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
         {/* Live Socket Gateway Indicator */}
         <div
           className={cn(
-            'flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold backdrop-blur-sm shadow-2xs',
+            'flex h-6.5 sm:h-7 items-center gap-1 sm:gap-1.5 rounded-full px-2 sm:px-2.5 text-[11px] sm:text-xs font-semibold backdrop-blur-sm shadow-2xs',
             socketConnected
               ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
               : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',

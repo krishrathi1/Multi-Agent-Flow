@@ -18,8 +18,16 @@ export function Layout() {
   const { setTask, removeTask } = useTaskStore();
   const { accessToken, isAuthenticated } = useAuthStore();
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useUiStore((s) => s.setSidebarCollapsed);
   const setSocketConnected = useUiStore((s) => s.setSocketConnected);
   const { pathname } = useLocation();
+
+  // Close sidebar drawer on mobile on route change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setSidebarCollapsed(true);
+    }
+  }, [pathname, setSidebarCollapsed]);
 
   useEffect(() => {
     fetchAgents();
@@ -75,7 +83,6 @@ export function Layout() {
 
     // Agent-to-agent messaging events (real-time monitoring across the app)
     s.on('agent:message', () => {
-      // Trigger a stats refresh so dashboard counters update
       fetchStats();
     });
 
@@ -111,13 +118,23 @@ export function Layout() {
         Skip to main content
       </a>
 
+      {/* Mobile Drawer Backdrop Overlay */}
+      {!sidebarCollapsed && (
+        <div
+          onClick={() => setSidebarCollapsed(true)}
+          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-xs lg:hidden transition-opacity cursor-pointer"
+          aria-hidden="true"
+        />
+      )}
+
       <Sidebar />
       <CommandPalette />
 
       <div
         className={cn(
           'flex min-h-dvh flex-col transition-[padding] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
-          sidebarCollapsed ? 'pl-[68px]' : 'pl-[248px]',
+          'pl-0',
+          sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[248px]',
         )}
       >
         <Topbar />
@@ -125,7 +142,7 @@ export function Layout() {
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 px-6 py-6 outline-none"
+          className="flex-1 px-3.5 sm:px-6 py-4 sm:py-6 outline-none"
         >
           {/* Caps line length on ultrawide displays instead of stretching. */}
           <div className="mx-auto w-full max-w-[1600px]">

@@ -87,11 +87,18 @@ const navSections: NavSection[] = [
 export function Sidebar() {
   const navigate = useNavigate();
   const { user, organization, logout } = useAuthStore();
-  // Collapse lives in the UI store so the main region's offset stays in sync.
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  const setSidebarCollapsed = useUiStore((s) => s.setSidebarCollapsed);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Auto-close on mobile after clicking nav
+  const handleNavClick = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setSidebarCollapsed(true);
+    }
+  };
 
   // Close the account menu on outside click or Escape.
   useEffect(() => {
@@ -113,8 +120,6 @@ export function Sidebar() {
     navigate('/login');
   };
 
-  const width = collapsed ? 'w-[68px]' : 'w-[248px]';
-
   const orgInitial = useMemo(
     () => organization?.name?.charAt(0).toUpperCase() ?? 'N',
     [organization?.name],
@@ -123,9 +128,15 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-line-subtle',
-        'bg-surface transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
-        width,
+        'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-line-subtle bg-surface transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
+        // Mobile Drawer sliding
+        collapsed
+          ? '-translate-x-full lg:translate-x-0'
+          : 'translate-x-0 shadow-2xl lg:shadow-none',
+        // Width on desktop vs mobile
+        collapsed
+          ? 'lg:w-[68px]'
+          : 'w-[280px] max-w-[85vw] lg:w-[248px]',
       )}
       aria-label="Main navigation"
     >
@@ -133,7 +144,7 @@ export function Sidebar() {
       <div
         className={cn(
           'flex h-14 shrink-0 items-center border-b border-line-subtle/80 bg-surface/80 backdrop-blur-md',
-          collapsed ? 'justify-center px-2' : 'justify-between px-3.5',
+          collapsed ? 'lg:justify-center lg:px-2 px-3.5 justify-between' : 'justify-between px-3.5',
         )}
       >
         <div className="flex items-center gap-2.5 min-w-0">
@@ -141,8 +152,8 @@ export function Sidebar() {
             {orgInitial}
             <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-emerald-500 shadow-2xs" />
           </div>
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
+          {(!collapsed || typeof window !== 'undefined') && (
+            <div className={cn('min-w-0 flex-1', collapsed ? 'lg:hidden' : 'block')}>
               <div className="flex items-center gap-1.5">
                 <p className="truncate text-xs font-bold tracking-tight text-ink">
                   {organization?.name || 'Nexus Control Plane'}
@@ -164,6 +175,7 @@ export function Sidebar() {
       <div className={cn('shrink-0 pt-3.5', collapsed ? 'px-2.5' : 'px-3.5')}>
         <NavLink
           to="/processes"
+          onClick={handleNavClick}
           title={collapsed ? 'New Production' : undefined}
           className={({ isActive }) =>
             cn(
@@ -207,6 +219,7 @@ export function Sidebar() {
                   <NavLink
                     to={item.path}
                     end={item.end}
+                    onClick={handleNavClick}
                     title={collapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       cn(
