@@ -27,6 +27,51 @@ import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/States';
 import type { Agent, ChatMessage, AgentStatus, Process } from '../types';
 
+function FormattedMessage({ text }: { text: string }) {
+  const lines = text.split('\n');
+
+  return (
+    <div className="space-y-2 leading-relaxed">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={idx} className="h-1" />;
+
+        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          return (
+            <div key={idx} className="flex items-start gap-2 ml-1">
+              <span className="text-brand-500 font-bold">•</span>
+              <span>{renderInlineFormatting(trimmed.substring(2))}</span>
+            </div>
+          );
+        }
+
+        return <p key={idx}>{renderInlineFormatting(line)}</p>;
+      })}
+    </div>
+  );
+}
+
+function renderInlineFormatting(content: string) {
+  const parts = content.split(/(\*\*.*?\*\*|`.*?`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      return (
+        <strong key={i} className="font-bold text-ink">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+      return (
+        <code key={i} className="rounded bg-inset px-1.5 py-0.5 font-mono text-[11px] font-semibold text-brand-600 dark:text-brand-400 border border-line-subtle">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+}
+
 export function Chat() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<{ type: 'mother'; processId?: string } | { type: 'agent'; agentId: string }>({
@@ -196,11 +241,11 @@ export function Chat() {
                   setSelectedProcessId(e.target.value);
                   setSelectedTarget({ type: 'mother', processId: e.target.value === 'all' ? undefined : e.target.value });
                 }}
-                className="w-full appearance-none rounded-lg border border-line bg-inset py-2 pl-3 pr-8 text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+                className="w-full truncate appearance-none rounded-xl border border-line bg-surface py-2 pl-3 pr-8 text-xs font-semibold text-ink shadow-2xs focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
               >
-                <option value="all">🌐 All Production Chains (Fleet View)</option>
+                <option value="all" className="bg-surface text-ink py-1">🌐 All Production Chains (Fleet View)</option>
                 {processes.map((p) => (
-                  <option key={p.id} value={p.id}>
+                  <option key={p.id} value={p.id} className="bg-surface text-ink py-1">
                     ⚡ {p.name}
                   </option>
                 ))}
@@ -354,10 +399,10 @@ export function Chat() {
                       'rounded-2xl px-4 py-3 text-xs leading-relaxed shadow-sm border font-sans',
                       isUser
                         ? 'bg-brand-600 text-white border-brand-500/40 rounded-tr-none'
-                        : 'bg-surface text-ink border-line-subtle rounded-tl-none whitespace-pre-wrap'
+                        : 'bg-surface text-ink border-line-subtle rounded-tl-none'
                     )}
                   >
-                    {msg.content}
+                    <FormattedMessage text={msg.content} />
                   </div>
                 </div>
               );
