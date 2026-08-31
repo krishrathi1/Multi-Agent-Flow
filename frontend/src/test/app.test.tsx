@@ -777,9 +777,9 @@ describe('Component Rendering', () => {
       );
 
       // The sidebar should render all section labels
-      expect(screen.getByText('Monitor')).toBeInTheDocument();
-      expect(screen.getByText('Manage')).toBeInTheDocument();
-      expect(screen.getByText('Observe')).toBeInTheDocument();
+      expect(screen.getByText('Core Fleet')).toBeInTheDocument();
+      expect(screen.getByText('Work & Governance')).toBeInTheDocument();
+      expect(screen.getByText('System & Tools')).toBeInTheDocument();
     });
 
     it('renders all nav items', () => {
@@ -789,68 +789,51 @@ describe('Component Rendering', () => {
         </MemoryRouter>,
       );
 
-      // Monitor section items
+      // Core Fleet section items
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
-      expect(screen.getByText('Activity Feed')).toBeInTheDocument();
+      expect(screen.getByText('Production Blocks')).toBeInTheDocument();
+      expect(screen.getByText('Fleet Controls')).toBeInTheDocument();
       expect(screen.getByText('Mother Chat')).toBeInTheDocument();
-      expect(screen.getByText('Communications')).toBeInTheDocument();
-      expect(screen.getByText('Timeline')).toBeInTheDocument();
 
-      // Manage section items
-      expect(screen.getByText('Boards')).toBeInTheDocument();
-      expect(screen.getByText('Approvals')).toBeInTheDocument();
+      // Work & Governance section items
       expect(screen.getByText('Task Board')).toBeInTheDocument();
+      expect(screen.getByText('Approvals & Audit')).toBeInTheDocument();
       expect(screen.getByText('Network Graph')).toBeInTheDocument();
-      expect(screen.getByText('Agent Controls')).toBeInTheDocument();
-      expect(screen.getByText('Gateways')).toBeInTheDocument();
+      expect(screen.getByText('Live Activity')).toBeInTheDocument();
+      expect(screen.getByText('Run History')).toBeInTheDocument();
 
-
-
-      // Observe section items
+      // System & Tools section items
       expect(screen.getByText('Metrics & Cost')).toBeInTheDocument();
-      expect(screen.getByText('Alerts')).toBeInTheDocument();
-      expect(screen.getByText('Search & Audit')).toBeInTheDocument();
+      expect(screen.getByText('Gateways')).toBeInTheDocument();
+      expect(screen.getByText('MCP Hub & Tools')).toBeInTheDocument();
+      expect(screen.getByText('Skills Library')).toBeInTheDocument();
+      expect(screen.getByText('Alerts & Incidents')).toBeInTheDocument();
 
       // The primary action creates a production chain.
       expect(screen.getByText('New Production')).toBeInTheDocument();
     });
 
-    it('renders the MyceliumOps brand title', () => {
+    it('renders organization name and status', () => {
       render(
         <MemoryRouter>
           <Sidebar />
         </MemoryRouter>,
       );
 
-      expect(screen.getByText((_, el) => el?.textContent === 'MyceliumOps')).toBeInTheDocument();
-      expect(screen.getByText('Mission Control')).toBeInTheDocument();
-    });
-
-    it('renders user name and organization', () => {
-      render(
-        <MemoryRouter>
-          <Sidebar />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByText('Alice')).toBeInTheDocument();
       expect(screen.getByText('Test Org')).toBeInTheDocument();
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      expect(screen.getByText('Fleet Operational')).toBeInTheDocument();
     });
 
-    it('exposes sign out from the account menu', async () => {
+    it('exposes collapse and sign out buttons', () => {
       render(
         <MemoryRouter>
           <Sidebar />
         </MemoryRouter>,
       );
 
-      // Destructive actions sit behind the account menu, not on the rail.
-      const trigger = screen.getByRole('button', { expanded: false });
-      fireEvent.click(trigger);
-
-      expect(
-        await screen.findByRole('menuitem', { name: /sign out/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /collapse sidebar/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
     });
 
     it('nav items are links with correct paths', () => {
@@ -863,13 +846,13 @@ describe('Component Rendering', () => {
       const dashboardLink = screen.getByText('Dashboard').closest('a');
       expect(dashboardLink).toHaveAttribute('href', '/dashboard');
 
-      const boardsLink = screen.getByText('Boards').closest('a');
-      expect(boardsLink).toHaveAttribute('href', '/boards');
+      const motherChatLink = screen.getByText('Mother Chat').closest('a');
+      expect(motherChatLink).toHaveAttribute('href', '/chat');
 
       const gatewaysLink = screen.getByText('Gateways').closest('a');
       expect(gatewaysLink).toHaveAttribute('href', '/gateways');
 
-      const productionsLink = screen.getByText('Productions').closest('a');
+      const productionsLink = screen.getByText('Production Blocks').closest('a');
       expect(productionsLink).toHaveAttribute('href', '/processes');
     });
   });
