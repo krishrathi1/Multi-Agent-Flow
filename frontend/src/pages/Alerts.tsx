@@ -319,66 +319,70 @@ export function Alerts() {
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left: Alert Events (3 columns) */}
-        <div className={cn('lg:col-span-3 space-y-4', activeTab !== 'events' && 'hidden lg:block')}>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-ink">
-                Alert Events ({filteredEvents.length})
-              </h3>
-              <LiveWaveform color="bg-brand-500" />
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <CustomDropdown
-                value={severityFilter}
-                options={severityOptions}
-                onChange={setSeverityFilter}
-              />
-
-              <CustomDropdown
-                value={ackFilter}
-                options={ackOptions}
-                onChange={setAckFilter}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {filteredEvents.length === 0 ? (
-              <div className="bg-surface rounded-2xl border border-line p-10 text-center text-ink-muted text-xs shadow-2xs">
-                <ShieldAlert size={32} className="mx-auto text-ink-faint mb-2 opacity-50" />
-                <p className="font-semibold text-ink">No alert events match criteria</p>
-                <p className="text-ink-muted text-xs mt-1">All agent telemetry thresholds are currently operating within normal bounds.</p>
+        <div className={cn('lg:col-span-3', activeTab !== 'events' && 'hidden lg:block')}>
+          <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs flex flex-col justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line-subtle pb-4 mb-4">
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-ink">
+                  Alert Events ({filteredEvents.length})
+                </h3>
+                <LiveWaveform color="bg-brand-500" />
               </div>
-            ) : (
-              filteredEvents.map((event) => (
-                <EventCard key={event.id} event={event} onAcknowledge={handleAcknowledge} />
-              ))
-            )}
+              <div className="flex items-center gap-2 flex-wrap">
+                <CustomDropdown
+                  value={severityFilter}
+                  options={severityOptions}
+                  onChange={setSeverityFilter}
+                />
+
+                <CustomDropdown
+                  value={ackFilter}
+                  options={ackOptions}
+                  onChange={setAckFilter}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {filteredEvents.length === 0 ? (
+                <div className="rounded-2xl bg-inset/40 border border-dashed border-line p-10 text-center text-ink-muted text-xs">
+                  <ShieldAlert size={32} className="mx-auto text-ink-faint mb-2 opacity-50" />
+                  <p className="font-semibold text-ink">No alert events match criteria</p>
+                  <p className="text-ink-muted text-xs mt-1">All agent telemetry thresholds are currently operating within normal bounds.</p>
+                </div>
+              ) : (
+                filteredEvents.map((event) => (
+                  <EventCard key={event.id} event={event} onAcknowledge={handleAcknowledge} />
+                ))
+              )}
+            </div>
           </div>
         </div>
 
         {/* Right: Alert Rules (2 columns) */}
-        <div className={cn('lg:col-span-2 space-y-4', activeTab !== 'rules' && 'hidden lg:block')}>
-          <div className="flex items-center justify-between pb-1">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Configured Rules ({rules.length})</h3>
-            <button
-              type="button"
-              onClick={() => setShowAddRule(true)}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 hover:bg-brand-500/20 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
-            >
-              <Plus size={13} /> Add Rule
-            </button>
-          </div>
+        <div className={cn('lg:col-span-2', activeTab !== 'rules' && 'hidden lg:block')}>
+          <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-line-subtle pb-4 mb-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Configured Rules ({rules.length})</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddRule(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 hover:bg-brand-500/20 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+              >
+                <Plus size={13} /> Add Rule
+              </button>
+            </div>
 
-          <div className="space-y-3">
-            {rules.map((rule) => (
-              <RuleCard key={rule.id} rule={rule} onToggle={handleToggleRule} />
-            ))}
-            {rules.length === 0 && (
-              <div className="bg-surface rounded-2xl border border-line p-8 text-center text-ink-muted text-xs shadow-2xs">
-                No alert rules configured
-              </div>
-            )}
+            <div className="space-y-3">
+              {rules.map((rule) => (
+                <RuleCard key={rule.id} rule={rule} onToggle={handleToggleRule} />
+              ))}
+              {rules.length === 0 && (
+                <div className="rounded-2xl bg-inset/40 border border-dashed border-line p-8 text-center text-ink-muted text-xs">
+                  No alert rules configured
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -402,25 +406,25 @@ function EventCard({
   return (
     <div
       className={cn(
-        'rounded-2xl border p-4.5 transition-all shadow-2xs',
+        'rounded-xl border p-4 transition-all shadow-2xs',
         event.acknowledged
-          ? 'border-line-subtle bg-surface/75 opacity-90'
-          : cn('border-line bg-surface hover:border-line-strong hover:shadow-xs')
+          ? 'border-line-subtle bg-inset/40 hover:bg-inset/70'
+          : 'border-line bg-inset/70 hover:border-line-strong hover:bg-inset shadow-xs'
       )}
     >
-      <div className="flex items-start gap-3.5">
+      <div className="flex items-start gap-3">
         <div className={cn(
-          'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border shadow-2xs mt-0.5',
+          'w-8 h-8 rounded-full flex items-center justify-center shrink-0 border shadow-2xs mt-0.5',
           sev.bg,
           sev.border,
           sev.color
         )}>
-          <IconComponent size={16} />
+          <IconComponent size={15} />
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
               <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border', sev.bg, sev.border, sev.color)}>
                 {sev.label}
               </span>
@@ -428,7 +432,7 @@ function EventCard({
                 <span className="text-xs font-bold text-ink truncate">{event.alertRule.name}</span>
               )}
             </div>
-            <span className="text-[11px] text-ink-faint font-medium flex items-center gap-1">
+            <span className="text-[11px] text-ink-faint font-medium flex items-center gap-1 font-mono shrink-0">
               <Clock size={11} /> {timeAgo(event.createdAt)}
             </span>
           </div>
@@ -473,30 +477,30 @@ function RuleCard({
   onToggle: (rule: AlertRule) => void;
 }) {
   return (
-    <div className={cn('rounded-2xl border p-4 bg-surface transition-all shadow-2xs', rule.enabled ? 'border-line hover:border-line-strong' : 'border-line-subtle opacity-60')}>
+    <div className={cn('rounded-xl border p-3.5 transition-all shadow-2xs', rule.enabled ? 'border-line-subtle bg-inset/70 hover:border-line hover:bg-inset' : 'border-line-subtle bg-inset/30 opacity-60')}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <h4 className="text-xs font-bold text-ink truncate">{rule.name}</h4>
             {rule._count && (
-              <span className="text-[10px] text-ink-muted px-2 py-0.5 rounded-full bg-inset border border-line-subtle font-semibold">
+              <span className="text-[10px] text-ink-muted px-2 py-0.5 rounded-full bg-surface border border-line-subtle font-semibold">
                 {rule._count.events} event{rule._count.events !== 1 ? 's' : ''}
               </span>
             )}
           </div>
           {rule.description && (
-            <p className="text-xs text-ink-muted mb-2.5 line-clamp-2 leading-relaxed">{rule.description}</p>
+            <p className="text-xs text-ink-muted mb-2 line-clamp-2 leading-relaxed">{rule.description}</p>
           )}
-          <div className="flex flex-wrap items-center gap-2 text-2xs text-ink-muted font-medium">
-            <span className="bg-inset px-2 py-1 rounded-lg border border-line-subtle">
+          <div className="flex flex-wrap items-center gap-1.5 text-2xs text-ink-muted font-medium">
+            <span className="bg-surface px-2 py-0.5 rounded-md border border-line-subtle">
               Condition: <strong className="text-ink font-mono">{rule.condition}</strong>
             </span>
             {rule.threshold !== null && rule.threshold !== undefined && (
-              <span className="bg-inset px-2 py-1 rounded-lg border border-line-subtle">
+              <span className="bg-surface px-2 py-0.5 rounded-md border border-line-subtle">
                 Threshold: <strong className="text-ink font-mono">{rule.threshold}</strong>
               </span>
             )}
-            <span className="bg-inset px-2 py-1 rounded-lg border border-line-subtle">
+            <span className="bg-surface px-2 py-0.5 rounded-md border border-line-subtle">
               Window: <strong className="text-ink font-mono">{rule.windowMinutes}m</strong>
             </span>
           </div>
@@ -507,7 +511,7 @@ function RuleCard({
           type="button"
           onClick={() => onToggle(rule)}
           className={cn(
-            'relative w-10 h-5.5 rounded-full transition-colors flex-shrink-0 mt-0.5 cursor-pointer',
+            'relative w-10 h-5.5 rounded-full transition-colors flex-shrink-0 mt-0.5 cursor-pointer outline-none focus:outline-none',
             rule.enabled ? 'bg-brand-600' : 'bg-line-strong',
           )}
         >
