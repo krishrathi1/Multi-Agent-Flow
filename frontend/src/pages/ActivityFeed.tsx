@@ -75,47 +75,48 @@ export function ActivityFeed() {
         <ActivityFilters />
       </div>
 
-      {/* Feed Status Header */}
-      <div className="flex items-center justify-between gap-3 px-1">
-        <div className="flex items-center gap-2">
-          <p className="text-xs font-semibold text-ink-muted">
-            <span className="font-bold text-ink font-mono">{formatNumber(total)}</span>{' '}
-            event{total === 1 ? '' : 's'}
+      {/* Master Activity Feed Surface Container */}
+      <div className="rounded-2xl border border-line-subtle bg-surface p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-line-subtle pb-3.5">
+          <div className="flex items-center gap-2.5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Live Event Stream</h3>
+            <span className="text-2xs font-mono font-bold text-ink-muted bg-inset px-2.5 py-0.5 rounded-full border border-line-subtle">
+              {formatNumber(total)} events
+            </span>
             {activeProcess && (
-              <>
-                {' '}in <span className="font-bold text-ink">{activeProcess.name}</span>
-              </>
+              <span className="hidden sm:inline-flex text-2xs font-medium text-ink-muted">
+                in <strong className="text-ink ml-1">{activeProcess.name}</strong>
+              </span>
             )}
-            {(filterAgent || filterType) && ' matching active filters'}
-          </p>
+          </div>
+          <LiveWaveform color="bg-brand-500" />
         </div>
-        <LiveWaveform color="bg-brand-500" />
-      </div>
 
-      {/* Activity List */}
-      {loading && activities.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <HourglassLoader size={48} label="Connecting to agent event stream..." />
-        </div>
-      ) : activities.length === 0 ? (
-        <div className="rounded-2xl border border-line-subtle bg-surface p-12 text-center shadow-xs">
-          <Inbox size={32} className="mx-auto mb-2 text-ink-faint opacity-50" />
-          <h3 className="text-xs font-bold text-ink mb-1">No Events Found</h3>
-          <p className="text-xs text-ink-muted max-w-sm mx-auto">
-            {filterAgent || filterType || activeProcess
-              ? 'No agent activity matches the current filter criteria. Try resetting filters.'
-              : 'Live agent events, task executions, and telemetry heartbeats will stream in here automatically.'}
-          </p>
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {activities.map((activity, idx) => (
-            <li key={activity.id || `feed-act-${idx}-${activity.createdAt || Date.now()}`}>
-              <ActivityItem activity={activity} />
-            </li>
-          ))}
-        </ul>
-      )}
+        {/* Activity List */}
+        {loading && activities.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <HourglassLoader size={48} label="Connecting to agent event stream..." />
+          </div>
+        ) : activities.length === 0 ? (
+          <div className="rounded-xl border border-line-subtle bg-inset/40 p-12 text-center">
+            <Inbox size={32} className="mx-auto mb-2 text-ink-faint opacity-50" />
+            <h3 className="text-xs font-bold text-ink mb-1">No Events Found</h3>
+            <p className="text-xs text-ink-muted max-w-sm mx-auto">
+              {filterAgent || filterType || activeProcess
+                ? 'No agent activity matches the current filter criteria. Try resetting filters.'
+                : 'Live agent events, task executions, and telemetry heartbeats will stream in here automatically.'}
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {activities.map((activity, idx) => (
+              <li key={activity.id || `feed-act-${idx}-${activity.createdAt || Date.now()}`}>
+                <ActivityItem activity={activity} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
