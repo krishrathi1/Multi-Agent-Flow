@@ -83,6 +83,10 @@ export async function runClaudeCli(
   const model = options.model ?? process.env.CLAUDE_CLI_MODEL;
   const tools = options.allowedTools ?? [];
 
+  // NOTE: On Windows, stdin piping to Claude CLI is unreliable (CLI waits 3s
+  // then exits with code 1 if it doesn't detect a TTY). We pass the prompt as
+  // a positional argument after all flags instead. This is safe because spawn()
+  // is used with shell:false — no shell interpolation occurs.
   const args = ['-p', '--output-format', 'json'];
 
   if (tools.length > 0) {
@@ -102,6 +106,9 @@ export async function runClaudeCli(
   if (options.systemPrompt) args.push('--append-system-prompt', options.systemPrompt);
   if (model) args.push('--model', model);
 
+  // Pass the prompt as the final positional argument (fixes Windows stdin pipe issue)
+  args.push(prompt);
+
   return new Promise<ClaudeCliResult | null>((resolve) => {
     let child;
     try {
@@ -112,7 +119,8 @@ export async function runClaudeCli(
         // up unrelated project context.
         cwd: options.cwd || process.env.TEMP || process.cwd(),
         env: { ...process.env, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' },
-        stdio: ['pipe', 'pipe', 'pipe'],
+        // stdin: 'ignore' since we pass prompt as arg now — avoids the 3s wait
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (err) {
       logger.warn({ err }, 'Claude CLI could not be spawned');
@@ -189,10 +197,6 @@ export async function runClaudeCli(
         finish(null);
       }
     });
-
-    // Prompt goes over stdin — never the command line.
-    child.stdin.write(prompt);
-    child.stdin.end();
   });
 }
 
