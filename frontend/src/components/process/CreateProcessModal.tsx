@@ -39,24 +39,34 @@ interface ParsedCurl {
 
 const AI_TEMPLATES = [
   {
-    title: 'Code Review & Security Audit',
-    desc: 'Audit current repository, find vulnerabilities, review PR diffs, and generate audit reports.',
-    prompt: 'Perform comprehensive architectural review, security vulnerability audit, and code quality scoring for current repository.',
+    title: '🌐 End-to-End Full-Stack Web & App Builder',
+    desc: 'Generates responsive React/Tailwind UI, Express API routes, PostgreSQL schema, and live deployment preview.',
+    prompt: 'Build an end-to-end web application with responsive UI, Express REST endpoints, Prisma database models, and build verification.',
   },
   {
-    title: 'Fullstack Feature & API Builder',
-    desc: 'Implement backend routes, schemas, database models, and responsive frontend UI.',
-    prompt: 'Implement end-to-end fullstack features with strict TypeScript types, API routes, and clean UI components.',
+    title: '⚡ Vercel & Cloud Log Reviewer & Auto-Fixer',
+    desc: 'Fetches Vercel/Cloud deployment build logs, parses stack traces, isolates exceptions, and auto-generates code patches.',
+    prompt: 'Inspect Vercel, Netlify, and Docker deployment build logs, isolate root cause errors, auto-generate fix patches, and verify build.',
   },
   {
-    title: 'Automated QA & Test Suite',
-    desc: 'Write unit tests, integration suites, and perform regression verification.',
-    prompt: 'Generate automated unit tests, mock test payloads, and verify edge cases across backend and frontend modules.',
+    title: '🔌 Model Context Protocol (MCP) Tool Orchestrator',
+    desc: 'Connects external MCP tool servers (PostgreSQL DB, Filesystem, Memory, Custom HTTP/SSE) to execute agent tool chains.',
+    prompt: 'Connect to external MCP tool servers via SSE/HTTP transports, discover remote tools, and execute multi-tool agent workflows.',
   },
   {
-    title: 'DevOps & CI/CD Pipeline',
-    desc: 'Automate Docker builds, GitHub Actions workflows, and health verification.',
-    prompt: 'Set up automated CI/CD pipelines, Docker container verification, and production build optimization.',
+    title: '🛡️ Security Vulnerability & OWASP Penetration Audit',
+    desc: 'Scans repository for OWASP Top 10 vulnerabilities, hardcoded secret leaks, and dependency risks.',
+    prompt: 'Perform OWASP Top 10 security audit, scan for hardcoded secret leaks, analyze third-party packages, and generate security patches.',
+  },
+  {
+    title: '🔧 Auto-Bug Resolver & Code Refactoring',
+    desc: 'Parses error logs, isolates root cause, generates candidate fix diffs, and runs regression unit tests.',
+    prompt: 'Analyze error stack traces, reproduce defects with unit tests, generate refactored code diffs, and verify zero regression.',
+  },
+  {
+    title: '📄 API Specification & Documentation Generator',
+    desc: 'Inspects API endpoints, produces OpenAPI/Swagger specs, Postman collections, and developer guides.',
+    prompt: 'Generate OpenAPI 3.0 specs, Postman collections, SDK usage snippets, and system architecture docs from codebase routes.',
   },
 ];
 

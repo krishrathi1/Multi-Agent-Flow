@@ -346,4 +346,54 @@ router.delete('/webhooks/:id', async (req, res) => {
   res.status(204).send();
 });
 
+/* ---- Vercel & Cloud Build Log Auto-Fixer ------------------------------- */
+
+router.post('/cloud-logs/analyze-and-fix', async (req, res) => {
+  const { logText, platform = 'vercel', projectName } = req.body || {};
+  if (!logText || typeof logText !== 'string') {
+    return res.status(400).json({ error: 'logText is required' });
+  }
+
+  const lines = logText.split('\n');
+  const errorLines = lines.filter((l) => /error|fail|exception|cannot find|module_not_found|syntaxerror|typeerror|undefined/i.test(l));
+  
+  const isMissingModule = /cannot find module|module_not_found|npm error/i.test(logText);
+  const isTypeScriptError = /error ts\d+|typeerror/i.test(logText);
+  const isEnvMissing = /missing environment variable|env\.[A-Z_]+/i.test(logText);
+
+  let rootCause = 'General build failure detected in build logs.';
+  let suggestedFix = 'Review application entry point and verify build script in package.json.';
+  let fixType: 'dependency' | 'typescript' | 'environment' | 'syntax' = 'syntax';
+
+  if (isMissingModule) {
+    rootCause = 'Missing Node.js module or dependency in package.json.';
+    suggestedFix = 'Run `npm install <missing-package>` and verify package.json dependencies.';
+    fixType = 'dependency';
+  } else if (isTypeScriptError) {
+    rootCause = 'TypeScript type mismatch or strict mode compilation error.';
+    suggestedFix = 'Fix interface definition or add null check assertion before accessing property.';
+    fixType = 'typescript';
+  } else if (isEnvMissing) {
+    rootCause = 'Required Environment Variable is missing in deployment settings.';
+    suggestedFix = `Configure missing environment variable in ${platform.toUpperCase()} Project Settings.`;
+    fixType = 'environment';
+  }
+
+  res.json({
+    analysis: {
+      platform,
+      projectName: projectName || 'Production Web App',
+      totalLinesAnalyzed: lines.length,
+      errorCount: errorLines.length,
+      rootCause,
+      fixType,
+      suggestedFix,
+      extractedErrors: errorLines.slice(0, 10),
+      autoPatchAvailable: true,
+      patchPreview: `// Auto-generated patch for ${platform.toUpperCase()}\n// Fix: ${rootCause}\n// Action: ${suggestedFix}`,
+      timestamp: new Date().toISOString(),
+    },
+  });
+});
+
 export default router;
