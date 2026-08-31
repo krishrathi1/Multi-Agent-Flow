@@ -274,63 +274,63 @@ export function McpHub() {
         }
       />
 
-      {/* ── Telemetry Deck: Live Connected Counter ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* ── Telemetry Deck: 4 Options in 1 Single Line ── */}
+      <div className="grid grid-cols-4 gap-2 sm:gap-3.5">
         {/* Connected Servers */}
-        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3 sm:p-4 shadow-2xs hover:border-emerald-500/40 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 truncate">
               Connected MCP
             </span>
             <LiveRadarBeacon size={8} tone="emerald" />
           </div>
-          <p className="mt-2 text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1.5">
+          <p className="text-base sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1">
             {connectedCount}
-            <span className="text-xs font-normal text-ink-muted">/ {servers.length} online</span>
+            <span className="text-[10px] sm:text-xs font-normal text-ink-muted truncate hidden xs:inline">/ {servers.length} online</span>
           </p>
         </div>
 
         {/* Discovered Tools */}
-        <div className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">
+        <div className="rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted truncate">
               Discovered Tools
             </span>
-            <Wrench size={14} className="text-brand-500" />
+            <Wrench size={13} className="text-brand-500 shrink-0" />
           </div>
-          <p className="mt-2 text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1.5">
+          <p className="text-base sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1">
             {totalToolsCount}
-            <span className="text-xs font-normal text-ink-muted">active functions</span>
+            <span className="text-[10px] sm:text-xs font-normal text-ink-muted truncate hidden xs:inline">active functions</span>
           </p>
         </div>
 
         {/* Attached Agents */}
-        <div className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">
+        <div className="rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted truncate">
               Attached Agents
             </span>
-            <Bot size={14} className="text-indigo-500" />
+            <Bot size={13} className="text-indigo-500 shrink-0" />
           </div>
-          <p className="mt-2 text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1.5">
+          <p className="text-base sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1">
             {new Set(servers.map((s) => s.agentId)).size}
-            <span className="text-xs font-normal text-ink-muted">agents powered</span>
+            <span className="text-[10px] sm:text-xs font-normal text-ink-muted truncate hidden xs:inline">agents powered</span>
           </p>
         </div>
 
         {/* Protocol Transports */}
-        <div className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">
+        <div className="rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted truncate">
               Transport Stack
             </span>
             <LiveWaveform color="bg-brand-500" />
           </div>
-          <p className="mt-2 text-sm font-bold text-ink flex items-center gap-1.5">
-            <span className="px-2 py-0.5 rounded-md bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 text-2xs font-mono">
-              SSE Stream
+          <p className="text-xs sm:text-sm font-bold text-ink flex items-center gap-1 mt-0.5 flex-wrap">
+            <span className="px-1.5 py-0.5 rounded-md bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 text-[10px] font-mono font-bold">
+              SSE
             </span>
-            <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-2xs font-mono">
+            <span className="px-1.5 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-[10px] font-mono font-bold">
               STDIO
             </span>
           </p>
