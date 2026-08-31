@@ -9,6 +9,7 @@ import {
   ChevronsRight,
   CircleUser,
   Columns3,
+  Cpu,
   Factory,
   History,
   Gauge,
@@ -77,7 +78,8 @@ const navSections: NavSection[] = [
     label: 'System & Tools',
     items: [
       { path: '/metrics', label: 'Metrics & Cost', icon: Gauge },
-      { path: '/gateways', label: 'Gateways & MCP', icon: Router },
+      { path: '/gateways', label: 'Gateways', icon: Router },
+      { path: '/mcp', label: 'MCP Hub & Tools', icon: Cpu },
       { path: '/skills', label: 'Skills Library', icon: Sparkles },
       { path: '/alerts', label: 'Alerts & Incidents', icon: AlertTriangle },
     ],

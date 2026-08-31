@@ -21,7 +21,7 @@ import alertRoutes from './routes/alerts.js';
 import commandRoutes from './routes/commands.js';
 import searchRoutes from './routes/search.js';
 import configRoutes from './routes/config.js';
-import mcpRoutes from './routes/mcp.js';
+import mcpRoutes, { orgMcpRouter } from './routes/mcp.js';
 import remoteRoutes from './routes/remote.js';
 import { requireApiKey } from './middleware/api-key-auth.js';
 import gatewayRoutes from './routes/gateways.js';
@@ -115,6 +115,7 @@ app.use('/api/org', requireAuth, orgRoutes);
 
 // MCP routes (nested under agents, needs mergeParams in router)
 app.use('/api/agents/:agentId/mcp-servers', requireAuth, mcpRoutes);
+app.use('/api/mcp', requireAuth, orgMcpRouter);
 
 // Remote agent routes (API key auth, not JWT)
 app.use('/api/remote', requireApiKey, remoteRoutes);

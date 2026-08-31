@@ -70,4 +70,38 @@ router.get('/:id/tools', async (req: any, res) => {
   }
 });
 
+export const orgMcpRouter = Router();
+
+// GET /api/mcp
+orgMcpRouter.get('/', async (req, res) => {
+  const servers = await mcpService.getAllOrgMcpServers(req.organizationId!);
+  res.json(servers);
+});
+
+// POST /api/mcp
+orgMcpRouter.post('/', async (req, res) => {
+  const { agentId, name, url, transport } = req.body;
+  if (!agentId) return res.status(400).json({ error: 'agentId is required' });
+  try {
+    const server = await mcpService.addMcpServer(agentId, { name, url, transport });
+    res.status(201).json(server);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/mcp/:id/refresh
+orgMcpRouter.post('/:id/refresh', async (req, res) => {
+  const server = await prisma.mcpServer.findFirst({
+    where: { id: req.params.id, agent: { organizationId: req.organizationId! } },
+  });
+  if (!server) return res.status(404).json({ error: 'MCP server not found' });
+  try {
+    const tools = await mcpService.refreshMcpTools(server.id, server.agentId);
+    res.json(tools);
+  } catch (error: any) {
+    res.status(502).json({ error: error.message });
+  }
+});
+
 export default router;

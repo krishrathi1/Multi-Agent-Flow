@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Header } from '@/components/layout/Header';
+import { Router as RouterIcon, Plus, RefreshCw, Trash2, Edit3, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { LiveRadarBeacon } from '@/components/ui/LiveIcon';
 import { api } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import type { Gateway, GatewayHealth } from '@/types';
 
 export function Gateways() {
@@ -106,23 +110,25 @@ export function Gateways() {
 
   const statusColors: Record<string, string> = {
     ONLINE: 'bg-emerald-500',
-    OFFLINE: 'bg-gray-500',
+    OFFLINE: 'bg-rose-500',
     UNKNOWN: 'bg-amber-500',
   };
 
   return (
-    <div>
-      <Header
+    <div className="space-y-6">
+      <PageHeader
+        icon={RouterIcon}
         title="Gateways"
-        subtitle="Manage OpenClaw gateway connections"
+        description="Manage OpenClaw gateway connection endpoints, WebSocket bridges, and agent dispatchers"
         actions={
           !showForm ? (
-            <button
+            <Button
+              variant="primary"
+              icon={Plus}
               onClick={() => setShowForm(true)}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-nexus-600 text-white hover:bg-nexus-500 transition-colors"
             >
-              + Add Gateway
-            </button>
+              Add Gateway
+            </Button>
           ) : undefined
         }
       />

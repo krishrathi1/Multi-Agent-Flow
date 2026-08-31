@@ -176,3 +176,27 @@ export async function refreshMcpTools(serverId: string, agentId: string) {
     }
   });
 }
+
+export async function getAllOrgMcpServers(organizationId: string) {
+  return prisma.mcpServer.findMany({
+    where: {
+      agent: {
+        organizationId,
+      },
+    },
+    include: {
+      tools: true,
+      agent: {
+        select: {
+          id: true,
+          name: true,
+          displayName: true,
+          avatar: true,
+          status: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+

@@ -30,6 +30,7 @@ import { Boards } from './pages/Boards';
 import { BoardDetail } from './pages/BoardDetail';
 import { Approvals } from './pages/Approvals';
 import { SkillsMarketplace } from './pages/SkillsMarketplace';
+import { McpHub } from './pages/McpHub';
 import { SoulTemplates } from './pages/SoulTemplates';
 import { Invitations } from './pages/Invitations';
 import { LandingPage } from './pages/landing/LandingPage';
@@ -111,6 +112,7 @@ export function App() {
           <Route path="/agents/:id/edit" element={<AgentCreate />} />
           <Route path="/agents/:id" element={<AgentProfile />} />
           <Route path="/gateways" element={<Gateways />} />
+          <Route path="/mcp" element={<McpHub />} />
           <Route path="/boards" element={<Boards />} />
           <Route path="/boards/:id" element={<BoardDetail />} />
           <Route path="/approvals" element={<Approvals />} />

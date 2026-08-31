@@ -320,6 +320,11 @@ export const api = {
       request(`/agents/${agentId}/mcp-servers/${serverId}/refresh-tools`, { method: 'POST' }),
     tools: (agentId: string, serverId: string) =>
       request(`/agents/${agentId}/mcp-servers/${serverId}/tools`),
+    orgList: () => request<any[]>('/mcp'),
+    orgAdd: (data: { agentId: string; name: string; url: string; transport?: string }) =>
+      request('/mcp', { method: 'POST', body: JSON.stringify(data) }),
+    orgRefresh: (serverId: string) =>
+      request(`/mcp/${serverId}/refresh`, { method: 'POST' }),
   },
   activities: {
     list: (params?: { agentId?: string; type?: string; processId?: string; limit?: number; offset?: number }) => {
