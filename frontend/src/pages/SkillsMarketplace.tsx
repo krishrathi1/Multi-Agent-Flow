@@ -196,12 +196,12 @@ export function SkillsMarketplace() {
       />
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="flex gap-1 bg-inset/50 rounded-xl p-1 border border-line w-fit shadow-2xs">
+        <div className="flex w-full sm:w-auto gap-1 bg-inset rounded-xl p-1 border border-line shadow-2xs">
           <button
             type="button"
             onClick={() => setTab('skills')}
             className={cn(
-              'px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer',
+              'flex-1 sm:flex-initial px-4 py-2 sm:py-1.5 text-xs font-bold rounded-lg transition-all text-center cursor-pointer',
               tab === 'skills'
                 ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-2xs border border-line-subtle'
                 : 'text-ink-muted hover:text-ink hover:bg-hover'
@@ -213,7 +213,7 @@ export function SkillsMarketplace() {
             type="button"
             onClick={() => setTab('packs')}
             className={cn(
-              'px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer',
+              'flex-1 sm:flex-initial px-4 py-2 sm:py-1.5 text-xs font-bold rounded-lg transition-all text-center cursor-pointer',
               tab === 'packs'
                 ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-2xs border border-line-subtle'
                 : 'text-ink-muted hover:text-ink hover:bg-hover'
