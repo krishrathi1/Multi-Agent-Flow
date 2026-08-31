@@ -151,6 +151,10 @@ async function prerender() {
 }
 
 prerender().catch((err) => {
+  if (err.message && err.message.includes('Could not find Chrome')) {
+    console.warn('[prerender] Warning: Chrome binary not found for static pre-rendering. Skipping pre-render step.');
+    process.exit(0);
+  }
   console.error('[prerender] Fatal error:', err);
   process.exit(1);
 });

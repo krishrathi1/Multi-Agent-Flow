@@ -42,14 +42,6 @@ import { DocsAlerts } from './pages/docs/DocsAlerts';
 import { DocsApiReference } from './pages/docs/DocsApiReference';
 import { DocsOrganizations } from './pages/docs/DocsOrganizations';
 import { DocsWebSocketEvents } from './pages/docs/DocsWebSocketEvents';
-import { SwarmStudio } from './pages/ruflo/SwarmStudio';
-import { VectorMemoryExplorer } from './pages/ruflo/VectorMemoryExplorer';
-import { GoalPlannerStudio } from './pages/ruflo/GoalPlannerStudio';
-import { FederationPortal } from './pages/ruflo/FederationPortal';
-import { NeuralLearningHub } from './pages/ruflo/NeuralLearningHub';
-import { AIDefenceCenter } from './pages/ruflo/AIDefenceCenter';
-import { MetaHarnessAudit } from './pages/ruflo/MetaHarnessAudit';
-import { RufloPersonasCatalog } from './pages/ruflo/RufloPersonasCatalog';
 
 function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -128,15 +120,6 @@ export function App() {
           <Route path="/invitations" element={<Invitations />} />
           <Route path="/settings" element={<Settings />} />
 
-          {/* Ruflo Agent Meta-Harness (Swarm Intelligence & Security) */}
-          <Route path="/ruflo/swarms" element={<SwarmStudio />} />
-          <Route path="/ruflo/memory" element={<VectorMemoryExplorer />} />
-          <Route path="/ruflo/goals" element={<GoalPlannerStudio />} />
-          <Route path="/ruflo/federation" element={<FederationPortal />} />
-          <Route path="/ruflo/learning" element={<NeuralLearningHub />} />
-          <Route path="/ruflo/aidefence" element={<AIDefenceCenter />} />
-          <Route path="/ruflo/metaharness" element={<MetaHarnessAudit />} />
-          <Route path="/ruflo/personas" element={<RufloPersonasCatalog />} />
         </Route>
       </Route>
 

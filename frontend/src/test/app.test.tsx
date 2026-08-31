@@ -804,15 +804,7 @@ describe('Component Rendering', () => {
       expect(screen.getByText('Agent Controls')).toBeInTheDocument();
       expect(screen.getByText('Gateways')).toBeInTheDocument();
 
-      // Ruflo Intelligence section items
-      expect(screen.getByText('Swarm Studio')).toBeInTheDocument();
-      expect(screen.getByText('Vector Memory (AgentDB)')).toBeInTheDocument();
-      expect(screen.getByText('GOAP Goal Planner')).toBeInTheDocument();
-      expect(screen.getByText('Zero-Trust Federation')).toBeInTheDocument();
-      expect(screen.getByText('SONA Neural Hub')).toBeInTheDocument();
-      expect(screen.getByText('AIDefence Center')).toBeInTheDocument();
-      expect(screen.getByText('MetaHarness Readiness')).toBeInTheDocument();
-      expect(screen.getByText('Specialized Personas')).toBeInTheDocument();
+
 
       // Observe section items
       expect(screen.getByText('Metrics & Cost')).toBeInTheDocument();

@@ -79,19 +79,7 @@ const navSections: NavSection[] = [
       { path: '/soul-templates', label: 'Soul Templates', icon: BadgeCheck },
     ],
   },
-  {
-    label: 'Ruflo Intelligence',
-    items: [
-      { path: '/ruflo/swarms', label: 'Swarm Studio', icon: Network },
-      { path: '/ruflo/memory', label: 'Vector Memory (AgentDB)', icon: BrainCircuit },
-      { path: '/ruflo/goals', label: 'GOAP Goal Planner', icon: Target },
-      { path: '/ruflo/federation', label: 'Zero-Trust Federation', icon: Globe },
-      { path: '/ruflo/learning', label: 'SONA Neural Hub', icon: Sparkles },
-      { path: '/ruflo/aidefence', label: 'AIDefence Center', icon: ShieldAlert },
-      { path: '/ruflo/metaharness', label: 'MetaHarness Readiness', icon: Gauge },
-      { path: '/ruflo/personas', label: 'Specialized Personas', icon: Users },
-    ],
-  },
+
   {
     label: 'Observe',
     items: [

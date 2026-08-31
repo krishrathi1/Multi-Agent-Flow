@@ -5,9 +5,6 @@ import { runClaudeCli, isClaudeCliEnabled } from '../lib/claude-cli.js';
 import { decryptField } from '../lib/crypto.js';
 import { safeFetch } from '../lib/url-validator.js';
 import { listWorkspaceFiles } from './agent-runner.service.js';
-import { aiDefenceService } from './ruflo/aidefence.service.js';
-import { memoryService } from './ruflo/memory.service.js';
-import { learningService } from './ruflo/learning.service.js';
 
 const HISTORY_LIMIT = 30;
 
@@ -289,20 +286,7 @@ ${processes.map((p) => `- "${p.name}" (${p.agents.length} agents, Status: ${p.st
 `;
   }
 
-  // 1. Ruflo AIDefence scan on inbound message
-  const scanResult = aiDefenceService.scanPrompt(message);
-  const effectiveMessage = scanResult.isSafe ? message : scanResult.sanitizedPrompt;
-
-  // 2. Ruflo AgentDB Vector Memory Recall
-  let memoryContext = '';
-  try {
-    const memoryMatches = await memoryService.search({ query: effectiveMessage, limit: 3 });
-    if (memoryMatches.length > 0) {
-      memoryContext = `\nRelevant AgentDB Vector Memory:\n${memoryMatches.map((m) => `- [${m.record.namespace}] ${m.record.content}`).join('\n')}\n`;
-    }
-  } catch {
-    // Ignore memory lookup error on cold boot
-  }
+  const effectiveMessage = message;
 
   const motherSystemPrompt = `
 You are "Mother Chat" (Mother Core Intelligence), the Supreme Primary AI Brain and Central Orchestrator of the Nexus AI Autonomous Agent fleet.
@@ -311,7 +295,6 @@ Note: Sub-agents cannot speak to you directly; only the human operator commands 
 
 Current Production Context:
 ${processContext}
-${memoryContext}
 Conversation Guidelines:
 - Answer the human operator's questions authoritatively, clearly, and concisely.
 - Report exact file deliverables, stage completions, agent roles, and execution progress.
@@ -329,21 +312,6 @@ Conversation Guidelines:
     organizationId,
     systemPrompt: motherSystemPrompt,
     prompt,
-  });
-
-  // 3. Ruflo SONA Trajectory recording
-  void learningService.recordTrajectory({
-    agentId: fallbackAgentId || 'mother-orchestrator',
-    agentName: 'Mother Chat',
-    taskType: 'mother_chat_turn',
-    prompt: message,
-    steps: [
-      { stepNumber: 1, action: 'AIDefence prompt scanning', durationMs: 20, success: true },
-      { stepNumber: 2, action: 'AgentDB vector memory retrieval', durationMs: 40, success: true },
-      { stepNumber: 3, action: 'LLM generation', durationMs: 650, success: true },
-    ],
-    overallSuccess: true,
-    score: 95,
   });
 
   const now = new Date();
@@ -397,20 +365,7 @@ export async function chatLocally(
   });
   if (!agent) return null;
 
-  // 1. Ruflo AIDefence scan on inbound message
-  const scanResult = aiDefenceService.scanPrompt(message);
-  const effectiveMessage = scanResult.isSafe ? message : scanResult.sanitizedPrompt;
-
-  // 2. Ruflo AgentDB Vector Memory Recall
-  let memoryContext = '';
-  try {
-    const memoryMatches = await memoryService.search({ query: effectiveMessage, limit: 3 });
-    if (memoryMatches.length > 0) {
-      memoryContext = `\n\n## Relevant AgentDB Vector Memory:\n${memoryMatches.map((m) => `- [${m.record.namespace}] ${m.record.content}`).join('\n')}`;
-    }
-  } catch {
-    // Ignore memory lookup error on cold boot
-  }
+  const effectiveMessage = message;
 
   const { messages: history } = await getLocalChatHistory(agentId, organizationId);
 
@@ -423,23 +378,8 @@ export async function chatLocally(
 
   const res = await callChatLLM({
     organizationId,
-    systemPrompt: buildSystemPrompt(agent) + memoryContext,
+    systemPrompt: buildSystemPrompt(agent),
     prompt,
-  });
-
-  // 3. Ruflo SONA Trajectory recording
-  void learningService.recordTrajectory({
-    agentId,
-    agentName: agent.displayName,
-    taskType: 'agent_chat_turn',
-    prompt: message,
-    steps: [
-      { stepNumber: 1, action: 'AIDefence prompt scanning', durationMs: 15, success: true },
-      { stepNumber: 2, action: 'AgentDB vector memory retrieval', durationMs: 30, success: true },
-      { stepNumber: 3, action: 'LLM generation', durationMs: 500, success: true },
-    ],
-    overallSuccess: true,
-    score: 95,
   });
 
   const now = new Date();

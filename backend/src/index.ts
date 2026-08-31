@@ -44,7 +44,6 @@ import processExtrasRoutes from './routes/process-extras.js';
 import codeIntelligenceRoutes from './routes/code-intelligence.js';
 import promptRoutes from './routes/prompts.js';
 import gitWebhookRoutes from './routes/git-webhook.js';
-import rufloRoutes from './routes/ruflo.js';
 import { startScheduler } from './services/scheduler.js';
 import { startGitWatcher } from './services/git-watcher.service.js';
 import { recoverOrphanedRuns } from './services/agent-runner.service.js';
@@ -163,9 +162,6 @@ app.use('/api/code-intelligence', requireAuth, codeIntelligenceRoutes);
 
 // Prompt Engineering (template registry + playground)
 app.use('/api/prompts', requireAuth, promptRoutes);
-
-// Ruflo Agent Meta-Harness (Swarms, Vector Memory, GOAP Goals, Federation, Learning, Security)
-app.use('/api/ruflo', requireAuth, rufloRoutes);
 
 // Global error handler for unhandled async errors in routes
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
