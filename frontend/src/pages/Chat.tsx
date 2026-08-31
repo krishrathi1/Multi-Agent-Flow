@@ -21,12 +21,18 @@ import {
   Copy,
   Terminal,
   Clock,
+  ThumbsUp,
+  ThumbsDown,
+  Share2,
+  RotateCw,
+  MoreHorizontal,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { getSocket } from '../lib/socket';
 import { cn, timeAgo } from '../lib/utils';
 import { agentStatusLabel, agentStatusTone } from '../lib/design';
 import { useProcessStore } from '../stores/process-store';
+import { useAuthStore } from '../stores/auth-store';
 import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -153,6 +159,15 @@ export function Chat() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [mobileTab, setMobileTab] = useState<'chat' | 'agents'>('chat');
+  const [feedback, setFeedback] = useState<Record<number, 'up' | 'down'>>({});
+  const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
+
+  const user = useAuthStore((s) => s.user);
+  const userName = user?.name ? user.name.split(' ')[0] : 'Krish';
+  const userInitials = user?.name
+    ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+    : 'OP';
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -223,8 +238,8 @@ export function Chat() {
             {
               role: 'assistant',
               content: activeProcess
-                ? `👋 Hello Operator! I am **Mother Chat**, Central Supervisor for **"${activeProcess.name}"**.\n\nI have complete real-time telemetry over all assigned agents and generated code artifacts in this production block. Ask me anything about execution status, task review deltas, or codebase deliverables!`
-                : `👋 Greetings Operator! I am **Mother Chat** (Primary Fleet Supervisor).\n\nI oversee all active production pipelines and autonomous agents across your workspace. Select a production block above or ask me about fleet status, code reviews, or deliverables!`,
+                ? `Hey ${userName}! 👋\n\nI am **Mother Chat**, overseeing **"${activeProcess.name}"**.\n\nWhat are we working on today?`
+                : `Hey ${userName}! 👋\n\nWhat are we working on today?`,
               timestamp: new Date().toISOString(),
             },
           ]);
@@ -576,45 +591,126 @@ export function Chat() {
           ) : (
             messages.map((msg, index) => {
               const isUser = msg.role === 'user';
+              if (isUser) {
+                return (
+                  <div
+                    key={index}
+                    className="flex items-start gap-2.5 max-w-2xl ml-auto flex-row-reverse animate-scale-in"
+                  >
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-600 text-white text-2xs font-bold shadow-xs border border-white/10 uppercase">
+                      {userInitials}
+                    </div>
+
+                    <div className="flex flex-col items-end max-w-[85%] sm:max-w-lg">
+                      <div className="rounded-[22px] rounded-br-xs px-4.5 py-2.5 bg-blue-600 dark:bg-blue-600 text-white shadow-sm text-xs sm:text-[13px] font-medium leading-relaxed break-words">
+                        <FormattedMessage text={msg.content} />
+                      </div>
+                      {msg.timestamp && (
+                        <div className="mt-1 text-[10px] font-mono text-ink-muted flex items-center gap-1 opacity-70 px-1">
+                          <Clock size={10} />
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={index}
-                  className={cn(
-                    'flex items-start gap-3 max-w-3xl animate-scale-in',
-                    isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'
-                  )}
+                  className="group flex items-start gap-2.5 max-w-3xl mr-auto animate-scale-in"
                 >
-                  <div
-                    className={cn(
-                      'grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-bold shadow-xs',
-                      isUser
-                        ? 'bg-brand-600 text-white'
-                        : 'bg-gradient-to-br from-brand-600 to-indigo-700 text-white border border-brand-400/30'
-                    )}
-                  >
-                    {isUser ? 'OP' : <Brain size={15} />}
+                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-600 to-indigo-700 text-white text-xs font-bold shadow-xs border border-brand-400/30">
+                    {selectedTarget.type === 'mother' ? <Brain size={15} /> : <Bot size={15} />}
                   </div>
 
-                  <div
-                    className={cn(
-                      'rounded-2xl p-4 text-xs leading-relaxed shadow-sm border font-sans',
-                      isUser
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-500/40 rounded-tr-xs shadow-md'
-                        : 'bg-surface text-ink border-line rounded-tl-xs shadow-xs'
-                    )}
-                  >
-                    <FormattedMessage text={msg.content} />
-                    {msg.timestamp && (
-                      <div
+                  <div className="flex flex-col items-start min-w-0 space-y-1 max-w-[90%] sm:max-w-2xl">
+                    <div className="rounded-2xl sm:rounded-[22px] sm:rounded-tl-xs p-4 text-xs sm:text-[13px] leading-relaxed shadow-xs border border-line-subtle bg-surface text-ink font-sans w-full">
+                      <FormattedMessage text={msg.content} />
+                      {msg.timestamp && (
+                        <div className="mt-2 text-[10px] font-mono text-ink-muted flex items-center gap-1 opacity-60">
+                          <Clock size={10} />
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Interactive Action Bar (Matching Image 3) */}
+                    <div className="flex items-center gap-1 pt-0.5 px-1 text-ink-muted transition-opacity">
+                      {/* Copy */}
+                      <button
+                        type="button"
+                        title="Copy message"
+                        onClick={() => {
+                          navigator.clipboard.writeText(msg.content);
+                          setCopiedMsgIdx(index);
+                          setTimeout(() => setCopiedMsgIdx(null), 1800);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer"
+                      >
+                        {copiedMsgIdx === index ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                      </button>
+
+                      {/* Thumbs Up */}
+                      <button
+                        type="button"
+                        title="Good response"
+                        onClick={() => setFeedback((prev) => ({ ...prev, [index]: prev[index] === 'up' ? undefined! : 'up' }))}
                         className={cn(
-                          'mt-2 text-[10px] font-mono flex items-center justify-end gap-1 opacity-70',
-                          isUser ? 'text-blue-100' : 'text-ink-muted'
+                          'p-1.5 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer',
+                          feedback[index] === 'up' && 'text-brand-500 bg-brand-500/10 font-bold'
                         )}
                       >
-                        <Clock size={10} />
-                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    )}
+                        <ThumbsUp size={14} />
+                      </button>
+
+                      {/* Thumbs Down */}
+                      <button
+                        type="button"
+                        title="Poor response"
+                        onClick={() => setFeedback((prev) => ({ ...prev, [index]: prev[index] === 'down' ? undefined! : 'down' }))}
+                        className={cn(
+                          'p-1.5 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer',
+                          feedback[index] === 'down' && 'text-rose-500 bg-rose-500/10 font-bold'
+                        )}
+                      >
+                        <ThumbsDown size={14} />
+                      </button>
+
+                      {/* Share / Export */}
+                      <button
+                        type="button"
+                        title="Share / Export snippet"
+                        onClick={() => {
+                          const blob = new Blob([msg.content], { type: 'text/markdown' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `mother-chat-turn-${index + 1}.md`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer"
+                      >
+                        <Share2 size={14} />
+                      </button>
+
+                      {/* Regenerate */}
+                      <button
+                        type="button"
+                        title="Regenerate turn"
+                        onClick={() => {
+                          const prevUserMsg = [...messages.slice(0, index)].reverse().find((m) => m.role === 'user');
+                          if (prevUserMsg) {
+                            handleSend(prevUserMsg.content);
+                          }
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-hover hover:text-ink transition-colors cursor-pointer"
+                      >
+                        <RotateCw size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
