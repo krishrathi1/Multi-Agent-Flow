@@ -183,6 +183,35 @@ export function CreateProcessModal({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string>();
 
+  // Edit with AI in Step 4 Review
+  const [showAiEdit, setShowAiEdit] = useState(false);
+  const [aiEditPrompt, setAiEditPrompt] = useState('');
+  const [isAiEditing, setIsAiEditing] = useState(false);
+  const [aiEditSuccess, setAiEditSuccess] = useState(false);
+
+  const handleApplyAiEdit = async (customText?: string) => {
+    const text = (customText || aiEditPrompt).trim();
+    if (!text) return;
+    setIsAiEditing(true);
+    setError(undefined);
+    try {
+      const effective = getEffectivePrompt();
+      const customizationPrompt = `Initial Fleet Requirements:\n${effective}\n\nCurrent Planned Pipeline:\nName: ${plan?.name}\nSummary: ${plan?.summary}\nCurrent Stages: ${plan?.stages.map(s => `${s.stage}. ${s.name}`).join(', ')}\n\nUSER CUSTOMIZATION REQUEST (APPLY THESE EXACT CHANGES):\n${text}\n\nRe-plan the optimal multi-stage autonomous agent fleet incorporating the requested changes.`;
+      const updatedPlan = await planProcess(
+        customizationPrompt,
+        agentCount === 'auto' ? undefined : Number(agentCount)
+      );
+      setPlan(updatedPlan);
+      setAiEditPrompt('');
+      setAiEditSuccess(true);
+      setTimeout(() => setAiEditSuccess(false), 4000);
+    } catch (err) {
+      setError((err as Error).message || 'Failed to customize agent fleet with AI.');
+    } finally {
+      setIsAiEditing(false);
+    }
+  };
+
   // Auto-parse cURL when curlInput changes or on parse action
   const handleParseAndSaveCurl = (rawOverride?: string) => {
     const raw = rawOverride !== undefined ? rawOverride : curlInput;
@@ -1128,16 +1157,100 @@ export function CreateProcessModal({
         {/* ========================================================================= */}
         {step === 'review' && (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-sm space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
-                  <Bot size={14} />
-                </span>
-                <h4 className="text-sm font-bold text-ink">{plan?.name}</h4>
+            {/* Plan Summary Header & Edit with AI Button */}
+            <div className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-sm space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-6 w-6 place-items-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                      <Bot size={14} />
+                    </span>
+                    <h4 className="text-sm font-bold text-ink">{plan?.name}</h4>
+                  </div>
+                  <p className="text-xs text-ink-muted leading-relaxed">{plan?.summary}</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAiEdit(!showAiEdit)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shrink-0 cursor-pointer',
+                    showAiEdit
+                      ? 'bg-purple-500 text-white shadow-xs'
+                      : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/25 hover:bg-purple-500/20'
+                  )}
+                >
+                  <Sparkles size={13} className={isAiEditing ? 'animate-spin' : ''} />
+                  <span>{showAiEdit ? 'Close AI Editor' : '✨ Edit with AI'}</span>
+                </button>
               </div>
-              <p className="text-xs text-ink-muted leading-relaxed">{plan?.summary}</p>
+
+              {/* AI Edit / Customization Prompt Panel */}
+              {showAiEdit && (
+                <div className="rounded-xl border border-purple-500/25 bg-purple-500/5 p-3.5 space-y-2.5 animate-scale-in">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-2xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                      <Wand2 size={12} />
+                      Prompt AI to Customize Agent Fleet:
+                    </label>
+                    {aiEditSuccess && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        <Check size={10} />
+                        Fleet Updated by AI!
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={aiEditPrompt}
+                      onChange={(e) => setAiEditPrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleApplyAiEdit();
+                      }}
+                      placeholder='e.g. "Add a QA Security Pentester in stage 2", "Make the team leaner with only 3 agents", "Focus on React 19"'
+                      className="flex-1 rounded-xl border border-line bg-surface px-3 py-2 text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleApplyAiEdit()}
+                      disabled={isAiEditing || !aiEditPrompt.trim()}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-purple-700 transition-all disabled:opacity-50 cursor-pointer shrink-0"
+                    >
+                      {isAiEditing ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                      <span>{isAiEditing ? 'Customizing…' : 'Apply AI Edit'}</span>
+                    </button>
+                  </div>
+
+                  {/* 1-Click Quick Customization Suggestions */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Quick Suggestions:</span>
+                    {[
+                      { label: '🛡️ Add Security Specialist', prompt: 'Add a dedicated OWASP Security & Secret Auditing specialist agent to the pipeline.' },
+                      { label: '⚡ Leaner Team (3 Agents)', prompt: 'Make the fleet leaner with a total of 3 highly focused specialist agents.' },
+                      { label: '🧪 Add Regression QA Agent', prompt: 'Add an automated QA reviewer and regression test specialist before deployment.' },
+                      { label: '📝 Add Docs Writer', prompt: 'Add a technical documentation and OpenAPI specification writer agent.' },
+                    ].map((chip) => (
+                      <button
+                        key={chip.label}
+                        type="button"
+                        onClick={() => {
+                          setAiEditPrompt(chip.prompt);
+                          handleApplyAiEdit(chip.prompt);
+                        }}
+                        disabled={isAiEditing}
+                        className="rounded-lg border border-purple-500/20 bg-surface/80 px-2 py-0.5 text-[10px] font-medium text-ink-muted hover:border-purple-500 hover:text-purple-600 dark:hover:text-purple-400 transition-colors cursor-pointer"
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
+            {/* Planned Stages */}
             <div className="space-y-3">
               <span className="block text-xs font-bold uppercase tracking-wider text-ink">
                 Planned Agent Stages ({plan?.agents.length} Autonomous Agents)
