@@ -150,7 +150,8 @@ export function SystemHealth() {
                             t.text,
                           )}
                         >
-                          {activityLabel[activity.type] ?? activity.type.replace(/_/g, ' ')}
+                          {(activity.type && activityLabel[activity.type]) ||
+                            (activity.type ? String(activity.type).replace(/_/g, ' ') : 'EVENT')}
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs leading-relaxed text-ink-muted line-clamp-2">

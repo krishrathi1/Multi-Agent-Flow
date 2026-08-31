@@ -38,7 +38,8 @@ export function ActivityItem({ activity }: { activity: Activity }) {
             {activity.agent.displayName}
           </span>
           <span className={cn('text-2xs font-semibold uppercase tracking-[0.07em]', t.text)}>
-            {activityLabel[activity.type] ?? activity.type.replace(/_/g, ' ')}
+            {(activity.type && activityLabel[activity.type]) ||
+              (activity.type ? String(activity.type).replace(/_/g, ' ') : 'EVENT')}
           </span>
         </div>
         <p className="mt-1 text-base leading-relaxed text-ink-muted">

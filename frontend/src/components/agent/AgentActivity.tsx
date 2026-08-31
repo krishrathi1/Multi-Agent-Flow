@@ -52,7 +52,8 @@ export function AgentActivity({ activities }: { activities: Activity[] }) {
                         t.text,
                       )}
                     >
-                      {activityLabel[activity.type] ?? activity.type.replace(/_/g, ' ')}
+                      {(activity.type && activityLabel[activity.type]) ||
+                        (activity.type ? String(activity.type).replace(/_/g, ' ') : 'EVENT')}
                     </span>
                     <time
                       className="text-2xs tabular-nums text-ink-faint"

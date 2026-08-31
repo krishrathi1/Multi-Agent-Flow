@@ -133,7 +133,7 @@ export function NotificationBell() {
           </div>
 
           {/* List */}
-          <div className="max-h-[min(65vh,400px)] overflow-y-auto divide-y divide-line-subtle/50">
+          <div className="max-h-[min(65vh,400px)] overflow-y-auto no-scrollbar divide-y divide-line-subtle/50">
             {items.length === 0 ? (
               <EmptyState
                 compact
