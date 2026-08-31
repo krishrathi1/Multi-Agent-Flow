@@ -3,7 +3,7 @@ import type { Activity } from '../../types';
 import { timeAgo, cn } from '../../lib/utils';
 import { activityIconFor, activityToneFor, activityLabel, tones } from '../../lib/design';
 import { Avatar } from '../ui/Avatar';
-import { Clock, FileCode, Check, Copy, ChevronDown, ChevronUp, FileText, AlertCircle, Wrench } from 'lucide-react';
+import { Clock, FileCode, Check, Copy, ChevronDown, ChevronUp, ChevronRight, FileText, AlertCircle, Wrench } from 'lucide-react';
 
 /** Clean up markdown fences or quotes from summary strings */
 function formatSummaryText(raw: string): string {
@@ -16,6 +16,7 @@ function formatSummaryText(raw: string): string {
 }
 
 export function ActivityItem({ activity }: { activity: Activity }) {
+  const [expandedSummary, setExpandedSummary] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -102,18 +103,57 @@ export function ActivityItem({ activity }: { activity: Activity }) {
           {activity.message}
         </p>
 
-        {/* Smart Deliverable / Output Summary Card */}
+        {/* Collapsible Deliverable / Output Summary Dropdown */}
         {summary && (
-          <div className="mt-2.5 rounded-xl bg-inset/70 border border-line-subtle p-3 space-y-1.5 transition-all">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-ink-muted uppercase tracking-wider">
-                <FileText size={12} className="text-brand-500" />
-                <span>Deliverable Summary</span>
+          <div className="mt-2 rounded-xl border border-line-subtle bg-inset/70 overflow-hidden transition-all shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setExpandedSummary(!expandedSummary)}
+              className="flex w-full items-center justify-between gap-2 p-2.5 sm:px-3 text-left hover:bg-raised/80 transition-colors cursor-pointer"
+              aria-expanded={expandedSummary}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <div className={cn(
+                  'w-5 h-5 rounded-md flex items-center justify-center text-ink-muted transition-transform duration-200',
+                  expandedSummary && 'rotate-90 text-brand-500'
+                )}>
+                  <ChevronRight size={14} />
+                </div>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <FileText size={12} className="text-brand-500 shrink-0" />
+                  <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-ink truncate">
+                    Deliverable Summary
+                  </span>
+                </div>
               </div>
-            </div>
-            <p className="text-xs text-ink/90 font-sans leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto pr-1">
-              {formatSummaryText(summary)}
-            </p>
+
+              <span className="text-2xs font-semibold text-ink-muted shrink-0 font-mono">
+                {expandedSummary ? 'Collapse' : 'Expand'}
+              </span>
+            </button>
+
+            {expandedSummary && (
+              <div className="border-t border-line-subtle p-3 pt-2.5 space-y-2 bg-inset/90 animate-scale-in">
+                <p className="text-xs text-ink/90 font-sans leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto pr-1">
+                  {formatSummaryText(summary)}
+                </p>
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(formatSummaryText(summary));
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1800);
+                    }}
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-ink-muted hover:text-ink transition-colors cursor-pointer py-0.5 px-2 rounded-lg bg-surface border border-line-subtle shadow-2xs"
+                  >
+                    {copied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
+                    <span>{copied ? 'Copied' : 'Copy Summary'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
