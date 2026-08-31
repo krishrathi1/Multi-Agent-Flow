@@ -81,6 +81,7 @@ export function Chat() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [mobileTab, setMobileTab] = useState<'chat' | 'agents'>('chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { processes, fetchProcesses } = useProcessStore();
@@ -212,10 +213,15 @@ export function Chat() {
   const selectedAgent = selectedTarget.type === 'agent' ? agents.find((a) => a.id === selectedTarget.agentId) : null;
 
   return (
-    <div className="-m-6 flex h-[calc(100dvh-3.5rem)] overflow-hidden bg-canvas">
+    <div className="-m-3.5 sm:-m-6 flex h-[calc(100dvh-3.5rem)] overflow-hidden bg-canvas">
       {/* ── Left Sidebar: Mother Core & Production Selector ── */}
-      <aside className="flex w-80 shrink-0 flex-col border-r border-line-subtle bg-surface shadow-sm">
-        <div className="space-y-3.5 border-b border-line-subtle p-4">
+      <aside
+        className={cn(
+          'flex flex-col border-r border-line-subtle bg-surface shadow-sm md:w-80 md:shrink-0',
+          mobileTab === 'agents' ? 'w-full flex-1' : 'hidden md:flex'
+        )}
+      >
+        <div className="space-y-3.5 border-b border-line-subtle p-3.5 sm:p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-indigo-600 text-white shadow-xs">
@@ -223,10 +229,21 @@ export function Chat() {
               </div>
               <h2 className="text-sm font-semibold text-ink">Mother Chat</h2>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-2xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Online
-            </span>
+
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-2xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Online
+              </span>
+              {/* Back to Chat button on mobile */}
+              <button
+                type="button"
+                onClick={() => setMobileTab('chat')}
+                className="md:hidden rounded-lg bg-brand-500/10 text-brand-600 px-2 py-1 text-2xs font-semibold hover:bg-brand-500/20 transition-colors"
+              >
+                💬 Open Chat
+              </button>
+            </div>
           </div>
 
           {/* Production Selector Dropdown */}
@@ -263,9 +280,12 @@ export function Chat() {
           {/* Primary Mother Chat Hub */}
           <button
             type="button"
-            onClick={() => setSelectedTarget({ type: 'mother', processId: selectedProcessId === 'all' ? undefined : selectedProcessId })}
+            onClick={() => {
+              setSelectedTarget({ type: 'mother', processId: selectedProcessId === 'all' ? undefined : selectedProcessId });
+              setMobileTab('chat');
+            }}
             className={cn(
-              'relative flex w-full items-start gap-3 rounded-xl p-3 text-left transition-all border',
+              'relative flex w-full items-start gap-3 rounded-xl p-3 text-left transition-all border cursor-pointer',
               selectedTarget.type === 'mother'
                 ? 'bg-brand-500/10 border-brand-500/40 text-ink shadow-xs ring-1 ring-brand-500/20'
                 : 'bg-surface border-line-subtle text-ink-muted hover:border-line hover:bg-raised'
@@ -298,9 +318,12 @@ export function Chat() {
               <button
                 key={agent.id}
                 type="button"
-                onClick={() => setSelectedTarget({ type: 'agent', agentId: agent.id })}
+                onClick={() => {
+                  setSelectedTarget({ type: 'agent', agentId: agent.id });
+                  setMobileTab('chat');
+                }}
                 className={cn(
-                  'relative flex w-full items-center gap-2.5 rounded-lg p-2.5 text-left transition-all border',
+                  'relative flex w-full items-center gap-2.5 rounded-lg p-2.5 text-left transition-all border cursor-pointer',
                   isSelected
                     ? 'bg-inset border-brand-500 text-ink shadow-xs ring-1 ring-brand-500/30'
                     : 'bg-surface border-line-subtle text-ink-muted hover:border-line hover:bg-raised'
@@ -333,13 +356,18 @@ export function Chat() {
       </aside>
 
       {/* ── Right Chat Area: Mother Core Conversation & Live Telemetry ── */}
-      <div className="flex min-w-0 flex-1 flex-col bg-canvas">
+      <div
+        className={cn(
+          'flex min-w-0 flex-1 flex-col bg-canvas',
+          mobileTab === 'chat' ? 'flex' : 'hidden md:flex'
+        )}
+      >
         {/* Conversation Header */}
-        <header className="flex shrink-0 items-center justify-between border-b border-line-subtle bg-surface px-6 py-3.5 shadow-xs">
-          <div className="flex items-center gap-3.5">
+        <header className="flex shrink-0 items-center justify-between border-b border-line-subtle bg-surface px-3.5 sm:px-6 py-3 shadow-xs">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
             {selectedTarget.type === 'mother' ? (
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 text-white shadow-sm">
-                <Brain size={20} />
+              <div className="grid h-9 w-9 sm:h-10 sm:w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 text-white shadow-sm">
+                <Brain size={18} />
               </div>
             ) : (
               <Avatar
@@ -350,29 +378,39 @@ export function Chat() {
               />
             )}
 
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-ink">
-                  {selectedTarget.type === 'mother' ? 'Mother Chat (Primary Core)' : selectedAgent?.displayName}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h2 className="truncate text-xs sm:text-sm font-semibold text-ink">
+                  {selectedTarget.type === 'mother' ? 'Mother Chat' : selectedAgent?.displayName}
                 </h2>
                 <Badge tone={selectedTarget.type === 'mother' ? 'accent' : 'brand'} size="sm">
-                  {selectedTarget.type === 'mother' ? 'Orchestrator' : `Stage ${selectedAgent?.processStage || 1}`}
+                  {selectedTarget.type === 'mother' ? 'Core' : `Stage ${selectedAgent?.processStage || 1}`}
                 </Badge>
               </div>
-              <p className="text-2xs text-ink-muted flex items-center gap-1.5 mt-0.5">
-                <Cpu size={12} className="text-brand-500" />
-                <span>
+              <p className="truncate text-2xs text-ink-muted flex items-center gap-1 mt-0.5">
+                <Cpu size={11} className="text-brand-500 shrink-0" />
+                <span className="truncate">
                   {activeProcess
-                    ? `Scoped to "${activeProcess.name}" • Connected to LLM Engine`
-                    : 'Global Fleet Scope • Live Telemetry'}
+                    ? `"${activeProcess.name}"`
+                    : 'Global Fleet Scope • Live'}
                 </span>
               </p>
             </div>
           </div>
+
+          {/* Switch Targets Button on Mobile */}
+          <button
+            type="button"
+            onClick={() => setMobileTab('agents')}
+            className="md:hidden flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1 text-2xs font-semibold text-ink shadow-2xs hover:bg-hover transition-colors shrink-0"
+          >
+            <Workflow size={13} className="text-brand-500" />
+            <span>Agents ({filteredAgents.length})</span>
+          </button>
         </header>
 
         {/* Conversation Message Feed */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4">
           {loading ? (
             <div className="flex justify-center py-16">
               <Spinner size={24} />
@@ -421,8 +459,8 @@ export function Chat() {
 
         {/* Quick Question Suggestions */}
         {selectedTarget.type === 'mother' && (
-          <div className="px-6 py-2.5 border-t border-line-subtle bg-surface/60 flex flex-wrap items-center gap-2">
-            <span className="text-2xs font-semibold uppercase tracking-wider text-ink-faint mr-1">Quick Ask:</span>
+          <div className="px-3.5 sm:px-6 py-2 border-t border-line-subtle bg-surface/60 flex items-center gap-2 overflow-x-auto scrollbar-thin">
+            <span className="text-2xs font-semibold uppercase tracking-wider text-ink-faint shrink-0">Quick:</span>
             {[
               'What has happened in this production block so far?',
               'Show me all files & code created by agents',
@@ -433,7 +471,7 @@ export function Chat() {
                 key={q}
                 type="button"
                 onClick={() => handleSend(q)}
-                className="rounded-lg border border-line-subtle bg-surface px-2.5 py-1 text-2xs font-medium text-ink-muted hover:border-brand-500 hover:text-ink transition-colors shadow-2xs"
+                className="shrink-0 rounded-lg border border-line-subtle bg-surface px-2.5 py-1 text-2xs font-medium text-ink-muted hover:border-brand-500 hover:text-ink transition-colors shadow-2xs whitespace-nowrap"
               >
                 {q}
               </button>
@@ -442,8 +480,8 @@ export function Chat() {
         )}
 
         {/* Input Composer Bar */}
-        <div className="border-t border-line-subtle bg-surface p-4">
-          <div className="flex items-center gap-2.5">
+        <div className="border-t border-line-subtle bg-surface p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             <textarea
               rows={1}
               value={input}
@@ -451,13 +489,14 @@ export function Chat() {
               onKeyDown={handleKeyDown}
               placeholder={
                 selectedTarget.type === 'mother'
-                  ? 'Ask Mother Chat about what happened, task progress, generated files, or architecture…'
+                  ? 'Ask Mother Chat about progress, code, architecture…'
                   : `Message ${selectedAgent?.displayName || 'agent'}…`
               }
-              className="flex-1 resize-none rounded-xl border border-line bg-inset px-4 py-2.5 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+              className="flex-1 resize-none rounded-xl border border-line bg-inset px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
             />
             <Button
               variant="primary"
+              size="sm"
               icon={SendHorizontal}
               loading={sending}
               onClick={() => handleSend()}
@@ -466,7 +505,7 @@ export function Chat() {
               Send
             </Button>
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-2xs text-ink-faint px-1">
+          <div className="mt-1.5 hidden sm:flex items-center justify-between text-2xs text-ink-faint px-1">
             <span>Press <kbd className="font-mono rounded border border-line bg-inset px-1 py-0.5">Enter</kbd> to send, <kbd className="font-mono rounded border border-line bg-inset px-1 py-0.5">Shift+Enter</kbd> for newline</span>
             <span>Mother Chat Fleet Intelligence</span>
           </div>
