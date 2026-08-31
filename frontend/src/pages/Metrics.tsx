@@ -12,13 +12,30 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { Bot, CircleDollarSign, Gauge, Hash, RefreshCw, Timer, TrendingUp, Wrench } from 'lucide-react';
+import {
+  Bot,
+  CircleDollarSign,
+  Gauge,
+  Hash,
+  RefreshCw,
+  Timer,
+  TrendingUp,
+  Wrench,
+  Activity,
+  Zap,
+  Clock,
+  ArrowUpRight,
+  ShieldCheck,
+  Cpu,
+  Layers,
+  Sparkles,
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { useUiStore } from '@/stores/ui-store';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { timeAgo } from '@/lib/utils';
+import { cn, timeAgo } from '@/lib/utils';
 import type { TokenUsage, MetricSnapshot, AgentInsight } from '@/types';
 import { formatCompact, formatCurrency, formatMs } from '@/lib/design';
 import { useChartTheme } from '@/lib/use-chart-theme';
@@ -27,6 +44,8 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
 import { EmptyState, Skeleton } from '@/components/ui/States';
 import { TableWrap, Table, Th, Td, Tr } from '@/components/ui/Table';
+import { LiveWaveform, LiveRadarBeacon } from '@/components/ui/LiveIcon';
+import { HourglassLoader } from '@/components/ui/HourglassLoader';
 
 interface TokenSummary {
   totalTokens: number;
@@ -56,40 +75,89 @@ interface MetricsSummary {
 
 const CHART_H = 260;
 
-/** Chart body with a consistent title, height and empty state. */
+/** Modern Glassmorphic Tooltip for Recharts */
+function CustomChartTooltip({
+  active,
+  payload,
+  label,
+  valueFormatter,
+}: {
+  active?: boolean;
+  payload?: any[];
+  label?: string;
+  valueFormatter?: (val: any, name?: string) => string;
+}) {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="rounded-2xl border border-line bg-surface/95 backdrop-blur-xl p-3 shadow-xl text-xs space-y-1.5 min-w-[150px] animate-scale-in">
+      {label && (
+        <p className="text-[11px] font-bold text-ink-muted border-b border-line-subtle pb-1">
+          {label}
+        </p>
+      )}
+      {payload.map((item, i) => (
+        <div key={i} className="flex items-center justify-between gap-3 text-2xs font-semibold">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: item.color || item.fill || '#3b82f6' }}
+            />
+            <span className="text-ink-muted capitalize truncate">{item.name}</span>
+          </div>
+          <span className="text-ink font-mono font-bold shrink-0">
+            {valueFormatter ? valueFormatter(item.value, item.name) : typeof item.value === 'number' ? item.value.toLocaleString() : item.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Chart panel card container with consistent header and responsive body */
 function ChartPanel({
   title,
   description,
-  icon,
+  icon: Icon,
   empty,
   emptyLabel,
+  action,
   children,
 }: {
   title: string;
   description?: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   empty?: boolean;
   emptyLabel?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <Card padding="none" className="min-w-0">
-      <CardHeader bordered icon={icon as never} title={title} description={description} />
-      <div className="p-3">
+    <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs hover:border-line-strong transition-all flex flex-col justify-between">
+      <div className="flex items-center justify-between gap-3 border-b border-line-subtle pb-3 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0">
+            <Icon size={16} />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink truncate">{title}</h3>
+            {description && <p className="text-[11px] text-ink-muted truncate">{description}</p>}
+          </div>
+        </div>
+        {action}
+      </div>
+
+      <div className="flex-1 min-h-0">
         {empty ? (
-          <div style={{ height: CHART_H }} className="flex items-center justify-center">
-            <EmptyState
-              compact
-              icon={icon as never}
-              title="No data yet"
-              description={emptyLabel ?? 'Data appears once agents report activity.'}
-            />
+          <div style={{ height: CHART_H }} className="flex flex-col items-center justify-center text-center p-6">
+            <Icon size={28} className="text-ink-faint mb-2 opacity-50" />
+            <p className="text-xs font-semibold text-ink">No data recorded</p>
+            <p className="text-[11px] text-ink-muted mt-0.5 max-w-xs">{emptyLabel ?? 'Metrics will populate automatically as agents process tasks.'}</p>
           </div>
         ) : (
           children
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -104,13 +172,8 @@ export function Metrics() {
   const [insights, setInsights] = useState<AgentInsight[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  // Guards against overlapping refreshes when a burst of events arrives.
   const inFlight = useRef(false);
 
-  /**
-   * `silent` keeps the charts on screen during background refreshes — showing
-   * the skeleton every 15s would make the page flicker.
-   */
   const fetchData = useCallback(async (silent = false) => {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -143,8 +206,6 @@ export function Metrics() {
     fetchData();
   }, [fetchData]);
 
-  // Poll while the tab is visible. Metrics are aggregates, so a 15s cadence is
-  // plenty and avoids hammering the API in a background tab.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState === 'visible') fetchData(true);
@@ -157,19 +218,20 @@ export function Metrics() {
     };
   }, [fetchData]);
 
-  // Anything that produces token usage or a metric snapshot should pull fresh
-  // numbers immediately rather than waiting for the next poll.
   useEffect(() => {
     const s = getSocket();
     let queued: ReturnType<typeof setTimeout> | null = null;
     const refresh = () => {
-      // Debounce: a chain starting can emit many events at once.
       if (queued) clearTimeout(queued);
       queued = setTimeout(() => fetchData(true), 800);
     };
     const events = [
-      'activity:new', 'metrics:new', 'token:usage',
-      'agent:status', 'agent:heartbeat', 'process:updated',
+      'activity:new',
+      'metrics:new',
+      'token:usage',
+      'agent:status',
+      'agent:heartbeat',
+      'process:updated',
     ];
     events.forEach((e) => s.on(e, refresh));
     return () => {
@@ -202,7 +264,7 @@ export function Metrics() {
 
   const hourlyTokenData = useMemo(() => {
     const now = Date.now();
-    const buckets: Array<{ hour: string; input: number; output: number }> = [];
+    const buckets: Array<{ hour: string; input: number; output: number; total: number }> = [];
     for (let i = 23; i >= 0; i--) {
       const start = now - (i + 1) * 60 * 60 * 1000;
       const end = now - i * 60 * 60 * 1000;
@@ -214,10 +276,13 @@ export function Metrics() {
         const ts = new Date(t.createdAt).getTime();
         return ts >= start && ts < end;
       });
+      const input = inRange.reduce((sum, t) => sum + t.inputTokens, 0);
+      const output = inRange.reduce((sum, t) => sum + t.outputTokens, 0);
       buckets.push({
         hour: hourLabel,
-        input: inRange.reduce((sum, t) => sum + t.inputTokens, 0),
-        output: inRange.reduce((sum, t) => sum + t.outputTokens, 0),
+        input,
+        output,
+        total: input + output,
       });
     }
     return buckets;
@@ -228,7 +293,12 @@ export function Metrics() {
   const costByAgent = useMemo(() => {
     if (!tokenSummary) return [];
     return tokenSummary.byAgent
-      .map((a) => ({ name: a.displayName, cost: Math.round(a.totalCost * 10000) / 10000 }))
+      .map((a) => ({
+        name: a.displayName,
+        agentName: a.agentName,
+        cost: Math.round(a.totalCost * 10000) / 10000,
+        tokens: a.totalTokens,
+      }))
       .sort((a, b) => b.cost - a.cost);
   }, [tokenSummary]);
 
@@ -238,6 +308,7 @@ export function Metrics() {
       name: a.displayName,
       avg: a.avgResponseTime,
       p95: a.p95ResponseTime,
+      calls: a.totalCalls,
     }));
   }, [metricsSummary]);
 
@@ -246,11 +317,10 @@ export function Metrics() {
     return metricsSummary.byAgent.map((a) => ({
       name: a.displayName,
       rate: a.successRate,
+      calls: a.totalCalls,
     }));
   }, [metricsSummary]);
 
-  /* Tool usage was a donut. A donut can't carry 8 slices legibly, so this is a
-     ranked horizontal bar — same data, actually comparable. */
   const toolUsage = useMemo(() => {
     const toolMap = new Map<string, number>();
     for (const m of metrics) {
@@ -265,41 +335,35 @@ export function Metrics() {
 
   if (loading) {
     return (
-      <>
+      <div className="space-y-6">
         <PageHeader
           icon={Gauge}
           title="Metrics & Cost"
-          description="Token usage, latency, and spend across the fleet."
+          description="Real-time telemetry, model token consumption, latency, and fleet spend analysis"
         />
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[104px] rounded-xl" />
-          ))}
+        <div className="flex flex-col items-center justify-center py-24">
+          <HourglassLoader size={52} label="Compiling fleet analytics..." />
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Skeleton className="h-[340px] rounded-xl" />
-          <Skeleton className="h-[340px] rounded-xl" />
-        </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         icon={Gauge}
         title="Metrics & Cost"
-        description="Token usage, latency, and spend across the fleet."
+        description="Real-time telemetry, model token consumption, latency, and fleet spend analysis"
         badge={
           <Badge tone={socketConnected ? 'success' : 'neutral'} dot pulse={socketConnected}>
-            {socketConnected ? 'Live' : 'Offline'}
+            {socketConnected ? 'Live Feed' : 'Offline'}
           </Badge>
         }
         actions={
-          <>
+          <div className="flex items-center gap-3">
             {lastUpdated && (
-              <span className="text-xs tabular-nums text-ink-faint">
-                Updated {timeAgo(lastUpdated)}
+              <span className="text-2xs font-semibold tabular-nums text-ink-muted flex items-center gap-1 bg-inset px-2.5 py-1 rounded-xl border border-line-subtle">
+                <Clock size={11} /> {timeAgo(lastUpdated)}
               </span>
             )}
             <Button
@@ -310,244 +374,284 @@ export function Metrics() {
             >
               Refresh
             </Button>
-          </>
+          </div>
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard
-          label="Tokens"
-          value={formatCompact(stats24h.totalTokens24h)}
-          sublabel="Last 24 hours"
-          icon={Hash}
-          tone="brand"
-          muted={stats24h.totalTokens24h === 0}
-        />
-        <StatCard
-          label="Spend"
-          value={formatCurrency(stats24h.totalCost24h)}
-          sublabel="Last 24 hours"
-          icon={CircleDollarSign}
-          tone="success"
-          muted={stats24h.totalCost24h === 0}
-        />
-        <StatCard
-          label="Avg Response"
-          value={formatMs(stats24h.avgResponseTime)}
-          sublabel={`${formatCompact(stats24h.calls)} calls`}
-          icon={Timer}
-          tone="warning"
-          muted={stats24h.avgResponseTime === 0}
-        />
-        <StatCard
-          label="Success Rate"
-          value={`${stats24h.successRate}%`}
-          sublabel="Last 24 hours"
-          icon={TrendingUp}
-          tone={stats24h.successRate >= 95 ? 'success' : stats24h.successRate >= 80 ? 'warning' : 'danger'}
-          muted={stats24h.calls === 0}
-        />
+      {/* 4 Core Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Tokens</span>
+            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center">
+              <Hash size={16} />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
+            {formatCompact(stats24h.totalTokens24h)}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Last 24 hours throughput</p>
+        </div>
+
+        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Total Spend</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+              <CircleDollarSign size={16} />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono text-emerald-600 dark:text-emerald-400">
+            {formatCurrency(stats24h.totalCost24h)}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Across all connected LLMs</p>
+        </div>
+
+        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Avg Response</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center">
+              <Timer size={16} />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
+            {formatMs(stats24h.avgResponseTime)}
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">{formatCompact(stats24h.calls)} total LLM calls</p>
+        </div>
+
+        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Success Rate</span>
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 flex items-center justify-center">
+              <TrendingUp size={16} />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
+            {stats24h.successRate}%
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Zero-anomaly threshold</p>
+        </div>
       </div>
 
-      {/* ---- Row 1 ---- */}
-      <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {/* Row 1: Token Usage Gradient Area Chart & Cost by Agent */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Token Usage Area Chart */}
         <ChartPanel
           icon={Hash}
-          title="Token Usage"
-          description="Input vs. output, hourly over 24h"
+          title="Token Usage Over Time"
+          description="Input vs. Output tokens hourly breakdown (24h)"
           empty={!hasTokenSeries}
-          emptyLabel="No token usage recorded in the last 24 hours."
+          emptyLabel="No token activity recorded in the past 24 hours."
         >
           <ResponsiveContainer width="100%" height={CHART_H}>
-            <AreaChart data={hourlyTokenData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke={chart.axis.stroke} strokeDasharray="2 4" vertical={false} />
+            <AreaChart data={hourlyTokenData} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="tokenInputGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.45} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+                </linearGradient>
+                <linearGradient id="tokenOutputGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.45} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--c-line-subtle)" />
               <XAxis
                 dataKey="hour"
-                tick={chart.axis.tick}
+                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
                 tickLine={false}
-                axisLine={{ stroke: chart.axis.stroke }}
+                axisLine={{ stroke: 'var(--c-line)' }}
                 interval="preserveStartEnd"
                 minTickGap={28}
               />
               <YAxis
-                tick={chart.axis.tick}
+                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
                 tickLine={false}
                 axisLine={false}
-                width={44}
+                width={42}
                 tickFormatter={formatCompact}
               />
               <Tooltip
-                {...chart.tooltip}
-                formatter={(value: number, name: string) => [
-                  formatCompact(value),
-                  name === 'input' ? 'Input' : 'Output',
-                ]}
+                content={
+                  <CustomChartTooltip
+                    valueFormatter={(val, name) => `${formatCompact(val)} ${name === 'input' ? 'Input' : 'Output'}`}
+                  />
+                }
               />
               <Legend
                 iconType="circle"
                 iconSize={8}
-                wrapperStyle={{ fontSize: 12, color: '#a2acbd', paddingTop: 4 }}
-                formatter={(v) => (v === 'input' ? 'Input tokens' : 'Output tokens')}
+                wrapperStyle={{ fontSize: 11, fontWeight: 600, color: 'var(--c-ink-muted)', paddingTop: 8 }}
+                formatter={(v) => (v === 'input' ? 'Input Tokens' : 'Output Tokens')}
               />
-              {/* 2px surface-coloured stroke keeps stacked bands from bleeding
-                  into each other. */}
               <Area
                 type="monotone"
                 dataKey="input"
                 stackId="1"
-                stroke={chart.surface}
-                strokeWidth={2}
-                fill={chart.colors[0]}
-                fillOpacity={0.85}
+                stroke="#3b82f6"
+                strokeWidth={2.5}
+                fill="url(#tokenInputGradient)"
                 name="input"
               />
               <Area
                 type="monotone"
                 dataKey="output"
                 stackId="1"
-                stroke={chart.surface}
-                strokeWidth={2}
-                fill={chart.colors[2]}
-                fillOpacity={0.85}
+                stroke="#10b981"
+                strokeWidth={2.5}
+                fill="url(#tokenOutputGradient)"
                 name="output"
               />
             </AreaChart>
           </ResponsiveContainer>
         </ChartPanel>
 
+        {/* Cost by Agent Ranked List */}
         <ChartPanel
           icon={CircleDollarSign}
-          title="Cost by Agent"
-          description="Total spend, highest first"
+          title="Cost Breakdown by Agent"
+          description="Cumulative token expenditure per agent"
           empty={costByAgent.length === 0}
+          emptyLabel="No spend incurred yet."
         >
-          <ResponsiveContainer width="100%" height={CHART_H}>
-            <BarChart
-              data={costByAgent}
-              layout="vertical"
-              margin={{ top: 4, right: 16, bottom: 0, left: 0 }}
-              barCategoryGap="22%"
-            >
-              <CartesianGrid stroke={chart.axis.stroke} strokeDasharray="2 4" horizontal={false} />
-              <XAxis
-                type="number"
-                tick={chart.axis.tick}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `$${v}`}
-              />
-              <YAxis
-                type="category"
-                dataKey="name"
-                tick={chart.axis.tick}
-                tickLine={false}
-                axisLine={false}
-                width={112}
-              />
-              <Tooltip
-                {...chart.tooltip}
-                formatter={(value: number) => [formatCurrency(value), 'Cost']}
-              />
-              {/* Single measure → one hue. Colour here would encode nothing. */}
-              <Bar dataKey="cost" radius={[0, 4, 4, 0]} fill={chart.colors[0]} maxBarSize={22} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="space-y-3.5 max-h-[260px] overflow-y-auto pr-1">
+            {costByAgent.map((agent, i) => {
+              const maxCost = Math.max(...costByAgent.map((a) => a.cost), 0.0001);
+              const percentage = Math.min(Math.round((agent.cost / maxCost) * 100), 100);
+              return (
+                <div key={agent.name} className="p-3 rounded-xl bg-inset/60 border border-line-subtle hover:border-line transition-all">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-5 h-5 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                        #{i + 1}
+                      </span>
+                      <span className="text-xs font-bold text-ink truncate">{agent.name}</span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(agent.cost)}
+                      </span>
+                      <span className="text-[10px] text-ink-faint font-mono ml-1.5">
+                        ({formatCompact(agent.tokens)} tok)
+                      </span>
+                    </div>
+                  </div>
+                  {/* Progress Meter */}
+                  <div className="w-full h-2 rounded-full bg-surface border border-line-subtle overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-all duration-500"
+                      style={{ width: `${Math.max(percentage, 4)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </ChartPanel>
       </div>
 
-      {/* ---- Row 2 ---- */}
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+      {/* Row 2: Response Time, Success Rate, Tool Usage */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Response Latency */}
         <ChartPanel
           icon={Timer}
-          title="Response Time"
-          description="Average vs. p95, per agent"
+          title="Response Time (Latency)"
+          description="Average vs. p95 tail latency per agent"
           empty={responseTimeByAgent.length === 0}
         >
           <ResponsiveContainer width="100%" height={CHART_H}>
             <BarChart
               data={responseTimeByAgent}
-              margin={{ top: 4, right: 8, bottom: 30, left: 0 }}
-              barGap={2}
+              margin={{ top: 8, right: 8, bottom: 25, left: 0 }}
+              barGap={4}
             >
-              <CartesianGrid stroke={chart.axis.stroke} strokeDasharray="2 4" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--c-line-subtle)" />
               <XAxis
                 dataKey="name"
-                tick={{ ...chart.axis.tick, fontSize: 10 }}
+                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
                 tickLine={false}
-                axisLine={{ stroke: chart.axis.stroke }}
-                angle={-25}
+                axisLine={{ stroke: 'var(--c-line)' }}
+                angle={-18}
                 textAnchor="end"
-                height={44}
+                height={35}
                 interval={0}
               />
               <YAxis
-                tick={chart.axis.tick}
+                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
                 tickLine={false}
                 axisLine={false}
-                width={48}
+                width={44}
                 tickFormatter={(v) => `${v}ms`}
               />
               <Tooltip
-                {...chart.tooltip}
-                formatter={(value: number, name: string) => [
-                  formatMs(value),
-                  name === 'avg' ? 'Average' : 'p95',
-                ]}
+                content={
+                  <CustomChartTooltip
+                    valueFormatter={(val, name) => `${formatMs(val)} (${name === 'avg' ? 'Avg' : 'p95'})`}
+                  />
+                }
               />
               <Legend
                 iconType="circle"
                 iconSize={8}
-                wrapperStyle={{ fontSize: 12, color: '#a2acbd' }}
-                formatter={(v) => (v === 'avg' ? 'Average' : 'p95')}
+                wrapperStyle={{ fontSize: 11, fontWeight: 600, color: 'var(--c-ink-muted)', paddingTop: 4 }}
+                formatter={(v) => (v === 'avg' ? 'Average Latency' : 'p95 Tail Latency')}
               />
-              <Bar dataKey="avg" fill={chart.colors[0]} radius={[3, 3, 0, 0]} name="avg" maxBarSize={18} />
-              <Bar dataKey="p95" fill={chart.colors[1]} radius={[3, 3, 0, 0]} name="p95" maxBarSize={18} />
+              <Bar dataKey="avg" fill="#3b82f6" radius={[4, 4, 0, 0]} name="avg" maxBarSize={20} />
+              <Bar dataKey="p95" fill="#f97316" radius={[4, 4, 0, 0]} name="p95" maxBarSize={20} />
             </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
 
+        {/* Success Rate */}
         <ChartPanel
           icon={TrendingUp}
-          title="Success Rate"
-          description="Green ≥95%, amber ≥80%, red below"
+          title="Reliability & Success Rate"
+          description="Zero-error task execution benchmark"
           empty={successRateByAgent.length === 0}
         >
           <ResponsiveContainer width="100%" height={CHART_H}>
             <BarChart
               data={successRateByAgent}
-              margin={{ top: 4, right: 8, bottom: 30, left: 0 }}
-              barCategoryGap="24%"
+              margin={{ top: 8, right: 8, bottom: 25, left: 0 }}
+              barCategoryGap="28%"
             >
-              <CartesianGrid stroke={chart.axis.stroke} strokeDasharray="2 4" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--c-line-subtle)" />
               <XAxis
                 dataKey="name"
-                tick={{ ...chart.axis.tick, fontSize: 10 }}
+                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
                 tickLine={false}
-                axisLine={{ stroke: chart.axis.stroke }}
-                angle={-25}
+                axisLine={{ stroke: 'var(--c-line)' }}
+                angle={-18}
                 textAnchor="end"
-                height={44}
+                height={35}
                 interval={0}
               />
               <YAxis
-                tick={chart.axis.tick}
+                tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
                 tickLine={false}
                 axisLine={false}
-                width={40}
+                width={38}
                 domain={[0, 100]}
                 tickFormatter={(v) => `${v}%`}
               />
               <Tooltip
-                {...chart.tooltip}
-                formatter={(value: number) => [`${value}%`, 'Success rate']}
+                content={
+                  <CustomChartTooltip
+                    valueFormatter={(val) => `${val}% Success`}
+                  />
+                }
               />
-              {/* Status encoding, not categorical — the threshold is stated in
-                  the panel description so colour isn't the only cue. */}
-              <Bar dataKey="rate" radius={[3, 3, 0, 0]} maxBarSize={30}>
+              <Bar dataKey="rate" radius={[6, 6, 0, 0]} maxBarSize={32}>
                 {successRateByAgent.map((entry, i) => (
                   <Cell
                     key={i}
-                    fill={entry.rate >= 95 ? chart.status.good : entry.rate >= 80 ? chart.status.warn : chart.status.bad}
+                    fill={
+                      entry.rate >= 95
+                        ? '#10b981'
+                        : entry.rate >= 80
+                          ? '#f59e0b'
+                          : '#ef4444'
+                    }
                   />
                 ))}
               </Bar>
@@ -555,93 +659,117 @@ export function Metrics() {
           </ResponsiveContainer>
         </ChartPanel>
 
+        {/* Tool Invocations */}
         <ChartPanel
           icon={Wrench}
-          title="Tool Usage"
-          description="Top 10 tools by call count"
+          title="Top Tool Invocations"
+          description="Most called agent functions & tools"
           empty={toolUsage.length === 0}
         >
-          <ResponsiveContainer width="100%" height={CHART_H}>
-            <BarChart
-              data={toolUsage}
-              layout="vertical"
-              margin={{ top: 4, right: 16, bottom: 0, left: 0 }}
-              barCategoryGap="20%"
-            >
-              <CartesianGrid stroke={chart.axis.stroke} strokeDasharray="2 4" horizontal={false} />
-              <XAxis type="number" tick={chart.axis.tick} tickLine={false} axisLine={false} />
-              <YAxis
-                type="category"
-                dataKey="name"
-                tick={{ ...chart.axis.tick, fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
-                width={104}
-              />
-              <Tooltip
-                {...chart.tooltip}
-                formatter={(value: number) => [`${value} calls`, 'Usage']}
-              />
-              <Bar dataKey="calls" radius={[0, 4, 4, 0]} fill={chart.colors[2]} maxBarSize={18} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+            {toolUsage.map((tool, i) => {
+              const maxCalls = Math.max(...toolUsage.map((t) => t.calls), 1);
+              const percentage = Math.round((tool.calls / maxCalls) * 100);
+              return (
+                <div key={tool.name} className="p-2.5 rounded-xl bg-inset/50 border border-line-subtle flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-5 h-5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 font-mono text-[10px] font-bold flex items-center justify-center shrink-0">
+                      {i + 1}
+                    </span>
+                    <span className="text-xs font-mono font-semibold text-ink truncate">{tool.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="w-16 h-1.5 rounded-full bg-surface border border-line-subtle overflow-hidden hidden sm:block">
+                      <div
+                        className="h-full bg-purple-500 rounded-full"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md bg-surface border border-line text-2xs font-mono font-bold text-ink">
+                      {tool.calls} calls
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </ChartPanel>
       </div>
 
-      {/* Which agents actually cost money and which are unreliable. Averages
-          across charts hide this; a ranked table does not. */}
+      {/* Row 3: Ranked Agent Performance Table */}
       {insights.length > 0 && (
-        <div className="mt-4">
-          <Card padding="none">
-            <CardHeader
-              bordered
-              icon={Bot}
-              title="Agent performance"
-              description="Ranked by spend across every chain run"
-            />
-            <TableWrap className="rounded-none border-0">
-              <Table>
-                <thead>
-                  <tr>
-                    <Th>Agent</Th>
-                    <Th align="right">Steps</Th>
-                    <Th align="right">Success</Th>
-                    <Th align="right">Avg time</Th>
-                    <Th align="right">Tokens</Th>
-                    <Th align="right">Spend</Th>
+        <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs">
+          <div className="flex items-center justify-between border-b border-line-subtle pb-3 mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400">
+                <Bot size={16} />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Agent Performance Ranking</h3>
+                <p className="text-[11px] text-ink-muted">Cumulative run metrics, duration, token usage, and total spend</p>
+              </div>
+            </div>
+            <LiveWaveform color="bg-brand-500" />
+          </div>
+
+          <div className="overflow-x-auto no-scrollbar">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-line-subtle text-[11px] uppercase tracking-wider text-ink-muted font-bold">
+                  <th className="py-2.5 px-3">Agent</th>
+                  <th className="py-2.5 px-3 text-right">Steps/Runs</th>
+                  <th className="py-2.5 px-3 text-right">Success</th>
+                  <th className="py-2.5 px-3 text-right">Avg Time</th>
+                  <th className="py-2.5 px-3 text-right">Tokens</th>
+                  <th className="py-2.5 px-3 text-right">Spend</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line-subtle font-medium">
+                {insights.map((agent) => (
+                  <tr key={agent.agentId} className="hover:bg-hover/50 transition-colors">
+                    <td className="py-3 px-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-inset border border-line flex items-center justify-center text-xs shrink-0">
+                          🤖
+                        </div>
+                        <div>
+                          <span className="font-bold text-ink block">{agent.agentName}</span>
+                          <span className="text-[10px] text-ink-faint font-mono">{agent.agentId}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-semibold text-ink">
+                      {agent.runs}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <span className={cn(
+                        'inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border',
+                        agent.successRate >= 90
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
+                          : agent.successRate >= 75
+                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25'
+                      )}>
+                        {agent.successRate}%
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono text-ink-muted">
+                      {formatMs(agent.avgDurationMs)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono text-ink-muted">
+                      {formatCompact(agent.totalTokens)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(agent.totalCostUsd)}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {insights.map((a) => (
-                    <Tr key={a.agentId}>
-                      <Td className="font-medium text-ink">{a.agentName}</Td>
-                      <Td align="right">{a.runs}</Td>
-                      <Td align="right">
-                        <Badge
-                          tone={
-                            a.successRate >= 80
-                              ? 'success'
-                              : a.successRate >= 50
-                                ? 'warning'
-                                : 'danger'
-                          }
-                        >
-                          {a.successRate}%
-                        </Badge>
-                      </Td>
-                      <Td align="right">{formatMs(a.avgDurationMs)}</Td>
-                      <Td align="right">{formatCompact(a.totalTokens)}</Td>
-                      <Td align="right" className="font-medium text-ink">
-                        {formatCurrency(a.totalCostUsd)}
-                      </Td>
-                    </Tr>
-                  ))}
-                </tbody>
-              </Table>
-            </TableWrap>
-          </Card>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
+
