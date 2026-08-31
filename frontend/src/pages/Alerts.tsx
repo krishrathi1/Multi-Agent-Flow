@@ -205,7 +205,9 @@ export function Alerts() {
           title="Alerts & Telemetry"
           description="Monitor autonomous agent alert rules, events, and anomaly thresholds"
         />
-        <div className="text-ink-muted text-xs p-6 text-center">Loading alert telemetry...</div>
+        <div className="flex flex-col items-center justify-center py-20">
+          <HourglassLoader size={48} label="Loading alert telemetry..." />
+        </div>
       </div>
     );
   }

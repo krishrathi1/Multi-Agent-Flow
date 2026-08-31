@@ -4,6 +4,7 @@ import { ProcessScope } from '../components/process/ProcessScope';
 import { useProcessStore } from '../stores/process-store';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { HourglassLoader } from '../components/ui/HourglassLoader';
 import { ScrollText, RefreshCw, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { Session } from '@/types';
@@ -300,8 +301,8 @@ export function Timeline() {
           </>
         }
       />
-        <div className="flex items-center justify-center h-96 text-gray-500 text-sm">
-          Loading timeline...
+        <div className="flex flex-col items-center justify-center py-24">
+          <HourglassLoader size={48} label="Loading session timeline..." />
         </div>
       </div>
     );

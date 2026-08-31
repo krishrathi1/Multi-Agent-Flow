@@ -31,6 +31,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Avatar } from '../components/ui/Avatar';
 import { Tabs } from '../components/ui/Tabs';
+import { HourglassLoader } from '../components/ui/HourglassLoader';
 import { api } from '../lib/api';
 import { cn, timeAgo } from '../lib/utils';
 import { useAuthStore } from '../stores/auth-store';
@@ -143,9 +144,9 @@ function OrganizationTab() {
 
   if (loading) {
     return (
-      <Card padding="md" className="p-8 text-center text-sm text-ink-muted">
-        Loading organization details...
-      </Card>
+      <div className="flex flex-col items-center justify-center py-16">
+        <HourglassLoader size={40} label="Loading organization details..." />
+      </div>
     );
   }
 
@@ -401,9 +402,9 @@ function MembersTab({
       {/* Mobile Member Cards (sm:hidden) */}
       <div className="space-y-3 sm:hidden">
         {loading ? (
-          <Card padding="md" className="p-6 text-center text-xs text-ink-muted">
-            Loading team members...
-          </Card>
+          <div className="flex flex-col items-center justify-center py-12">
+            <HourglassLoader size={36} label="Loading team members..." />
+          </div>
         ) : members.length === 0 ? (
           <Card padding="md" className="p-6 text-center text-xs text-ink-muted">
             No members found.
@@ -488,8 +489,8 @@ function MembersTab({
             <tbody className="divide-y divide-line-subtle">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center text-ink-muted">
-                    Loading members...
+                  <td colSpan={4} className="px-5 py-12 text-center text-ink-muted">
+                    <HourglassLoader size={40} label="Loading members..." />
                   </td>
                 </tr>
               ) : members.length === 0 ? (
@@ -730,9 +731,9 @@ function ApiKeysTab({ isAdmin }: { isAdmin: boolean }) {
       {/* Keys List */}
       <div className="space-y-3">
         {loading ? (
-          <Card padding="md" className="p-8 text-center text-xs text-ink-muted">
-            Loading API keys...
-          </Card>
+          <div className="flex flex-col items-center justify-center py-16">
+            <HourglassLoader size={40} label="Loading API keys..." />
+          </div>
         ) : keys.length === 0 ? (
           <Card padding="md" className="p-8 text-center text-xs text-ink-muted">
             No active API keys found. Click &quot;Generate New Key&quot; to create one.

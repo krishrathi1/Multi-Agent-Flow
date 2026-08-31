@@ -28,6 +28,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge, Chip } from '@/components/ui/Badge';
 import { Avatar } from '@/components/ui/Avatar';
+import { HourglassLoader } from '@/components/ui/HourglassLoader';
 import { useToast } from '@/components/ui/Toast';
 
 function AgentControlCard({ agent, onCommandSent }: { agent: Agent; onCommandSent: () => void }) {
@@ -478,15 +479,21 @@ export function AgentControls() {
       </div>
 
       {/* Agents Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {agents.map((agent) => (
-          <AgentControlCard
-            key={agent.id}
-            agent={agent}
-            onCommandSent={fetchAllCommands}
-          />
-        ))}
-      </div>
+      {agents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <HourglassLoader size={48} label="Loading fleet agents..." />
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {agents.map((agent) => (
+            <AgentControlCard
+              key={agent.id}
+              agent={agent}
+              onCommandSent={fetchAllCommands}
+            />
+          ))}
+        </div>
+      )}
     </>
   );
 }

@@ -4,6 +4,7 @@ import { useAgentStore } from '../stores/agent-store';
 import { HeartbeatChart } from '../components/agent/HeartbeatChart';
 import { AgentActivity } from '../components/agent/AgentActivity';
 import { SoulViewer } from '../components/agent/SoulViewer';
+import { HourglassLoader } from '../components/ui/HourglassLoader';
 import { statusColors, statusTextColors, timeAgo, cn } from '../lib/utils';
 import { api } from '../lib/api';
 import type { WorkspaceFile } from '../types';
@@ -17,7 +18,11 @@ export function AgentProfile() {
   }, [id, fetchAgent]);
 
   if (!selectedAgent) {
-    return <div className="py-12 text-ink-muted text-center text-xs">Loading agent...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center py-24">
+        <HourglassLoader size={48} label="Loading agent telemetry..." />
+      </div>
+    );
   }
 
   const agent = selectedAgent;
@@ -231,7 +236,9 @@ function WorkspaceFiles({ agentId }: { agentId: string }) {
       </div>
 
       {loading ? (
-        <div className="text-xs text-ink-muted py-4 text-center">Loading files...</div>
+        <div className="flex flex-col items-center justify-center py-8">
+          <HourglassLoader size={36} label="Loading workspace files..." />
+        </div>
       ) : selectedFile ? (
         <div>
           <div className="flex items-center justify-between mb-2">

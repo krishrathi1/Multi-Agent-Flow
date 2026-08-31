@@ -25,6 +25,7 @@ import { Badge } from '../components/ui/Badge';
 import { Avatar } from '../components/ui/Avatar';
 import { LiveRadarBeacon, LiveWaveform, LiveGearIcon } from '../components/ui/LiveIcon';
 import { LottieAnimation } from '../components/ui/LottieAnimation';
+import { HourglassLoader } from '../components/ui/HourglassLoader';
 import { api } from '../lib/api';
 import { cn, timeAgo } from '../lib/utils';
 import type { McpServer, McpTool, Agent } from '../types';
@@ -352,8 +353,8 @@ export function McpHub() {
 
       {/* ── MCP Servers Grid ── */}
       {loading ? (
-        <div className="p-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line">
-          Loading Model Context Protocol servers...
+        <div className="flex flex-col items-center justify-center py-20">
+          <HourglassLoader size={48} label="Loading Model Context Protocol servers..." />
         </div>
       ) : filteredServers.length === 0 ? (
         <div className="rounded-2xl border border-line bg-surface p-12 text-center shadow-2xs space-y-3">
