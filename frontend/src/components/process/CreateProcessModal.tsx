@@ -329,49 +329,34 @@ export function CreateProcessModal({
     >
       {step === 'describe' ? (
         <div className="space-y-4">
-          {/* Mode Selector Tabs */}
-          <div className="flex gap-1 rounded-xl border border-line-subtle bg-inset/50 p-1">
-            <button
-              type="button"
-              onClick={() => setMode('ai')}
-              className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold transition-all whitespace-nowrap',
-                mode === 'ai'
-                  ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-xs border border-line-subtle'
-                  : 'text-ink-muted hover:text-ink'
-              )}
-            >
-              <Sparkles size={13} className="text-amber-500 shrink-0" />
-              <span>Build with AI</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMode('curl')}
-              className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold transition-all whitespace-nowrap',
-                mode === 'curl'
-                  ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-xs border border-line-subtle'
-                  : 'text-ink-muted hover:text-ink'
-              )}
-            >
-              <Terminal size={13} className="shrink-0" />
-              <span>cURL / API</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMode('github')}
-              className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold transition-all whitespace-nowrap',
-                mode === 'github'
-                  ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-xs border border-line-subtle'
-                  : 'text-ink-muted hover:text-ink'
-              )}
-            >
-              <Github size={13} className="shrink-0" />
-              <span>GitHub + Vercel</span>
-            </button>
+          {/* Mode Selector — Pill Segmented Control */}
+          <div className="grid grid-cols-3 rounded-2xl bg-inset border border-line-subtle p-1 gap-1">
+            {(
+              [
+                { id: 'ai',     icon: Sparkles,  label: 'Build with AI',    activeColor: 'text-amber-600 dark:text-amber-400',  activeBg: 'bg-amber-500/10 border-amber-500/25' },
+                { id: 'curl',   icon: Terminal,  label: 'cURL / API',       activeColor: 'text-brand-600 dark:text-brand-400',  activeBg: 'bg-brand-500/10 border-brand-500/25' },
+                { id: 'github', icon: Github,    label: 'GitHub + Vercel',  activeColor: 'text-purple-600 dark:text-purple-400', activeBg: 'bg-purple-500/10 border-purple-500/25' },
+              ] as const
+            ).map((tab) => {
+              const isActive = mode === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setMode(tab.id)}
+                  className={cn(
+                    'flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-2 text-xs font-bold transition-all duration-150 whitespace-nowrap',
+                    isActive
+                      ? `bg-surface shadow-sm border ${tab.activeBg} ${tab.activeColor}`
+                      : 'text-ink-muted hover:text-ink hover:bg-surface/50'
+                  )}
+                >
+                  <Icon size={13} className="shrink-0" />
+                  <span className="truncate">{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
 
 
