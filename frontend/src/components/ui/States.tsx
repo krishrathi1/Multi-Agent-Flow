@@ -84,8 +84,11 @@ export function SkeletonRows({ rows = 6 }: { rows?: number }) {
 
 /* ---- Empty state -------------------------------------------------------- */
 
+import { LottieAnimation, type AnimationType } from './LottieAnimation';
+
 export interface EmptyStateProps {
   icon?: LucideIcon;
+  animation?: AnimationType;
   title: string;
   /** Explain what would appear here and how to make it appear. */
   description?: string;
@@ -97,6 +100,7 @@ export interface EmptyStateProps {
 
 export function EmptyState({
   icon: Icon,
+  animation,
   title,
   description,
   action,
@@ -111,20 +115,25 @@ export function EmptyState({
         className,
       )}
     >
-      {Icon && (
+      {animation ? (
+        <div className="relative mb-3 flex items-center justify-center">
+          <div className="absolute inset-0 rounded-full bg-brand-500/10 blur-xl scale-125" />
+          <LottieAnimation type={animation} size={compact ? 48 : 68} />
+        </div>
+      ) : Icon ? (
         <span
           className={cn(
-            'mb-3 grid place-items-center rounded-full border border-line',
-            'bg-raised text-ink-faint',
-            compact ? 'h-9 w-9' : 'h-12 w-12',
+            'mb-3 grid place-items-center rounded-2xl border border-line-subtle',
+            'bg-surface/85 backdrop-blur-md text-ink-faint shadow-2xs',
+            compact ? 'h-10 w-10' : 'h-14 w-14',
           )}
         >
-          <Icon size={compact ? 17 : 22} strokeWidth={1.5} aria-hidden />
+          <Icon size={compact ? 18 : 24} strokeWidth={1.75} aria-hidden />
         </span>
-      )}
+      ) : null}
       <p
         className={cn(
-          'font-medium text-ink',
+          'font-bold text-ink',
           compact ? 'text-sm' : 'text-md',
         )}
       >
@@ -133,7 +142,7 @@ export function EmptyState({
       {description && (
         <p
           className={cn(
-            'mt-1 max-w-sm text-ink-subtle',
+            'mt-1 max-w-sm text-ink-subtle leading-relaxed',
             compact ? 'text-xs' : 'text-sm',
           )}
         >

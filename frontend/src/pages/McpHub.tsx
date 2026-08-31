@@ -23,6 +23,7 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Avatar } from '../components/ui/Avatar';
 import { LiveRadarBeacon, LiveWaveform, LiveGearIcon } from '../components/ui/LiveIcon';
+import { LottieAnimation } from '../components/ui/LottieAnimation';
 import { api } from '../lib/api';
 import { cn, timeAgo } from '../lib/utils';
 import type { McpServer, McpTool, Agent } from '../types';
@@ -266,8 +267,9 @@ export function McpHub() {
         </div>
       ) : filteredServers.length === 0 ? (
         <div className="rounded-2xl border border-line bg-surface p-12 text-center shadow-2xs space-y-3">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-brand-500/10 text-brand-500">
-            <Cpu size={24} />
+          <div className="relative mx-auto flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full bg-cyan-500/10 blur-xl scale-125" />
+            <LottieAnimation type="quantumHub" size={68} />
           </div>
           <h3 className="text-sm font-bold text-ink">No MCP Servers Connected</h3>
           <p className="text-xs text-ink-muted max-w-md mx-auto">

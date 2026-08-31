@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { LiveWaveform, LiveRadarBeacon } from '@/components/ui/LiveIcon';
+import { LottieAnimation } from '@/components/ui/LottieAnimation';
 
 const severityConfig: Record<Severity, { color: string; bg: string; border: string; label: string; dot: string }> = {
   INFO: { color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30', label: 'Info', dot: 'bg-blue-500' },
@@ -225,7 +226,7 @@ export function Alerts() {
         <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2.5">
-              <LiveRadarBeacon size={10} tone="rose" />
+              <LottieAnimation type="securityShield" size={28} />
               <span className="text-sm font-bold text-ink">
                 {unacknowledged.length} Unacknowledged Alert{unacknowledged.length !== 1 ? 's' : ''}
               </span>

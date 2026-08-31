@@ -362,7 +362,7 @@ export function Processes() {
         ) : processes.length === 0 ? (
           <Card padding="none">
             <EmptyState
-              icon={Factory}
+              animation="rocketLaunch"
               title="No productions yet"
               description="Describe what you want done — MyceliumOps decides how many agents are needed, what each one does, and wires them into a staged chain."
               action={

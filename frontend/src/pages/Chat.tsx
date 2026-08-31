@@ -26,6 +26,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/States';
 import { LiveBrainIcon, LiveWaveform, LiveRadarBeacon } from '../components/ui/LiveIcon';
+import { LottieAnimation } from '../components/ui/LottieAnimation';
 import type { Agent, ChatMessage, AgentStatus, Process } from '../types';
 
 function FormattedMessage({ text }: { text: string }) {
@@ -292,8 +293,8 @@ export function Chat() {
                 : 'bg-surface border-line-subtle text-ink-muted hover:border-line hover:bg-raised'
             )}
           >
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 text-white shadow-xs shrink-0">
-              <Brain size={18} />
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 text-white shadow-xs shrink-0 overflow-hidden border border-brand-400/30">
+              <LottieAnimation type="aiBrain" size={28} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between">
@@ -367,8 +368,8 @@ export function Chat() {
         <header className="flex shrink-0 items-center justify-between border-b border-line-subtle bg-surface px-3.5 sm:px-6 py-3 shadow-xs">
           <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
             {selectedTarget.type === 'mother' ? (
-              <div className="grid h-9 w-9 sm:h-10 sm:w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 text-white shadow-sm">
-                <LiveBrainIcon size={20} />
+              <div className="relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 text-white shadow-sm overflow-hidden border border-brand-400/30">
+                <LottieAnimation type="aiBrain" size={32} />
               </div>
             ) : (
               <Avatar
