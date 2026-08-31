@@ -55,37 +55,31 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    label: 'Monitor',
+    label: 'Core Fleet',
     items: [
       { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { path: '/processes', label: 'Productions', icon: Factory },
-      { path: '/runs', label: 'Run History', icon: History },
-      { path: '/activity', label: 'Activity Feed', icon: Activity },
+      { path: '/processes', label: 'Production Blocks', icon: Factory },
+      { path: '/controls', label: 'Fleet Controls', icon: SlidersHorizontal },
       { path: '/chat', label: 'Mother Chat', icon: MessagesSquare },
-      { path: '/comms', label: 'Communications', icon: Waypoints },
-      { path: '/timeline', label: 'Timeline', icon: ScrollText },
     ],
   },
   {
-    label: 'Manage',
+    label: 'Work & Governance',
     items: [
-      { path: '/boards', label: 'Boards', icon: Columns3 },
-      { path: '/approvals', label: 'Approvals', icon: ShieldCheck },
       { path: '/tasks', label: 'Task Board', icon: KanbanSquare },
+      { path: '/approvals', label: 'Approvals & Audit', icon: ShieldCheck },
       { path: '/topology', label: 'Network Graph', icon: Network },
-      { path: '/controls', label: 'Agent Controls', icon: SlidersHorizontal },
-      { path: '/gateways', label: 'Gateways', icon: Router },
-      { path: '/skills', label: 'Skills', icon: Sparkles },
-      { path: '/soul-templates', label: 'Soul Templates', icon: BadgeCheck },
+      { path: '/activity', label: 'Live Activity', icon: Activity },
+      { path: '/runs', label: 'Run History', icon: History },
     ],
   },
-
   {
-    label: 'Observe',
+    label: 'System & Tools',
     items: [
       { path: '/metrics', label: 'Metrics & Cost', icon: Gauge },
-      { path: '/alerts', label: 'Alerts', icon: AlertTriangle },
-      { path: '/search', label: 'Search & Audit', icon: Search },
+      { path: '/gateways', label: 'Gateways & MCP', icon: Router },
+      { path: '/skills', label: 'Skills Library', icon: Sparkles },
+      { path: '/alerts', label: 'Alerts & Incidents', icon: AlertTriangle },
     ],
   },
 ];

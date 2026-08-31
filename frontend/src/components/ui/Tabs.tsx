@@ -73,8 +73,8 @@ export function Tabs<T extends string = string>({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-lg border border-line-subtle',
-        'bg-inset p-0.5',
+        'inline-flex items-center gap-1 rounded-xl border border-line-subtle/80',
+        'bg-inset/70 p-1 backdrop-blur-sm shadow-2xs',
         className,
       )}
     >
@@ -88,16 +88,23 @@ export function Tabs<T extends string = string>({
             aria-selected={active}
             onClick={() => onChange(item.value)}
             className={cn(
-              'flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium',
-              'transition-colors duration-150',
+              'flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold',
+              'transition-all duration-150 active:scale-[0.98]',
               active
-                ? 'bg-raised text-ink shadow-e1'
-                : 'text-ink-subtle hover:text-ink-muted hover:wash',
+                ? 'bg-surface text-ink shadow-xs border border-line-subtle'
+                : 'text-ink-muted hover:text-ink hover:bg-surface/50',
             )}
           >
-            {Icon && <Icon size={13} strokeWidth={1.75} aria-hidden />}
+            {Icon && <Icon size={13} strokeWidth={2} aria-hidden />}
             {item.label}
-            {typeof item.count === 'number' && <Chip>{item.count}</Chip>}
+            {typeof item.count === 'number' && (
+              <span className={cn(
+                'ml-1 rounded px-1.5 py-0.2 text-[10px] font-mono font-bold',
+                active ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400' : 'bg-inset text-ink-faint'
+              )}>
+                {item.count}
+              </span>
+            )}
           </button>
         );
       })}
