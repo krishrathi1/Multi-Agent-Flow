@@ -10,6 +10,7 @@ import { decryptField } from '../lib/crypto.js';
 import { safeFetch } from '../lib/url-validator.js';
 import { fireWebhooks } from './process-extras.service.js';
 import { notify } from './insights.service.js';
+import { pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
 
 /**
  * Intelligent Multi-LLM Execution Engine.
@@ -2351,6 +2352,87 @@ export async function runProcessChain(
   cancelled.delete(processId);
   activeChildren.delete(processId);
   stopHeartbeat(processId);
+
+  // ── AUTONOMOUS POST-BUILD DELIVERY: GITHUB PUSH & VERCEL AUTO-DEPLOY ──
+  if (allOk && files.length > 0) {
+    const workspace = workspaceFor(processId);
+
+    // 1. GitHub Auto-Sync
+    const repoMatch =
+      proc.prompt.match(/Target GitHub Repository:\s*([^\s\(\n]+)/i) ||
+      proc.prompt.match(/Action:\s*Create New GitHub Repository[\s\S]*?Name:\s*([^\n]+)/i);
+    let targetRepo = repoMatch ? repoMatch[1].trim() : null;
+    if (targetRepo && !targetRepo.includes('/')) {
+      targetRepo = `krishrathi1/${targetRepo}`;
+    }
+
+    const ghToken =
+      process.env.GITHUB_TOKEN ||
+      process.env.PLATFORM_GITHUB_TOKEN ||
+      process.env.GITHUB_PAT;
+
+    if (targetRepo && ghToken) {
+      try {
+        const pushRes = await pushWorkspaceToGitHub({
+          workspace,
+          repoFullName: targetRepo,
+          githubToken: ghToken,
+          commitMessage: `feat(autonomous): Multi-agent deliverables for ${proc.name}`,
+        });
+        if (pushRes.success) {
+          const leadAgentId = proc.agents[0]?.id || (await prisma.agent.findFirst({ where: { organizationId } }))?.id;
+          if (leadAgentId) {
+            await prisma.activity.create({
+              data: {
+                organizationId,
+                agentId: leadAgentId,
+                processId,
+                type: ActivityType.SYSTEM,
+                message: `✓ Autonomous delivery: Pushed ${files.length} production files to GitHub: ${pushRes.repoUrl}`,
+              },
+            });
+          }
+        }
+      } catch (err: any) {
+        logger.warn({ err, processId }, 'GitHub auto-push encountered non-fatal error');
+      }
+    }
+
+    // 2. Vercel Auto-Deployment
+    const isVercelEnabled = /Vercel Deployment:\s*Enabled/i.test(proc.prompt);
+    const vToken =
+      process.env.VERCEL_TOKEN ||
+      process.env.PLATFORM_VERCEL_TOKEN ||
+      process.env.VERCEL_API_TOKEN;
+
+    if (isVercelEnabled && vToken) {
+      try {
+        const deployRes = await deployToVercel({
+          workspace,
+          projectName: proc.name,
+          vercelToken: vToken,
+        });
+        if (deployRes.success && deployRes.previewUrl) {
+          const opsAgentId = proc.agents[proc.agents.length - 1]?.id || (await prisma.agent.findFirst({ where: { organizationId } }))?.id;
+          if (opsAgentId) {
+            await prisma.activity.create({
+              data: {
+                organizationId,
+                agentId: opsAgentId,
+                processId,
+                type: ActivityType.SYSTEM,
+                message: `✓ Live Production Deployed on Vercel: ${deployRes.previewUrl}`,
+                metadata: { previewUrl: deployRes.previewUrl },
+              },
+            });
+            emit('process:deployed', { processId, previewUrl: deployRes.previewUrl });
+          }
+        }
+      } catch (err: any) {
+        logger.warn({ err, processId }, 'Vercel auto-deploy encountered non-fatal error');
+      }
+    }
+  }
 
   if (!awaitingApproval) {
     await notify(

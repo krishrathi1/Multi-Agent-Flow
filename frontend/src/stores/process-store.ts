@@ -94,8 +94,14 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
 
   createProcess: async (data) => {
     const created = await api.processes.create(data);
-    set((s) => ({ processes: [created, ...s.processes] }));
+    set((s) => ({ processes: [created, ...s.processes], scopeId: created.id }));
     get().fetchStats();
+    // Automatically trigger the multi-agent production chain immediately
+    try {
+      await api.processes.run(created.id);
+    } catch {
+      // Non-fatal if already running
+    }
     return created;
   },
 
