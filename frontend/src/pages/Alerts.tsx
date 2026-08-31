@@ -1,16 +1,112 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Header } from '../components/layout/Header';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { PageHeader } from '../components/ui/PageHeader';
 import { api } from '@/lib/api';
 import { cn, timeAgo } from '@/lib/utils';
 import type { AlertRule, AlertEvent, Severity } from '@/types';
-import { Bell, ShieldAlert, CheckCircle2, AlertTriangle, Info, Plus } from 'lucide-react';
+import {
+  Bell,
+  ShieldAlert,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
+  Plus,
+  ChevronDown,
+  Check,
+  Radio,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { LiveWaveform, LiveRadarBeacon } from '@/components/ui/LiveIcon';
 
-const severityConfig: Record<Severity, { color: string; bg: string; border: string; label: string }> = {
-  INFO: { color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30', label: 'Info' },
-  WARNING: { color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', label: 'Warning' },
-  CRITICAL: { color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30', label: 'Critical' },
+const severityConfig: Record<Severity, { color: string; bg: string; border: string; label: string; dot: string }> = {
+  INFO: { color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30', label: 'Info', dot: 'bg-blue-500' },
+  WARNING: { color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', label: 'Warning', dot: 'bg-amber-500' },
+  CRITICAL: { color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30', label: 'Critical', dot: 'bg-rose-500' },
 };
+
+interface DropdownOption<T> {
+  value: T;
+  label: string;
+  dotColor?: string;
+}
+
+function CustomDropdown<T extends string>({
+  value,
+  options,
+  onChange,
+  placeholder,
+}: {
+  value: T;
+  options: DropdownOption<T>[];
+  onChange: (val: T) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'flex h-9 items-center gap-2 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-2xs transition-all hover:border-brand-500/50 hover:bg-hover active:scale-[0.98] cursor-pointer',
+          open && 'border-brand-500 ring-2 ring-brand-500/10 bg-surface'
+        )}
+      >
+        {selected?.dotColor && (
+          <span className={cn('h-2 w-2 rounded-full shrink-0', selected.dotColor)} />
+        )}
+        <span className="truncate">{selected?.label ?? placeholder ?? 'Select'}</span>
+        <ChevronDown size={13} className={cn('text-ink-muted transition-transform duration-200 ml-0.5', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-50 mt-1.5 min-w-[160px] overflow-hidden rounded-2xl border border-line bg-surface p-1.5 shadow-xl animate-scale-in">
+          {options.map((opt) => {
+            const isSelected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'flex w-full items-center justify-between gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors cursor-pointer text-left',
+                  isSelected
+                    ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400'
+                    : 'text-ink-muted hover:bg-hover hover:text-ink'
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  {opt.dotColor && (
+                    <span className={cn('h-2 w-2 rounded-full shrink-0', opt.dotColor)} />
+                  )}
+                  <span>{opt.label}</span>
+                </div>
+                {isSelected && <Check size={13} className="shrink-0 text-brand-600 dark:text-brand-400" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Alerts() {
   const [events, setEvents] = useState<AlertEvent[]>([]);
@@ -81,10 +177,27 @@ export function Alerts() {
     return true;
   });
 
+  const severityOptions: DropdownOption<Severity | 'ALL'>[] = [
+    { value: 'ALL', label: 'All Severities' },
+    { value: 'CRITICAL', label: 'Critical', dotColor: 'bg-rose-500' },
+    { value: 'WARNING', label: 'Warning', dotColor: 'bg-amber-500' },
+    { value: 'INFO', label: 'Info', dotColor: 'bg-blue-500' },
+  ];
+
+  const ackOptions: DropdownOption<'all' | 'unacknowledged' | 'acknowledged'>[] = [
+    { value: 'all', label: 'All Status' },
+    { value: 'unacknowledged', label: 'Unacknowledged', dotColor: 'bg-rose-500 animate-pulse' },
+    { value: 'acknowledged', label: 'Acknowledged', dotColor: 'bg-emerald-500' },
+  ];
+
   if (loading) {
     return (
       <div className="space-y-6">
-        <Header title="Alerts & Telemetry" subtitle="Monitor autonomous agent alert rules, events, and anomaly thresholds" />
+        <PageHeader
+          icon={AlertTriangle}
+          title="Alerts & Telemetry"
+          description="Monitor autonomous agent alert rules, events, and anomaly thresholds"
+        />
         <div className="text-ink-muted text-xs p-6">Loading alert telemetry...</div>
       </div>
     );
@@ -92,34 +205,44 @@ export function Alerts() {
 
   return (
     <div className="space-y-6">
-      <Header title="Alerts & Telemetry" subtitle="Monitor autonomous agent alert rules, events, and anomaly thresholds" />
+      <PageHeader
+        icon={AlertTriangle}
+        title="Alerts & Telemetry"
+        description="Monitor autonomous agent alert rules, events, and anomaly thresholds"
+        actions={
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => setShowAddRule(true)}
+          >
+            Add Rule
+          </Button>
+        }
+      />
 
       {/* Active Alerts Banner */}
       {unacknowledged.length > 0 && (
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2.5">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-              </span>
+              <LiveRadarBeacon size={10} tone="rose" />
               <span className="text-sm font-bold text-ink">
                 {unacknowledged.length} Unacknowledged Alert{unacknowledged.length !== 1 ? 's' : ''}
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">
               {criticalCount > 0 && (
-                <span className="px-2.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-700 dark:text-rose-300 font-bold">
+                <span className="px-2.5 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-700 dark:text-rose-300 font-bold">
                   {criticalCount} Critical
                 </span>
               )}
               {warningCount > 0 && (
-                <span className="px-2.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold">
                   {warningCount} Warning
                 </span>
               )}
               {infoCount > 0 && (
-                <span className="px-2.5 py-0.5 rounded-md bg-blue-500/15 border border-blue-500/30 text-blue-700 dark:text-blue-300 font-bold">
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-700 dark:text-blue-300 font-bold">
                   {infoCount} Info
                 </span>
               )}
@@ -144,28 +267,24 @@ export function Alerts() {
         {/* Left: Alert Events (3 columns) */}
         <div className="lg:col-span-3 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Alert Events ({filteredEvents.length})</h3>
             <div className="flex items-center gap-2">
-              <select
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink">
+                Alert Events ({filteredEvents.length})
+              </h3>
+              <LiveWaveform color="bg-brand-500" />
+            </div>
+            <div className="flex items-center gap-2">
+              <CustomDropdown
                 value={severityFilter}
-                onChange={(e) => setSeverityFilter(e.target.value as Severity | 'ALL')}
-                className="text-xs font-semibold bg-canvas border border-line text-ink rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-brand-500 shadow-2xs"
-              >
-                <option value="ALL">All Severities</option>
-                <option value="CRITICAL">Critical</option>
-                <option value="WARNING">Warning</option>
-                <option value="INFO">Info</option>
-              </select>
+                options={severityOptions}
+                onChange={setSeverityFilter}
+              />
 
-              <select
+              <CustomDropdown
                 value={ackFilter}
-                onChange={(e) => setAckFilter(e.target.value as 'all' | 'unacknowledged' | 'acknowledged')}
-                className="text-xs font-semibold bg-canvas border border-line text-ink rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-brand-500 shadow-2xs"
-              >
-                <option value="all">All Status</option>
-                <option value="unacknowledged">Unacknowledged</option>
-                <option value="acknowledged">Acknowledged</option>
-              </select>
+                options={ackOptions}
+                onChange={setAckFilter}
+              />
             </div>
           </div>
 
