@@ -90,7 +90,7 @@ export function NotificationBell() {
           open && 'border-brand-500/50 bg-surface text-ink shadow-e1',
         )}
       >
-        <Bell size={16} strokeWidth={1.75} aria-hidden />
+        <Bell size={16} strokeWidth={1.75} className={cn('transition-transform', unread > 0 && 'animate-bell-ring text-brand-500')} aria-hidden />
         {unread > 0 && (
           <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />

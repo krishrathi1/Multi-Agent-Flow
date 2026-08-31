@@ -19,6 +19,7 @@ import { timeAgo, cn } from '../../lib/utils';
 import { activityIconFor, activityToneFor, activityLabel, tones } from '../../lib/design';
 import { Card, CardHeader } from '../ui/Card';
 import { Skeleton } from '../ui/States';
+import { LiveWaveform, LiveRadarBeacon } from '../ui/LiveIcon';
 
 const FEED_LIMIT = 8;
 
@@ -81,7 +82,12 @@ export function SystemHealth() {
         <CardHeader
           bordered
           icon={ActivityIcon}
-          title="Live Operations Feed"
+          title={
+            <span className="flex items-center gap-2">
+              <span>Live Operations Feed</span>
+              <LiveWaveform color="bg-emerald-500" />
+            </span>
+          }
           description="Real-time event stream from autonomous agents"
           actions={
             <Link

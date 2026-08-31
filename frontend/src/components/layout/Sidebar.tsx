@@ -245,8 +245,13 @@ export function Sidebar() {
                           size={16}
                           strokeWidth={1.75}
                           className={cn(
-                            'shrink-0 transition-colors',
-                            isActive ? 'text-brand-700 dark:text-brand-300' : 'text-ink-faint group-hover:text-ink-muted',
+                            'shrink-0 transition-all duration-200 live-icon-hover',
+                            isActive
+                              ? 'text-brand-600 dark:text-brand-300 scale-105'
+                              : 'text-ink-faint group-hover:text-brand-500 group-hover:scale-110',
+                            item.path === '/chat' && isActive && 'animate-glow-pulse text-violet-500 dark:text-violet-300',
+                            item.path === '/skills' && isActive && 'animate-shimmer-sparkle text-amber-500 dark:text-amber-400',
+                            item.path === '/activity' && isActive && 'animate-pulse text-emerald-500 dark:text-emerald-400',
                           )}
                           aria-hidden
                         />

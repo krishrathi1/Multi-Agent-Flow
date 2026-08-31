@@ -25,6 +25,7 @@ import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/States';
+import { LiveBrainIcon, LiveWaveform, LiveRadarBeacon } from '../components/ui/LiveIcon';
 import type { Agent, ChatMessage, AgentStatus, Process } from '../types';
 
 function FormattedMessage({ text }: { text: string }) {
@@ -225,14 +226,14 @@ export function Chat() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-indigo-600 text-white shadow-xs">
-                <Brain size={15} />
+                <LiveBrainIcon size={15} />
               </div>
               <h2 className="text-sm font-semibold text-ink">Mother Chat</h2>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-2xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-2xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-2xs">
+                <LiveRadarBeacon size={6} tone="emerald" />
                 Online
               </span>
               {/* Back to Chat button on mobile */}
@@ -367,7 +368,7 @@ export function Chat() {
           <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
             {selectedTarget.type === 'mother' ? (
               <div className="grid h-9 w-9 sm:h-10 sm:w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-700 text-white shadow-sm">
-                <Brain size={18} />
+                <LiveBrainIcon size={20} />
               </div>
             ) : (
               <Avatar

@@ -21,6 +21,7 @@ import { useAuthStore } from '../../stores/auth-store';
 import { useUiStore } from '../../stores/ui-store';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
+import { LiveGatewayBadge } from '../ui/LiveIcon';
 
 /**
  * Premium glassmorphic Topbar with live telemetry, unified search,
@@ -165,18 +166,8 @@ export function Topbar() {
 
       {/* ---- Right: Telemetry & Actions ---- */}
       <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-        {/* Live Socket Gateway Indicator */}
-        <div
-          className={cn(
-            'flex h-6.5 sm:h-7 items-center gap-1 sm:gap-1.5 rounded-full px-2 sm:px-2.5 text-[11px] sm:text-xs font-semibold backdrop-blur-sm shadow-2xs',
-            socketConnected
-              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',
-          )}
-        >
-          <span className={cn('h-1.5 w-1.5 rounded-full', socketConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500')} />
-          <span>{socketConnected ? 'Live' : 'Offline'}</span>
-        </div>
+        {/* Live Socket Gateway Indicator with Animated Radar & Wave */}
+        <LiveGatewayBadge connected={socketConnected} />
 
         {/* Fleet telemetry deck */}
         {stats && (
