@@ -141,101 +141,103 @@ function ProcessCard({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-line-subtle px-3 py-2.5">
-        {/* Primary run control. Start brings every agent in the chain online;
-            pause idles them without discarding history. */}
-        {running ? (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-subtle px-3 py-2.5">
+        {/* Primary Run Controls */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {running ? (
+            <Button
+              variant="secondary"
+              size="xs"
+              icon={Pause}
+              loading={busy}
+              onClick={() => onPause(process)}
+              aria-label={`Pause production ${process.name}`}
+            >
+              Pause
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="xs"
+              icon={Play}
+              loading={busy}
+              onClick={() => onStart(process)}
+              aria-label={`${startLabel} production ${process.name}`}
+            >
+              {startLabel}
+            </Button>
+          )}
+
           <Button
             variant="secondary"
-            size="sm"
-            icon={Pause}
-            loading={busy}
-            onClick={() => onPause(process)}
-            aria-label={`Pause production ${process.name}`}
+            size="xs"
+            icon={Hammer}
+            onClick={() => onRun(process)}
+            aria-label={`Run production ${process.name}`}
           >
-            Pause
+            Run
           </Button>
-        ) : (
+
           <Button
-            variant="primary"
-            size="sm"
-            icon={Play}
-            loading={busy}
-            onClick={() => onStart(process)}
-            aria-label={`${startLabel} production ${process.name}`}
+            variant="secondary"
+            size="xs"
+            icon={FileText}
+            onClick={() => onReport(process)}
+            aria-label={`View audit report for ${process.name}`}
           >
-            {startLabel}
+            Report
           </Button>
-        )}
 
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={Hammer}
-          onClick={() => onRun(process)}
-          aria-label={`Run production ${process.name}`}
-        >
-          Run
-        </Button>
-
-        {/* Dedicated Report Option */}
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={FileText}
-          onClick={() => onReport(process)}
-          aria-label={`View audit report for ${process.name}`}
-        >
-          Report
-        </Button>
-
-        {hasSite && (
-          <ButtonLink
-            href={api.processes.previewUrl(process.id)}
-            variant="ghost"
-            size="sm"
-            icon={ExternalLink}
-            aria-label={`Open live preview of ${process.name}`}
+          <Link
+            to={`/activity?processId=${process.id}`}
+            className="rounded-lg px-2 py-1 text-xs font-semibold text-ink-muted transition-colors hover:text-brand-600 dark:hover:text-brand-400"
           >
-            Preview
-          </ButtonLink>
-        )}
+            Activity
+          </Link>
+        </div>
 
-        <Link
-          to={`/activity?processId=${process.id}`}
-          className="rounded-sm px-1 text-xs font-medium text-ink-subtle transition-colors hover:text-brand-700 dark:hover:text-brand-300"
-        >
-          Activity
-        </Link>
+        {/* Action Tool Group (Edit, Settings, Delete) */}
+        <div className="flex items-center gap-0.5 shrink-0 ml-auto">
+          {hasSite && (
+            <ButtonLink
+              href={api.processes.previewUrl(process.id)}
+              variant="ghost"
+              size="xs"
+              iconOnly
+              icon={ExternalLink}
+              aria-label={`Open live preview of ${process.name}`}
+            />
+          )}
 
-        {/* Edit Button */}
-        <Button
-          variant="ghost"
-          size="xs"
-          iconOnly
-          icon={Edit3}
-          aria-label={`Edit ${process.name}`}
-          onClick={() => onEdit(process)}
-          className="ml-auto hover:text-brand-600 dark:hover:text-brand-400"
-        />
+          <Button
+            variant="ghost"
+            size="xs"
+            iconOnly
+            icon={Edit3}
+            aria-label={`Edit ${process.name}`}
+            onClick={() => onEdit(process)}
+            className="hover:text-brand-600 dark:hover:text-brand-400"
+          />
 
-        <Button
-          variant="ghost"
-          size="xs"
-          iconOnly
-          icon={SlidersHorizontal}
-          aria-label={`Guardrails for ${process.name}`}
-          onClick={() => onSettings(process)}
-        />
-        <Button
-          variant="ghost"
-          size="xs"
-          iconOnly
-          icon={Trash2}
-          aria-label={`Delete production ${process.name}`}
-          onClick={() => onDelete(process)}
-          className="hover:text-red-500 dark:hover:text-red-300"
-        />
+          <Button
+            variant="ghost"
+            size="xs"
+            iconOnly
+            icon={SlidersHorizontal}
+            aria-label={`Guardrails for ${process.name}`}
+            onClick={() => onSettings(process)}
+          />
+
+          <Button
+            variant="ghost"
+            size="xs"
+            iconOnly
+            icon={Trash2}
+            aria-label={`Delete production ${process.name}`}
+            onClick={() => onDelete(process)}
+            className="hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10"
+          />
+        </div>
       </div>
     </Card>
   );
@@ -321,7 +323,7 @@ export function Processes() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <StatCard
           label="Productions"
           value={stats?.total ?? processes.length}
