@@ -104,6 +104,82 @@ function EmojiPicker({ value, onChange }: { value: string; onChange: (v: string)
   );
 }
 
+function CustomSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = 'Select an option',
+}: {
+  label?: string;
+  value: string;
+  onChange: (val: string) => void;
+  options: Array<{ value: string; label: string; sublabel?: string }>;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <div className="relative" ref={ref}>
+      {label && <label className="block text-xs font-semibold text-ink-muted mb-1.5">{label}</label>}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'w-full h-10 px-3.5 py-2 rounded-xl bg-inset border text-xs text-ink flex items-center justify-between shadow-2xs transition-all cursor-pointer',
+          open ? 'border-brand-500 ring-2 ring-brand-500/10' : 'border-line hover:border-line-strong'
+        )}
+      >
+        <span className={cn('truncate', !selected && 'text-ink-faint')}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <ChevronDown size={14} className={cn('text-ink-muted shrink-0 ml-2 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1.5 left-0 w-full rounded-2xl bg-surface/95 backdrop-blur-2xl border border-line shadow-xl p-1.5 space-y-0.5 animate-scale-in max-h-60 overflow-y-auto no-scrollbar">
+          {options.map((opt) => {
+            const isOptSelected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs text-left transition-colors cursor-pointer',
+                  isOptSelected
+                    ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
+                    : 'text-ink-muted hover:bg-hover hover:text-ink font-medium'
+                )}
+              >
+                <div className="min-w-0 flex-1 truncate">
+                  <span className="block truncate">{opt.label}</span>
+                  {opt.sublabel && <p className="text-[10px] text-ink-faint font-normal">{opt.sublabel}</p>}
+                </div>
+                {isOptSelected && <Check size={13} className="text-brand-500 shrink-0 ml-2" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const KNOWN_PROVIDERS = [
   { id: 'openai', label: 'OpenAI', placeholder: 'sk-...' },
   { id: 'anthropic', label: 'Anthropic', placeholder: 'sk-ant-...' },
@@ -741,80 +817,81 @@ export function AgentCreate() {
                   {/* Connection Gateway — hidden when auto-provisioned with 0-1 gateways */}
                   {!(gatewayInfo?.hasDefaultConfig && gatewayInfo.gatewayCount <= 1) && (
                     <div className="col-span-2 sm:col-span-1 pt-3">
-                      <label className="block text-xs font-semibold text-ink-muted mb-1.5">
-                        Connection Gateway
-                      </label>
-                      <select
+                      <CustomSelect
+                        label="Connection Gateway"
                         value={gatewayId}
-                        onChange={(e) => setGatewayId(e.target.value)}
-                        className="w-full h-10 px-3 py-2 rounded-xl bg-inset border border-line text-xs text-ink shadow-2xs focus:outline-none focus:border-brand-500 cursor-pointer"
-                      >
-                        <option value="">Auto (default)</option>
-                        {gateways.map((gw) => (
-                          <option key={gw.id} value={gw.id}>
-                            {gw.name} {gw.status === 'ONLINE' ? '' : `(${gw.status.toLowerCase()})`}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(val) => setGatewayId(val)}
+                        placeholder="Auto (default)"
+                        options={[
+                          { value: '', label: 'Auto (default)', sublabel: 'Auto-assign available gateway' },
+                          ...gateways.map((gw) => ({
+                            value: gw.id,
+                            label: gw.name,
+                            sublabel: gw.status === 'ONLINE' ? 'Online' : `Status: ${gw.status.toLowerCase()}`,
+                          })),
+                        ]}
+                      />
                     </div>
                   )}
 
                   {/* Health Check Frequency */}
-                  <div className="col-span-1">
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                      Health Check Frequency <span className="text-gray-600 font-normal">(minutes)</span>
+                  <div className="col-span-2 sm:col-span-1 pt-3">
+                    <label className="block text-xs font-semibold text-ink-muted mb-1.5">
+                      Health Check Frequency{' '}
+                      <span className="text-ink-faint font-normal">(minutes)</span>
                     </label>
                     <input
                       type="number"
                       min={1}
                       value={heartbeatInterval}
                       onChange={(e) => setHeartbeatInterval(parseInt(e.target.value) || 1)}
-                      className="w-32 px-3 py-2 rounded-lg bg-surface-900 border border-white/10 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-nexus-500/50"
+                      className="w-full h-10 px-3.5 py-2 rounded-xl bg-inset border border-line text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:outline-none focus:border-brand-500"
                     />
                   </div>
 
                   {/* Enabled toggle */}
-                  <div className="col-span-1 flex items-end pb-1">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <button
-                        type="button"
-                        onClick={() => setEnabled(!enabled)}
+                  <div className="col-span-2 sm:col-span-1 flex items-center justify-between p-3.5 rounded-xl bg-inset border border-line shadow-2xs mt-1">
+                    <div>
+                      <p className="text-xs font-bold text-ink">Agent Active State</p>
+                      <p className="text-[11px] text-ink-muted mt-0.5">
+                        {enabled ? 'Agent is enabled and ready to run' : 'Agent is disabled (paused)'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEnabled(!enabled)}
+                      className={cn(
+                        'relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ml-4 cursor-pointer',
+                        enabled ? 'bg-emerald-500' : 'bg-line-strong'
+                      )}
+                    >
+                      <div
                         className={cn(
-                          'relative w-11 h-6 rounded-full transition-colors duration-200',
-                          enabled ? 'bg-emerald-500' : 'bg-gray-600'
+                          'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-xs transition-transform duration-200',
+                          enabled ? 'translate-x-5.5' : 'translate-x-0.5'
                         )}
-                      >
-                        <div
-                          className={cn(
-                            'absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200',
-                            enabled ? 'translate-x-5.5' : 'translate-x-0.5'
-                          )}
-                        />
-                      </button>
-                      <span className="text-xs font-medium text-gray-400">
-                        {enabled ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </label>
+                      />
+                    </button>
                   </div>
                 </div>
               )}
             </div>
 
             {/* LLM Configuration */}
-            <div className="rounded-xl border border-white/5 bg-surface-850 p-5">
+            <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-semibold text-white">LLM Configuration</h3>
+                <h3 className="text-sm font-bold text-ink">LLM Configuration</h3>
                 {llmProviders.length > 0 && !showLlmSetup && (
                   <button
                     type="button"
                     onClick={() => setShowLlmSetup(true)}
-                    className="px-3 py-1 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-200 transition-all"
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 hover:bg-brand-500/20 transition-all cursor-pointer"
                   >
                     + Add Provider
                   </button>
                 )}
               </div>
-              <p className="text-xs text-gray-500 mb-4">
+              <p className="text-xs text-ink-muted mb-4">
                 Choose how this agent accesses LLM services — bring your own API key or use platform credits
               </p>
 
@@ -822,10 +899,10 @@ export function AgentCreate() {
               {llmMessage && (
                 <div
                   className={cn(
-                    'text-sm px-3 py-2 rounded-lg border mb-3',
+                    'text-xs px-3.5 py-2.5 rounded-xl border mb-3',
                     llmMessage.type === 'success'
-                      ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
-                      : 'text-red-400 bg-red-500/10 border-red-500/30'
+                      ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/30'
+                      : 'text-rose-700 dark:text-rose-300 bg-rose-500/10 border-rose-500/30'
                   )}
                 >
                   {llmMessage.text}
@@ -833,7 +910,7 @@ export function AgentCreate() {
               )}
 
               {llmLoading ? (
-                <div className="text-gray-500 text-xs py-4 text-center">Loading LLM providers...</div>
+                <div className="text-ink-muted text-xs py-4 text-center">Loading LLM providers...</div>
               ) : (
                 <>
                   {/* Existing providers */}
@@ -844,28 +921,28 @@ export function AgentCreate() {
                         return (
                           <div
                             key={provider.id}
-                            className="rounded-lg border border-white/5 bg-surface-900 px-3 py-2.5 flex items-center gap-3"
+                            className="rounded-xl border border-line bg-inset/50 px-3.5 py-2.5 flex items-center gap-3"
                           >
-                            <div className="w-8 h-8 rounded-lg bg-surface-850 border border-white/5 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-surface border border-line flex items-center justify-center text-xs font-bold text-ink shrink-0 shadow-2xs">
                               {(info?.label || provider.provider).charAt(0).toUpperCase()}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-white">
+                                <span className="text-xs font-bold text-ink">
                                   {info?.label || provider.provider}
                                 </span>
                                 <span
                                   className={cn(
-                                    'text-[10px] px-1.5 py-0.5 rounded font-medium uppercase border',
+                                    'text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase border',
                                     provider.mode === 'BYOK'
-                                      ? 'text-blue-400 bg-blue-500/10 border-blue-500/30'
-                                      : 'text-purple-400 bg-purple-500/10 border-purple-500/30'
+                                      ? 'text-brand-600 dark:text-brand-400 bg-brand-500/10 border-brand-500/30'
+                                      : 'text-purple-600 dark:text-purple-400 bg-purple-500/10 border-purple-500/30'
                                   )}
                                 >
                                   {provider.mode}
                                 </span>
                                 {provider.isActive && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded font-medium uppercase text-emerald-400 bg-emerald-500/10 border border-emerald-500/30">
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30">
                                     Active
                                   </span>
                                 )}
@@ -879,13 +956,13 @@ export function AgentCreate() {
 
                   {/* No providers warning */}
                   {llmProviders.length === 0 && !showLlmSetup && (
-                    <div className="text-center py-4 rounded-lg border border-amber-500/20 bg-amber-500/5 mb-3">
-                      <p className="text-amber-400 text-sm font-medium">No LLM provider configured</p>
-                      <p className="text-gray-500 text-xs mt-1">Set up a provider so your agent can use LLM services</p>
+                    <div className="text-center py-4 rounded-xl border border-amber-500/30 bg-amber-500/10 mb-3">
+                      <p className="text-amber-700 dark:text-amber-300 text-xs font-bold">No LLM provider configured</p>
+                      <p className="text-ink-muted text-xs mt-1">Set up a provider so your agent can use LLM services</p>
                       <button
                         type="button"
                         onClick={() => setShowLlmSetup(true)}
-                        className="mt-3 px-4 py-1.5 rounded-lg text-xs font-medium bg-nexus-600 text-white hover:bg-nexus-500 transition-colors"
+                        className="mt-3 px-4 py-2 rounded-xl text-xs font-bold bg-brand-600 text-white hover:bg-brand-500 transition-colors shadow-xs cursor-pointer"
                       >
                         Configure Provider
                       </button>
@@ -894,103 +971,94 @@ export function AgentCreate() {
 
                   {/* Add/Setup form */}
                   {showLlmSetup && (
-                    <div className="rounded-lg border border-white/10 bg-surface-900 p-4">
-                      <div className="space-y-3">
+                    <div className="rounded-2xl border border-line bg-inset/40 p-4">
+                      <div className="space-y-3.5">
                         {/* Mode selection cards */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-400 mb-2">
+                          <label className="block text-xs font-semibold text-ink-muted mb-2">
                             How should your agent access LLM services?
                           </label>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <button
                               type="button"
                               onClick={() => setLlmMode('BYOK')}
                               className={cn(
-                                'p-3 rounded-lg border text-left transition-all',
+                                'p-3.5 rounded-xl border text-left transition-all cursor-pointer',
                                 llmMode === 'BYOK'
-                                  ? 'border-blue-500/50 bg-blue-500/10'
-                                  : 'border-white/10 bg-surface-850 hover:border-white/20'
+                                  ? 'border-brand-500/60 bg-brand-500/10 dark:bg-brand-500/15 shadow-sm'
+                                  : 'border-line bg-surface hover:border-line-strong'
                               )}
                             >
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
-                                </svg>
-                                <span className={cn('text-sm font-medium', llmMode === 'BYOK' ? 'text-blue-400' : 'text-gray-300')}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-xs text-brand-600 dark:text-brand-400">
                                   Bring Your Own Key
                                 </span>
                               </div>
-                              <p className="text-[11px] text-gray-500">Use your own API key from any provider</p>
+                              <p className="text-[11px] text-ink-muted">Use your own API key from OpenAI, Anthropic, Google, etc.</p>
                             </button>
                             <button
                               type="button"
                               onClick={() => setLlmMode('PLATFORM')}
                               className={cn(
-                                'p-3 rounded-lg border text-left transition-all',
+                                'p-3.5 rounded-xl border text-left transition-all cursor-pointer',
                                 llmMode === 'PLATFORM'
-                                  ? 'border-purple-500/50 bg-purple-500/10'
-                                  : 'border-white/10 bg-surface-850 hover:border-white/20'
+                                  ? 'border-purple-500/60 bg-purple-500/10 dark:bg-purple-500/15 shadow-sm'
+                                  : 'border-line bg-surface hover:border-line-strong'
                               )}
                             >
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z" />
-                                </svg>
-                                <span className={cn('text-sm font-medium', llmMode === 'PLATFORM' ? 'text-purple-400' : 'text-gray-300')}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-xs text-purple-600 dark:text-purple-400">
                                   Platform Managed
                                 </span>
                               </div>
-                              <p className="text-[11px] text-gray-500">Use MyceliumOps credits, billed per token</p>
+                              <p className="text-[11px] text-ink-muted">Use MyceliumOps managed credits, billed per token</p>
                             </button>
                           </div>
                         </div>
 
                         {/* Provider selection */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-400 mb-1.5">Provider</label>
-                          <select
+                          <CustomSelect
+                            label="Provider"
                             value={llmProvider}
-                            onChange={(e) => setLlmProvider(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg bg-surface-850 border border-white/10 text-sm text-white focus:outline-none focus:border-nexus-500/50"
-                          >
-                            {KNOWN_PROVIDERS.map((p) => {
+                            onChange={(val) => setLlmProvider(val)}
+                            options={KNOWN_PROVIDERS.map((p) => {
                               const alreadyConfigured = llmProviders.some((ep) => ep.provider === p.id);
-                              return (
-                                <option key={p.id} value={p.id} disabled={alreadyConfigured}>
-                                  {p.label} {alreadyConfigured ? '(configured)' : ''}
-                                </option>
-                              );
+                              return {
+                                value: p.id,
+                                label: p.label + (alreadyConfigured ? ' (configured)' : ''),
+                              };
                             })}
-                          </select>
+                          />
                         </div>
 
                         {/* BYOK: API key input */}
                         {llmMode === 'BYOK' && (
                           <div>
-                            <label className="block text-xs font-medium text-gray-400 mb-1.5">API Key</label>
+                            <label className="block text-xs font-semibold text-ink-muted mb-1.5">API Key</label>
                             <input
                               type="password"
                               value={llmApiKey}
                               onChange={(e) => setLlmApiKey(e.target.value)}
                               placeholder={KNOWN_PROVIDERS.find((p) => p.id === llmProvider)?.placeholder || 'Enter API key'}
-                              className="w-full px-3 py-2 rounded-lg bg-surface-850 border border-white/10 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-nexus-500/50"
+                              className="w-full h-10 px-3.5 py-2 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-brand-500 shadow-2xs"
                             />
                           </div>
                         )}
 
                         {/* Platform info */}
                         {llmMode === 'PLATFORM' && (
-                          <p className="text-xs text-gray-500 bg-surface-850 p-3 rounded-lg border border-white/5">
+                          <p className="text-xs text-ink-muted bg-surface p-3 rounded-xl border border-line shadow-2xs">
                             Platform-managed mode uses MyceliumOps credits. Usage is billed per token at standard rates.
                           </p>
                         )}
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 pt-1">
                           <button
                             type="button"
                             onClick={handleSaveLlmProvider}
                             disabled={llmSaving}
-                            className="px-4 py-2 rounded-lg text-sm font-medium bg-nexus-600 text-white hover:bg-nexus-500 transition-colors disabled:opacity-50"
+                            className="px-4 py-2 rounded-xl text-xs font-bold bg-brand-600 text-white hover:bg-brand-500 transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
                           >
                             {llmSaving ? 'Saving...' : 'Save Provider'}
                           </button>
@@ -998,7 +1066,7 @@ export function AgentCreate() {
                             <button
                               type="button"
                               onClick={() => { setShowLlmSetup(false); setLlmMessage(null); }}
-                              className="px-4 py-2 rounded-lg text-sm font-medium bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 transition-all"
+                              className="px-4 py-2 rounded-xl text-xs font-semibold bg-surface border border-line text-ink-muted hover:text-ink transition-all cursor-pointer shadow-2xs"
                             >
                               Cancel
                             </button>
@@ -1012,64 +1080,60 @@ export function AgentCreate() {
             </div>
 
             {/* Skills Selection */}
-            <div className="rounded-xl border border-white/5 bg-surface-850 p-5">
-              <h3 className="text-sm font-semibold text-white mb-1">Skills</h3>
-              <p className="text-xs text-gray-500 mb-3">
+            <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs">
+              <h3 className="text-sm font-bold text-ink mb-1">Skills</h3>
+              <p className="text-xs text-ink-muted mb-3">
                 Select skills from the marketplace to equip this agent
               </p>
               {availableSkills.length === 0 ? (
-                <p className="text-xs text-gray-600 py-4 text-center">
+                <p className="text-xs text-ink-faint py-4 text-center">
                   No skills available.{' '}
-                  <Link to="/skills" className="text-nexus-400 hover:underline">Add some in the marketplace</Link>
+                  <Link to="/skills" className="text-brand-500 hover:underline">Add some in the marketplace</Link>
                 </p>
               ) : (
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                <div className="space-y-2 max-h-[400px] overflow-y-auto no-scrollbar">
                   {availableSkills.map((skill) => {
                     const isSelected = selectedSkillIds.has(skill.id);
                     const isEditing = editingSkillId === skill.id;
-                    const riskColor = skill.risk === 'low' ? 'text-emerald-400 bg-emerald-500/10' :
-                      skill.risk === 'medium' ? 'text-amber-400 bg-amber-500/10' :
-                      'text-red-400 bg-red-500/10';
+                    const riskColor = skill.risk === 'low' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20' :
+                      skill.risk === 'medium' ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20' :
+                      'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20';
                     return (
                       <div key={skill.id} className={cn(
-                        'rounded-lg border px-3 py-2.5 transition-all',
+                        'rounded-xl border px-3.5 py-3 transition-all',
                         isSelected
-                          ? 'border-nexus-500/30 bg-nexus-500/5'
-                          : 'border-white/5 bg-surface-900 hover:border-white/10'
+                          ? 'border-brand-500/50 bg-brand-500/10 dark:bg-brand-500/15 shadow-2xs'
+                          : 'border-line bg-inset/40 hover:border-line-strong hover:bg-hover/60'
                       )}>
                         <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleSkillToggle(skill.id)}>
                           <div className={cn(
-                            'w-4 h-4 rounded border flex items-center justify-center shrink-0',
-                            isSelected ? 'bg-nexus-500 border-nexus-500' : 'border-white/20'
+                            'w-4.5 h-4.5 rounded-md border flex items-center justify-center shrink-0 transition-colors',
+                            isSelected ? 'bg-brand-600 border-brand-600 text-white' : 'border-line bg-surface'
                           )}>
-                            {isSelected && (
-                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
+                            {isSelected && <Check size={11} strokeWidth={3} />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-white">{skill.name}</span>
-                              <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium uppercase', riskColor)}>{skill.risk}</span>
-                              <span className="text-[10px] text-gray-600">{skill.category}</span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-ink">{skill.name}</span>
+                              <span className={cn('text-[10px] px-1.5 py-0.2 rounded font-semibold uppercase border', riskColor)}>{skill.risk}</span>
+                              <span className="text-[10px] font-mono text-ink-faint">{skill.category}</span>
                             </div>
-                            <p className="text-xs text-gray-500 truncate">{skill.description || 'No description'}</p>
+                            <p className="text-xs text-ink-muted truncate mt-0.5">{skill.description || 'No description'}</p>
                           </div>
                           {isSelected && (
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); setEditingSkillId(isEditing ? null : skill.id); }}
-                              className="px-2 py-1 rounded text-[11px] font-medium bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-200 transition-all"
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-surface border border-line text-ink-muted hover:text-ink transition-all cursor-pointer shadow-2xs"
                             >
                               {isEditing ? 'Done' : 'Customize'}
                             </button>
                           )}
                         </div>
                         {isSelected && isEditing && (
-                          <div className="mt-2 pt-2 border-t border-white/5 space-y-2">
+                          <div className="mt-2.5 pt-2.5 border-t border-line space-y-2">
                             <div>
-                              <label className="block text-[11px] text-gray-500 mb-1">Custom Name (override)</label>
+                              <label className="block text-[11px] font-semibold text-ink-muted mb-1">Custom Name (override)</label>
                               <input
                                 type="text"
                                 value={skillCustomizations[skill.id]?.customName || ''}
@@ -1078,11 +1142,11 @@ export function AgentCreate() {
                                   [skill.id]: { customName: e.target.value, customDescription: prev[skill.id]?.customDescription || '' }
                                 }))}
                                 placeholder={skill.name}
-                                className="w-full px-2.5 py-1.5 rounded bg-surface-850 border border-white/10 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-nexus-500/50"
+                                className="w-full px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-brand-500 shadow-2xs"
                               />
                             </div>
                             <div>
-                              <label className="block text-[11px] text-gray-500 mb-1">Custom Description (override)</label>
+                              <label className="block text-[11px] font-semibold text-ink-muted mb-1">Custom Description (override)</label>
                               <textarea
                                 value={skillCustomizations[skill.id]?.customDescription || ''}
                                 onChange={(e) => setSkillCustomizations(prev => ({
@@ -1091,7 +1155,7 @@ export function AgentCreate() {
                                 }))}
                                 rows={2}
                                 placeholder={skill.description || 'Enter custom description'}
-                                className="w-full px-2.5 py-1.5 rounded bg-surface-850 border border-white/10 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-nexus-500/50 resize-y"
+                                className="w-full px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-brand-500 resize-y shadow-2xs"
                               />
                             </div>
                           </div>
@@ -1102,59 +1166,59 @@ export function AgentCreate() {
                 </div>
               )}
               {selectedSkillIds.size > 0 && (
-                <p className="text-[11px] text-gray-500 mt-2">{selectedSkillIds.size} skill{selectedSkillIds.size !== 1 ? 's' : ''} selected</p>
+                <p className="text-[11px] text-ink-faint mt-2 font-medium">{selectedSkillIds.size} skill{selectedSkillIds.size !== 1 ? 's' : ''} selected</p>
               )}
             </div>
 
             {/* Platform Integrations */}
-            <div className="rounded-xl border border-white/5 bg-surface-850 p-5">
-                <h3 className="text-sm font-semibold text-white mb-1">Platform Integrations</h3>
-                <p className="text-xs text-gray-500 mb-3">
+            <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs">
+                <h3 className="text-sm font-bold text-ink mb-1">Platform Integrations</h3>
+                <p className="text-xs text-ink-muted mb-3">
                   Connect this agent to Telegram, Slack, or Google Chat
                 </p>
                 <div className="space-y-3">
                   {/* Telegram */}
                   {(() => {
                     const channels: { key: ChannelType; label: string; color: string; borderColor: string; bgColor: string }[] = [
-                      { key: 'TELEGRAM', label: 'Telegram', color: 'text-sky-400', borderColor: 'border-sky-500/30', bgColor: 'bg-sky-500/10' },
-                      { key: 'SLACK', label: 'Slack', color: 'text-purple-400', borderColor: 'border-purple-500/30', bgColor: 'bg-purple-500/10' },
-                      { key: 'GOOGLE_CHAT', label: 'Google Chat', color: 'text-emerald-400', borderColor: 'border-emerald-500/30', bgColor: 'bg-emerald-500/10' },
+                      { key: 'TELEGRAM', label: 'Telegram', color: 'text-sky-500', borderColor: 'border-sky-500/30', bgColor: 'bg-sky-500/10' },
+                      { key: 'SLACK', label: 'Slack', color: 'text-purple-500', borderColor: 'border-purple-500/30', bgColor: 'bg-purple-500/10' },
+                      { key: 'GOOGLE_CHAT', label: 'Google Chat', color: 'text-emerald-500', borderColor: 'border-emerald-500/30', bgColor: 'bg-emerald-500/10' },
                     ];
                     return channels.map(({ key, label, color, borderColor, bgColor }) => {
                       const integration = integrations[key];
                       const isConfigured = Boolean(integration?.id);
                       const isExpanded = expandedChannel === key;
                       return (
-                        <div key={key} className={cn('rounded-lg border transition-all', isConfigured ? borderColor : 'border-white/5', isConfigured ? bgColor.replace('/10', '/5') : 'bg-surface-900')}>
+                        <div key={key} className={cn('rounded-2xl border transition-all', isConfigured ? borderColor : 'border-line', isConfigured ? bgColor.replace('/10', '/5') : 'bg-inset/40')}>
                           {/* Channel header */}
                           <div
                             className="flex items-center gap-3 px-4 py-3 cursor-pointer"
                             onClick={() => setExpandedChannel(isExpanded ? null : key)}
                           >
-                            <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold', bgColor, color)}>
+                            <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs', bgColor, color)}>
                               {label.charAt(0)}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-white">{label}</span>
+                                <span className="text-xs font-bold text-ink">{label}</span>
                                 {isConfigured && (
-                                  <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium',
-                                    integration.enabled ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-500 bg-gray-500/10'
+                                  <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-semibold border',
+                                    integration.enabled ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30' : 'text-ink-faint bg-inset border-line'
                                   )}>
                                     {integration.enabled ? 'Enabled' : 'Disabled'}
                                   </span>
                                 )}
                                 {isConfigured && integration.status && (
-                                  <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium',
-                                    integration.status === 'connected' ? 'text-emerald-400 bg-emerald-500/10' :
-                                    integration.status === 'error' ? 'text-red-400 bg-red-500/10' :
-                                    'text-gray-500 bg-gray-500/10'
+                                  <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-semibold border',
+                                    integration.status === 'connected' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30' :
+                                    integration.status === 'error' ? 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/30' :
+                                    'text-ink-faint bg-inset border-line'
                                   )}>
                                     {integration.status}
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[11px] text-gray-500">
+                              <p className="text-[11px] text-ink-muted truncate mt-0.5">
                                 {!isConfigured ? 'Not configured' : integration.lastError ? integration.lastError : 'Click to configure'}
                               </p>
                             </div>
@@ -1163,45 +1227,43 @@ export function AgentCreate() {
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); isEditMode && id ? handleToggleIntegration(key, !integration.enabled) : updateIntegrationField(key, 'enabled', !integration.enabled); }}
                                 className={cn(
-                                  'relative w-9 h-5 rounded-full transition-colors duration-200 shrink-0',
-                                  integration.enabled ? 'bg-emerald-500' : 'bg-gray-600'
+                                  'relative w-10 h-5.5 rounded-full transition-colors duration-200 shrink-0 cursor-pointer',
+                                  integration.enabled ? 'bg-emerald-500' : 'bg-line-strong'
                                 )}
                               >
                                 <div className={cn(
-                                  'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200',
-                                  integration.enabled ? 'translate-x-4.5' : 'translate-x-0.5'
+                                  'absolute top-0.5 w-4.5 h-4.5 rounded-full bg-white shadow-xs transition-transform duration-200',
+                                  integration.enabled ? 'translate-x-5' : 'translate-x-0.5'
                                 )} />
                               </button>
                             )}
-                            <svg className={cn('w-4 h-4 text-gray-500 transition-transform shrink-0', isExpanded && 'rotate-180')} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
+                            <ChevronDown size={14} className={cn('text-ink-muted transition-transform shrink-0', isExpanded && 'rotate-180')} />
                           </div>
 
                           {/* Expanded config form */}
                           {isExpanded && (
-                            <div className="px-4 pb-4 pt-1 border-t border-white/5 space-y-3">
+                            <div className="px-4 pb-4 pt-2 border-t border-line space-y-3">
                               {/* Telegram fields */}
                               {key === 'TELEGRAM' && (
                                 <>
                                   <div>
-                                    <label className="block text-[11px] text-gray-400 mb-1">Bot Token <span className="text-gray-600">(from @BotFather)</span></label>
+                                    <label className="block text-[11px] font-semibold text-ink-muted mb-1">Bot Token <span className="text-ink-faint font-normal">(from @BotFather)</span></label>
                                     <input
                                       type="password"
                                       value={integration.botToken || ''}
                                       onChange={(e) => updateIntegrationField(key, 'botToken', e.target.value)}
                                       placeholder="123456:ABC-DEF..."
-                                      className="w-full px-2.5 py-1.5 rounded bg-surface-850 border border-white/10 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-sky-500/50"
+                                      className="w-full h-9 px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-sky-500 shadow-2xs"
                                     />
                                   </div>
                                   <div>
-                                    <label className="block text-[11px] text-gray-400 mb-1">Webhook URL <span className="text-gray-600">(optional, uses polling if empty)</span></label>
+                                    <label className="block text-[11px] font-semibold text-ink-muted mb-1">Webhook URL <span className="text-ink-faint font-normal">(optional, uses polling if empty)</span></label>
                                     <input
                                       type="text"
                                       value={integration.webhookUrl || ''}
                                       onChange={(e) => updateIntegrationField(key, 'webhookUrl', e.target.value)}
                                       placeholder="https://your-domain.com/telegram"
-                                      className="w-full px-2.5 py-1.5 rounded bg-surface-850 border border-white/10 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-sky-500/50"
+                                      className="w-full h-9 px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-sky-500 shadow-2xs"
                                     />
                                   </div>
                                 </>
@@ -1211,23 +1273,23 @@ export function AgentCreate() {
                               {key === 'SLACK' && (
                                 <>
                                   <div>
-                                    <label className="block text-[11px] text-gray-400 mb-1">Bot Token <span className="text-gray-600">(xoxb-...)</span></label>
+                                    <label className="block text-[11px] font-semibold text-ink-muted mb-1">Bot Token <span className="text-ink-faint font-normal">(xoxb-...)</span></label>
                                     <input
                                       type="password"
                                       value={integration.botToken || ''}
                                       onChange={(e) => updateIntegrationField(key, 'botToken', e.target.value)}
                                       placeholder="xoxb-..."
-                                      className="w-full px-2.5 py-1.5 rounded bg-surface-850 border border-white/10 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50"
+                                      className="w-full h-9 px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-purple-500 shadow-2xs"
                                     />
                                   </div>
                                   <div>
-                                    <label className="block text-[11px] text-gray-400 mb-1">App Token <span className="text-gray-600">(xapp-... for Socket Mode)</span></label>
+                                    <label className="block text-[11px] font-semibold text-ink-muted mb-1">App Token <span className="text-ink-faint font-normal">(xapp-... for Socket Mode)</span></label>
                                     <input
                                       type="password"
                                       value={integration.appToken || ''}
                                       onChange={(e) => updateIntegrationField(key, 'appToken', e.target.value)}
                                       placeholder="xapp-..."
-                                      className="w-full px-2.5 py-1.5 rounded bg-surface-850 border border-white/10 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50"
+                                      className="w-full h-9 px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-purple-500 shadow-2xs"
                                     />
                                   </div>
                                 </>
@@ -1237,7 +1299,7 @@ export function AgentCreate() {
                               {key === 'GOOGLE_CHAT' && (
                                 <>
                                   <div>
-                                    <label className="block text-[11px] text-gray-400 mb-1">Service Account JSON</label>
+                                    <label className="block text-[11px] font-semibold text-ink-muted mb-1">Service Account JSON</label>
                                     <textarea
                                       value={integration.serviceAccount ? JSON.stringify(integration.serviceAccount, null, 2) : ''}
                                       onChange={(e) => {
@@ -1245,54 +1307,53 @@ export function AgentCreate() {
                                           const parsed = JSON.parse(e.target.value);
                                           updateIntegrationField(key, 'serviceAccount', parsed);
                                         } catch {
-                                          // Allow typing incomplete JSON
                                           updateIntegrationField(key, 'serviceAccount', e.target.value as any);
                                         }
                                       }}
                                       rows={4}
                                       placeholder='{"type": "service_account", "project_id": "...", ...}'
-                                      className="w-full px-2.5 py-1.5 rounded bg-surface-850 border border-white/10 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 font-mono resize-y"
+                                      className="w-full p-3 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-emerald-500 font-mono resize-y shadow-2xs"
                                     />
                                   </div>
                                   <div>
-                                    <label className="block text-[11px] text-gray-400 mb-1">Webhook URL <span className="text-gray-600">(public HTTPS endpoint)</span></label>
+                                    <label className="block text-[11px] font-semibold text-ink-muted mb-1">Webhook URL <span className="text-ink-faint font-normal">(public HTTPS endpoint)</span></label>
                                     <input
                                       type="text"
                                       value={integration.webhookUrl || ''}
                                       onChange={(e) => updateIntegrationField(key, 'webhookUrl', e.target.value)}
                                       placeholder="https://your-domain.com/googlechat"
-                                      className="w-full px-2.5 py-1.5 rounded bg-surface-850 border border-white/10 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50"
+                                      className="w-full h-9 px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-emerald-500 shadow-2xs"
                                     />
                                   </div>
                                 </>
                               )}
 
                               {/* Common: DM & Group Policy */}
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                  <label className="block text-[11px] text-gray-400 mb-1">DM Policy</label>
-                                  <select
+                                  <CustomSelect
+                                    label="DM Policy"
                                     value={integration.dmPolicy || 'open'}
-                                    onChange={(e) => updateIntegrationField(key, 'dmPolicy', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 rounded bg-surface-850 border border-white/10 text-xs text-white focus:outline-none"
-                                  >
-                                    <option value="open">Open</option>
-                                    <option value="pairing">Pairing</option>
-                                    <option value="allowlist">Allowlist</option>
-                                    <option value="disabled">Disabled</option>
-                                  </select>
+                                    onChange={(val) => updateIntegrationField(key, 'dmPolicy', val)}
+                                    options={[
+                                      { value: 'open', label: 'Open' },
+                                      { value: 'pairing', label: 'Pairing' },
+                                      { value: 'allowlist', label: 'Allowlist' },
+                                      { value: 'disabled', label: 'Disabled' },
+                                    ]}
+                                  />
                                 </div>
                                 <div>
-                                  <label className="block text-[11px] text-gray-400 mb-1">Group Policy</label>
-                                  <select
+                                  <CustomSelect
+                                    label="Group Policy"
                                     value={integration.groupPolicy || 'open'}
-                                    onChange={(e) => updateIntegrationField(key, 'groupPolicy', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 rounded bg-surface-850 border border-white/10 text-xs text-white focus:outline-none"
-                                  >
-                                    <option value="open">Open</option>
-                                    <option value="allowlist">Allowlist</option>
-                                    <option value="disabled">Disabled</option>
-                                  </select>
+                                    onChange={(val) => updateIntegrationField(key, 'groupPolicy', val)}
+                                    options={[
+                                      { value: 'open', label: 'Open' },
+                                      { value: 'allowlist', label: 'Allowlist' },
+                                      { value: 'disabled', label: 'Disabled' },
+                                    ]}
+                                  />
                                 </div>
                               </div>
 
@@ -1303,7 +1364,7 @@ export function AgentCreate() {
                                     type="button"
                                     onClick={() => handleSaveIntegration(key)}
                                     disabled={savingIntegration === key}
-                                    className={cn('px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors disabled:opacity-50',
+                                    className={cn('px-3.5 py-1.5 rounded-xl text-xs font-bold text-white transition-colors disabled:opacity-50 shadow-xs cursor-pointer',
                                       key === 'TELEGRAM' ? 'bg-sky-600 hover:bg-sky-500' :
                                       key === 'SLACK' ? 'bg-purple-600 hover:bg-purple-500' :
                                       'bg-emerald-600 hover:bg-emerald-500'
@@ -1315,14 +1376,14 @@ export function AgentCreate() {
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteIntegration(key)}
-                                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                                      className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-colors cursor-pointer"
                                     >
                                       Remove
                                     </button>
                                   )}
                                 </div>
                               ) : (
-                                <p className="text-[10px] text-gray-500 pt-1">
+                                <p className="text-[10px] text-ink-faint pt-1">
                                   Integration will be saved when you create the agent.
                                 </p>
                               )}
@@ -1336,32 +1397,31 @@ export function AgentCreate() {
             </div>
 
             {/* SOUL.md Editor */}
-            <div className="rounded-xl border border-white/5 bg-surface-850 p-5">
-              <h3 className="text-sm font-semibold text-white mb-1">
+            <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs">
+              <h3 className="text-sm font-bold text-ink mb-1">
                 SOUL.md
               </h3>
-              <p className="text-xs text-gray-500 mb-3">
-                Agent personality and instructions
+              <p className="text-xs text-ink-muted mb-3">
+                Agent personality and autonomous behavioral instructions
               </p>
               {/* Soul Template Picker */}
               <div className="mb-3">
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                  Start from Template <span className="text-gray-600 font-normal">(optional)</span>
-                </label>
-                <select
+                <CustomSelect
+                  label="Start from Template (optional)"
                   value={selectedTemplateId}
-                  onChange={(e) => handleTemplateSelect(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-surface-900 border border-white/10 text-sm text-white focus:outline-none focus:border-nexus-500/50"
-                >
-                  <option value="">Blank — start from scratch</option>
-                  {soulTemplates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.category})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => handleTemplateSelect(val)}
+                  placeholder="Blank — start from scratch"
+                  options={[
+                    { value: '', label: 'Blank — start from scratch', sublabel: 'Create custom instructions' },
+                    ...soulTemplates.map((t) => ({
+                      value: t.id,
+                      label: t.name,
+                      sublabel: `Category: ${t.category}`,
+                    })),
+                  ]}
+                />
                 {selectedTemplateId && (
-                  <p className="text-[11px] text-ink-muted mt-1">
+                  <p className="text-[11px] text-brand-600 dark:text-brand-400 mt-1.5 font-medium">
                     Template content loaded. Customize it below.
                   </p>
                 )}
@@ -1440,14 +1500,14 @@ export function AgentCreate() {
 
           {/* Right column: MCP Servers (edit mode only) */}
           {isEditMode && id && (
-            <div className="w-1/3 flex flex-col gap-4">
-              <div className="rounded-xl border border-white/5 bg-surface-850 p-5">
+            <div className="w-full lg:w-1/3 flex flex-col gap-4">
+              <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-white">MCP Servers</h3>
+                  <h3 className="text-sm font-bold text-ink">MCP Servers</h3>
                   <button
                     type="button"
                     onClick={() => setShowAddMcp(!showAddMcp)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-nexus-600 text-white hover:bg-nexus-500 transition-all"
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 hover:bg-brand-500/20 transition-all cursor-pointer"
                   >
                     {showAddMcp ? 'Cancel' : '+ Add Server'}
                   </button>
@@ -1455,47 +1515,43 @@ export function AgentCreate() {
 
                 {/* Add MCP server inline form */}
                 {showAddMcp && (
-                  <div className="mb-4 p-3 rounded-lg bg-surface-900 border border-white/10 space-y-3">
+                  <div className="mb-4 p-3.5 rounded-2xl bg-inset border border-line space-y-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">Name</label>
+                      <label className="block text-xs font-semibold text-ink-muted mb-1">Name</label>
                       <input
                         type="text"
                         value={newMcpName}
                         onChange={(e) => setNewMcpName(e.target.value)}
                         placeholder="my-mcp-server"
-                        className="w-full px-3 py-2 rounded-lg bg-surface-850 border border-white/10 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-nexus-500/50"
+                        className="w-full h-9 px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-brand-500 shadow-2xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">URL</label>
+                      <label className="block text-xs font-semibold text-ink-muted mb-1">URL</label>
                       <input
                         type="text"
                         value={newMcpUrl}
                         onChange={(e) => setNewMcpUrl(e.target.value)}
                         placeholder="http://localhost:3001/sse"
-                        className="w-full px-3 py-2 rounded-lg bg-surface-850 border border-white/10 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-nexus-500/50"
+                        className="w-full h-9 px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-brand-500 shadow-2xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">
-                        Transport
-                      </label>
-                      <select
+                      <CustomSelect
+                        label="Transport"
                         value={newMcpTransport}
-                        onChange={(e) =>
-                          setNewMcpTransport(e.target.value as 'SSE' | 'STREAMABLE_HTTP')
-                        }
-                        className="w-full px-3 py-2 rounded-lg bg-surface-850 border border-white/10 text-sm text-white focus:outline-none focus:border-nexus-500/50"
-                      >
-                        <option value="SSE">SSE</option>
-                        <option value="STREAMABLE_HTTP">Streamable HTTP</option>
-                      </select>
+                        onChange={(val) => setNewMcpTransport(val as 'SSE' | 'STREAMABLE_HTTP')}
+                        options={[
+                          { value: 'SSE', label: 'SSE (Server-Sent Events)' },
+                          { value: 'STREAMABLE_HTTP', label: 'Streamable HTTP' },
+                        ]}
+                      />
                     </div>
                     <button
                       type="button"
                       onClick={handleAddMcpServer}
                       disabled={addingMcp || !newMcpName.trim() || !newMcpUrl.trim()}
-                      className="w-full px-4 py-2 rounded-lg text-sm font-medium bg-nexus-600 text-white hover:bg-nexus-500 transition-all disabled:opacity-50"
+                      className="w-full px-4 py-2 rounded-xl text-xs font-bold bg-brand-600 text-white hover:bg-brand-500 transition-all disabled:opacity-50 shadow-xs cursor-pointer"
                     >
                       {addingMcp ? 'Adding...' : 'Add Server'}
                     </button>
@@ -1504,7 +1560,7 @@ export function AgentCreate() {
 
                 {/* MCP server list */}
                 {mcpServers.length === 0 && !showAddMcp && (
-                  <p className="text-xs text-gray-600 py-4 text-center">
+                  <p className="text-xs text-ink-faint py-4 text-center">
                     No MCP servers connected
                   </p>
                 )}
@@ -1513,27 +1569,27 @@ export function AgentCreate() {
                   {mcpServers.map((server) => (
                     <div
                       key={server.id}
-                      className="rounded-lg border border-white/5 bg-surface-900 overflow-hidden"
+                      className="rounded-xl border border-line bg-inset/40 overflow-hidden"
                     >
                       {/* Server header */}
-                      <div className="px-3 py-3 flex items-start justify-between gap-2">
+                      <div className="px-3.5 py-3 flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium text-white truncate">
+                            <span className="text-xs font-bold text-ink truncate">
                               {server.name}
                             </span>
                             <span
                               className={cn(
-                                'text-[10px] px-1.5 py-0.5 rounded font-medium uppercase shrink-0',
+                                'text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase shrink-0 border',
                                 server.transport === 'SSE'
-                                  ? 'bg-blue-500/15 text-blue-400'
-                                  : 'bg-purple-500/15 text-purple-400'
+                                  ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border-brand-500/30'
+                                  : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30'
                               )}
                             >
                               {server.transport}
                             </span>
                           </div>
-                          <p className="text-xs text-gray-500 truncate">{server.url}</p>
+                          <p className="text-[11px] text-ink-muted truncate">{server.url}</p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           {/* Enabled toggle */}
@@ -1541,14 +1597,14 @@ export function AgentCreate() {
                             type="button"
                             onClick={() => handleToggleMcpEnabled(server.id, server.enabled)}
                             className={cn(
-                              'relative w-8 h-4.5 rounded-full transition-colors duration-200',
-                              server.enabled ? 'bg-emerald-500' : 'bg-gray-600'
+                              'relative w-9 h-5 rounded-full transition-colors duration-200 cursor-pointer',
+                              server.enabled ? 'bg-emerald-500' : 'bg-line-strong'
                             )}
                           >
                             <div
                               className={cn(
-                                'absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform duration-200',
-                                server.enabled ? 'translate-x-4' : 'translate-x-0.5'
+                                'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-xs transition-transform duration-200',
+                                server.enabled ? 'translate-x-4.5' : 'translate-x-0.5'
                               )}
                             />
                           </button>
@@ -1556,16 +1612,16 @@ export function AgentCreate() {
                       </div>
 
                       {/* Server actions */}
-                      <div className="px-3 pb-3 flex items-center gap-2">
+                      <div className="px-3.5 pb-3 flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => handleRefreshTools(server.id)}
                           disabled={refreshingServer === server.id}
-                          className="px-2.5 py-1 rounded text-[11px] font-medium bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-200 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-surface border border-line text-ink-muted hover:text-ink transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-2xs cursor-pointer"
                         >
                           {refreshingServer === server.id ? (
                             <>
-                              <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                              <div className="w-3 h-3 border border-ink-muted border-t-transparent rounded-full animate-spin" />
                               Refreshing...
                             </>
                           ) : (
@@ -1575,32 +1631,23 @@ export function AgentCreate() {
                         <button
                           type="button"
                           onClick={() => handleToggleExpand(server.id)}
-                          className="px-2.5 py-1 rounded text-[11px] font-medium bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-200 transition-all flex items-center gap-1"
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-surface border border-line text-ink-muted hover:text-ink transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
                         >
                           Tools
-                          <svg
+                          <ChevronDown
+                            size={12}
                             className={cn(
-                              'w-3 h-3 transition-transform',
+                              'transition-transform',
                               server._expanded && 'rotate-180'
                             )}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 9l-7 7-7-7"
-                            />
-                          </svg>
+                          />
                         </button>
                         <div className="flex-1" />
                         <button
                           type="button"
                           onClick={() => handleDeleteMcpServer(server.id)}
                           disabled={deletingServer === server.id}
-                          className="px-2.5 py-1 rounded text-[11px] font-medium bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-all disabled:opacity-50 cursor-pointer"
                         >
                           {deletingServer === server.id ? '...' : 'Delete'}
                         </button>
@@ -1608,23 +1655,23 @@ export function AgentCreate() {
 
                       {/* Expanded tool list */}
                       {server._expanded && (
-                        <div className="border-t border-white/5 px-3 py-2">
+                        <div className="border-t border-line px-3.5 py-2.5 bg-surface/50">
                           {server._loadingTools ? (
                             <div className="flex items-center justify-center py-3">
-                              <div className="w-4 h-4 border border-gray-500 border-t-transparent rounded-full animate-spin" />
+                              <div className="w-4 h-4 border border-brand-500 border-t-transparent rounded-full animate-spin" />
                             </div>
                           ) : server.tools && server.tools.length > 0 ? (
                             <div className="space-y-1.5">
                               {server.tools.map((tool) => (
                                 <div
                                   key={tool.id}
-                                  className="px-2.5 py-2 rounded bg-surface-850 border border-white/5"
+                                  className="px-2.5 py-2 rounded-lg bg-surface border border-line-subtle shadow-2xs"
                                 >
-                                  <p className="text-xs font-medium text-white font-mono">
+                                  <p className="text-xs font-bold text-ink font-mono">
                                     {tool.name}
                                   </p>
                                   {tool.description && (
-                                    <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">
+                                    <p className="text-[11px] text-ink-muted mt-0.5 line-clamp-2">
                                       {tool.description}
                                     </p>
                                   )}
@@ -1632,7 +1679,7 @@ export function AgentCreate() {
                               ))}
                             </div>
                           ) : (
-                            <p className="text-[11px] text-gray-600 py-2 text-center">
+                            <p className="text-[11px] text-ink-faint py-2 text-center">
                               No tools discovered. Try refreshing.
                             </p>
                           )}

@@ -17,35 +17,39 @@ export function AgentProfile() {
   }, [id, fetchAgent]);
 
   if (!selectedAgent) {
-    return <div className="py-12 text-gray-500">Loading agent...</div>;
+    return <div className="py-12 text-ink-muted text-center text-xs">Loading agent...</div>;
   }
 
   const agent = selectedAgent;
 
   return (
-    <div className="py-6">
+    <div className="py-6 space-y-6">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-        <Link to="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
+      <div className="flex items-center gap-2 text-xs text-ink-muted">
+        <Link to="/dashboard" className="hover:text-ink transition-colors font-medium">Dashboard</Link>
         <span>/</span>
-        <span className="text-white">{agent.displayName}</span>
+        <Link to="/controls" className="hover:text-ink transition-colors font-medium">Fleet Controls</Link>
+        <span>/</span>
+        <span className="text-ink font-bold">{agent.displayName}</span>
       </div>
 
       {/* Agent header */}
-      <div className="rounded-xl border border-white/5 bg-surface-850 p-6 mb-6">
-        <div className="flex items-center justify-between">
+      <div className="rounded-2xl border border-line-subtle bg-surface p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <span className="text-4xl">{agent.avatar}</span>
+            <span className="text-4xl w-14 h-14 rounded-2xl bg-inset border border-line-subtle flex items-center justify-center shadow-2xs shrink-0">
+              {agent.avatar || '🤖'}
+            </span>
             <div>
-              <h2 className="text-2xl font-bold text-white">{agent.displayName}</h2>
-              <div className="flex items-center gap-3 mt-1">
-                <span className="text-sm text-gray-500 font-mono">{agent.name}</span>
-                <div className="flex items-center gap-1.5">
-                  <div className={cn('w-2.5 h-2.5 rounded-full', statusColors[agent.status], agent.status === 'ONLINE' && 'animate-pulse-dot')} />
-                  <span className={cn('text-sm font-medium', statusTextColors[agent.status])}>{agent.status}</span>
+              <h2 className="text-xl sm:text-2xl font-bold text-ink">{agent.displayName}</h2>
+              <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
+                <span className="text-xs text-ink-muted font-mono bg-inset px-2 py-0.5 rounded-md border border-line-subtle">{agent.name}</span>
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-inset border border-line-subtle">
+                  <div className={cn('w-2 h-2 rounded-full', statusColors[agent.status], agent.status === 'ONLINE' && 'animate-pulse-dot')} />
+                  <span className={cn('text-xs font-semibold', statusTextColors[agent.status])}>{agent.status}</span>
                 </div>
                 {agent.agentToAgent && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium uppercase bg-nexus-600/15 text-nexus-400 border border-nexus-500/20">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20">
                     A2A
                   </span>
                 )}
@@ -53,35 +57,37 @@ export function AgentProfile() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="text-xs text-gray-500 uppercase tracking-wider">Last Heartbeat</div>
-              <div className="text-sm text-white mt-0.5">{timeAgo(agent.lastHeartbeat)}</div>
+          <div className="flex items-center gap-4 self-stretch sm:self-auto justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-line-subtle">
+            <div className="text-left sm:text-right">
+              <div className="text-[10px] text-ink-muted uppercase font-bold tracking-wider">Last Heartbeat</div>
+              <div className="text-xs font-bold text-ink mt-0.5">{timeAgo(agent.lastHeartbeat)}</div>
               {agent.heartbeatInterval > 0 && (
-                <div className="text-xs text-gray-600 mt-0.5">Every {agent.heartbeatInterval}m</div>
+                <div className="text-[10px] text-ink-faint mt-0.5">Every {agent.heartbeatInterval}m</div>
               )}
             </div>
             <Link
               to={`/agents/${agent.id}/edit`}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-nexus-600 text-white hover:bg-nexus-500 transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-brand-600 text-white hover:bg-brand-500 transition-colors shadow-xs"
             >
               Edit Agent
             </Link>
           </div>
         </div>
 
-        <p className="text-sm text-gray-400 mt-4">{agent.description}</p>
+        {agent.description && (
+          <p className="text-xs text-ink-muted leading-relaxed mt-4 pt-4 border-t border-line-subtle">{agent.description}</p>
+        )}
 
         {/* Assigned Skills */}
         {agent.agentSkills && agent.agentSkills.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-white/5">
+          <div className="mt-4 pt-4 border-t border-line-subtle">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-gray-500 uppercase tracking-wider">Skills</span>
-              <Link to={`/agents/${agent.id}/edit`} className="text-[10px] text-nexus-400 hover:underline">Edit</Link>
+              <span className="text-[10px] text-ink-muted uppercase font-bold tracking-wider">Equipped Skills</span>
+              <Link to={`/agents/${agent.id}/edit`} className="text-[11px] text-brand-500 font-semibold hover:underline">Manage</Link>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {agent.agentSkills.map((as) => (
-                <span key={as.id} className="px-2 py-0.5 text-xs rounded-full bg-surface-900 border border-white/5 text-gray-300">
+                <span key={as.id} className="px-2.5 py-1 text-xs rounded-xl bg-inset border border-line text-ink font-medium shadow-2xs">
                   {as.customName || as.skill.name}
                 </span>
               ))}
@@ -91,30 +97,30 @@ export function AgentProfile() {
 
         {/* Integrations */}
         {agent.integrations && agent.integrations.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-white/5">
+          <div className="mt-4 pt-4 border-t border-line-subtle">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-gray-500 uppercase tracking-wider">Integrations</span>
-              <Link to={`/agents/${agent.id}/edit`} className="text-[10px] text-nexus-400 hover:underline">Configure</Link>
+              <span className="text-[10px] text-ink-muted uppercase font-bold tracking-wider">Platform Integrations</span>
+              <Link to={`/agents/${agent.id}/edit`} className="text-[11px] text-brand-500 font-semibold hover:underline">Configure</Link>
             </div>
             <div className="flex flex-wrap gap-2">
               {agent.integrations.map((integration) => (
                 <div
                   key={integration.id}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-900 border border-white/5"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-inset border border-line shadow-2xs"
                 >
                   <span className="text-sm">
                     {integration.channel === 'TELEGRAM' ? '✈️' : integration.channel === 'SLACK' ? '💬' : '💭'}
                   </span>
-                  <span className="text-xs text-gray-300 font-medium">
+                  <span className="text-xs text-ink font-semibold">
                     {integration.channel === 'GOOGLE_CHAT' ? 'Google Chat' : integration.channel.charAt(0) + integration.channel.slice(1).toLowerCase()}
                   </span>
                   <span className={cn(
                     'w-1.5 h-1.5 rounded-full',
-                    integration.enabled ? 'bg-emerald-400' : 'bg-gray-600'
+                    integration.enabled ? 'bg-emerald-500' : 'bg-line-strong'
                   )} />
                   <span className={cn(
-                    'text-[10px]',
-                    integration.enabled ? 'text-emerald-400' : 'text-gray-600'
+                    'text-[10px] font-bold uppercase',
+                    integration.enabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-ink-faint'
                   )}>
                     {integration.enabled ? 'Active' : 'Disabled'}
                   </span>
@@ -125,24 +131,24 @@ export function AgentProfile() {
         )}
 
         {/* Quick stats */}
-        <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-white/5">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-white">{agent._count?.activities || 0}</div>
-            <div className="text-xs text-gray-500 uppercase tracking-wider">Total Events</div>
+        <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-line-subtle">
+          <div className="text-center p-3 rounded-xl bg-inset/50 border border-line-subtle">
+            <div className="text-xl font-bold text-ink">{agent._count?.activities || 0}</div>
+            <div className="text-[10px] text-ink-muted uppercase font-bold tracking-wider mt-0.5">Total Events</div>
           </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-white">{agent._count?.tasks || 0}</div>
-            <div className="text-xs text-gray-500 uppercase tracking-wider">Tasks</div>
+          <div className="text-center p-3 rounded-xl bg-inset/50 border border-line-subtle">
+            <div className="text-xl font-bold text-ink">{agent._count?.tasks || 0}</div>
+            <div className="text-[10px] text-ink-muted uppercase font-bold tracking-wider mt-0.5">Tasks</div>
           </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-white">{agent.heartbeatInterval || '∞'}</div>
-            <div className="text-xs text-gray-500 uppercase tracking-wider">Heartbeat (min)</div>
+          <div className="text-center p-3 rounded-xl bg-inset/50 border border-line-subtle">
+            <div className="text-xl font-bold text-ink">{agent.heartbeatInterval || '∞'}</div>
+            <div className="text-[10px] text-ink-muted uppercase font-bold tracking-wider mt-0.5">Heartbeat (min)</div>
           </div>
         </div>
       </div>
 
       {/* Charts + Activity + Config + Files */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-6">
           <HeartbeatChart activities={agent.activities || []} />
           <SoulViewer agent={agent} />
@@ -211,13 +217,13 @@ function WorkspaceFiles({ agentId }: { agentId: string }) {
   };
 
   return (
-    <div className="rounded-xl border border-white/5 bg-surface-850 p-5">
+    <div className="rounded-2xl border border-line-subtle bg-surface p-5 sm:p-6 shadow-xs">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-white">Workspace Files</h3>
+        <h3 className="text-sm font-bold text-ink">Workspace Files</h3>
         {selectedFile && (
           <button
             onClick={() => { setSelectedFile(null); setEditContent(''); }}
-            className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            className="text-xs text-brand-500 font-semibold hover:underline cursor-pointer"
           >
             Back to list
           </button>
@@ -225,19 +231,19 @@ function WorkspaceFiles({ agentId }: { agentId: string }) {
       </div>
 
       {loading ? (
-        <div className="text-xs text-gray-500 py-4 text-center">Loading files...</div>
+        <div className="text-xs text-ink-muted py-4 text-center">Loading files...</div>
       ) : selectedFile ? (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-gray-400">{selectedFile.name}</span>
+            <span className="text-xs font-mono text-ink-muted font-bold">{selectedFile.name}</span>
             <button
               onClick={handleSave}
               disabled={saving || editContent === (selectedFile.content || '')}
               className={cn(
-                'px-3 py-1 rounded-lg text-xs font-medium transition-colors',
+                'px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer',
                 saving || editContent === (selectedFile.content || '')
-                  ? 'bg-white/5 text-gray-600 cursor-not-allowed'
-                  : 'bg-nexus-600 text-white hover:bg-nexus-500'
+                  ? 'bg-inset text-ink-faint cursor-not-allowed border border-line'
+                  : 'bg-brand-600 text-white hover:bg-brand-500'
               )}
             >
               {saving ? 'Saving...' : 'Save'}
@@ -247,28 +253,28 @@ function WorkspaceFiles({ agentId }: { agentId: string }) {
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
             rows={16}
-            className="w-full px-3 py-2 rounded-lg bg-surface-900 border border-white/10 text-xs text-gray-300 font-mono resize-y focus:outline-none focus:border-nexus-500/50 leading-relaxed"
+            className="w-full p-3.5 rounded-xl bg-inset border border-line text-xs text-ink font-mono resize-y focus:outline-none focus:border-brand-500 leading-relaxed shadow-inner"
           />
         </div>
       ) : files.length === 0 ? (
-        <p className="text-xs text-gray-600 py-4 text-center">No workspace files found</p>
+        <p className="text-xs text-ink-faint py-4 text-center">No workspace files found</p>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {files.map((file) => (
             <button
               key={file.name}
               onClick={() => handleSelectFile(file)}
               disabled={file.missing || loadingFile}
               className={cn(
-                'w-full px-3 py-2 rounded-lg text-left flex items-center justify-between transition-colors',
+                'w-full px-3.5 py-2.5 rounded-xl text-left flex items-center justify-between transition-all border cursor-pointer',
                 file.missing
-                  ? 'bg-surface-900 text-gray-600 cursor-not-allowed'
-                  : 'bg-surface-900 text-gray-300 hover:bg-white/5 hover:text-white'
+                  ? 'bg-inset/40 border-line text-ink-faint cursor-not-allowed'
+                  : 'bg-inset/50 border-line text-ink hover:bg-hover hover:border-line-strong'
               )}
             >
               <span className="text-xs font-mono truncate">{file.name}</span>
               {file.size !== undefined && (
-                <span className="text-[10px] text-gray-600 ml-2 shrink-0">
+                <span className="text-[10px] text-ink-faint font-mono ml-2 shrink-0">
                   {file.size > 1024 ? `${(file.size / 1024).toFixed(1)}KB` : `${file.size}B`}
                 </span>
               )}
@@ -279,3 +285,4 @@ function WorkspaceFiles({ agentId }: { agentId: string }) {
     </div>
   );
 }
+

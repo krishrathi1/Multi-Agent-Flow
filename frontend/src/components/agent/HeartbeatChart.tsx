@@ -30,43 +30,45 @@ export function HeartbeatChart({ activities }: { activities: Activity[] }) {
   const data = Array.from(bucketMap.entries()).map(([time, count]) => ({ time, count }));
 
   return (
-    <div className="rounded-xl border border-white/5 bg-surface-850 p-5">
-      <h3 className="text-sm font-semibold text-white mb-4">Heartbeat Activity</h3>
+    <div className="rounded-2xl border border-line-subtle bg-surface p-5 sm:p-6 shadow-xs">
+      <h3 className="text-sm font-bold text-ink mb-4">Heartbeat Activity</h3>
       <ResponsiveContainer width="100%" height={200}>
         <AreaChart data={data}>
           <defs>
             <linearGradient id="heartbeatGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b8eff" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#3b8eff" stopOpacity={0} />
+              <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
+              <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
             </linearGradient>
           </defs>
           <XAxis
             dataKey="time"
-            tick={{ fill: '#4b5563', fontSize: 10 }}
-            axisLine={{ stroke: '#1f2937' }}
+            tick={{ fill: '#94a3b8', fontSize: 10 }}
+            axisLine={{ stroke: '#e2e8f0' }}
             tickLine={false}
             interval={3}
           />
           <YAxis
-            tick={{ fill: '#4b5563', fontSize: 10 }}
+            tick={{ fill: '#94a3b8', fontSize: 10 }}
             axisLine={false}
             tickLine={false}
             width={30}
           />
           <Tooltip
             contentStyle={{
-              background: '#0f172a',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '8px',
+              background: 'var(--c-surface)',
+              border: '1px solid var(--c-line)',
+              borderRadius: '12px',
               fontSize: '12px',
+              color: 'var(--c-ink)',
+              boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
             }}
-            labelStyle={{ color: '#9ca3af' }}
-            itemStyle={{ color: '#3b8eff' }}
+            labelStyle={{ color: 'var(--c-ink-muted)', fontWeight: 600 }}
+            itemStyle={{ color: '#2563eb', fontWeight: 600 }}
           />
           <Area
             type="monotone"
             dataKey="count"
-            stroke="#3b8eff"
+            stroke="#2563eb"
             strokeWidth={2}
             fill="url(#heartbeatGradient)"
             name="Events"
