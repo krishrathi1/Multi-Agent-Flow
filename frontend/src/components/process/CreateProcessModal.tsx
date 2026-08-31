@@ -734,17 +734,19 @@ export function CreateProcessModal({
               <div className="space-y-2.5">
                 {/* Method & URL */}
                 <div className="flex gap-2">
-                  <select
-                    value={apiMethod}
-                    onChange={(e) => setApiMethod(e.target.value)}
-                    className="w-24 rounded-xl border border-line bg-inset font-mono text-xs font-bold text-ink px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  >
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                    <option value="PATCH">PATCH</option>
-                    <option value="DELETE">DELETE</option>
-                  </select>
+                  <div className="w-28 shrink-0">
+                    <CustomSelect
+                      value={apiMethod}
+                      onChange={(val) => setApiMethod(val)}
+                      options={[
+                        { value: 'GET', label: 'GET' },
+                        { value: 'POST', label: 'POST' },
+                        { value: 'PUT', label: 'PUT' },
+                        { value: 'PATCH', label: 'PATCH' },
+                        { value: 'DELETE', label: 'DELETE' },
+                      ]}
+                    />
+                  </div>
                   <input
                     type="text"
                     value={apiUrl}
