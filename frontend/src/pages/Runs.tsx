@@ -294,16 +294,21 @@ export function Runs() {
 
   const tabs = useMemo(
     () =>
-      (
-        [
-          { value: 'all' as const, label: 'All', count: counts.all ?? 0 },
-          { value: 'COMPLETED' as const, label: 'Completed', count: counts.COMPLETED ?? 0 },
-          { value: 'RUNNING' as const, label: 'Running', count: counts.RUNNING ?? 0 },
-          { value: 'FAILED' as const, label: 'Failed', count: counts.FAILED ?? 0 },
-          { value: 'AWAITING_APPROVAL' as const, label: 'Awaiting review', count: counts.AWAITING_APPROVAL ?? 0 },
-          { value: 'CANCELLED' as const, label: 'Cancelled', count: counts.CANCELLED ?? 0 },
-        ] satisfies { value: Filter; label: string; count: number }[]
-      ).filter((t) => t.value === 'all' || t.count > 0),
+      [
+        { value: 'all' as const, label: 'All', count: counts.all ?? 0 },
+        { value: 'COMPLETED' as const, label: 'Completed', count: counts.COMPLETED ?? 0 },
+        { value: 'RUNNING' as const, label: 'Running', count: counts.RUNNING ?? 0 },
+        { value: 'FAILED' as const, label: 'Failed', count: counts.FAILED ?? 0 },
+        { value: 'AWAITING_APPROVAL' as const, label: 'Awaiting Review', count: counts.AWAITING_APPROVAL ?? 0 },
+        { value: 'CANCELLED' as const, label: 'Cancelled', count: counts.CANCELLED ?? 0 },
+      ].filter(
+        (t) =>
+          t.value === 'all' ||
+          t.value === 'COMPLETED' ||
+          t.value === 'FAILED' ||
+          t.value === 'RUNNING' ||
+          t.count > 0,
+      ),
     [counts],
   );
 
@@ -411,9 +416,23 @@ export function Runs() {
             </div>
           ) : visible.length === 0 ? (
             <div className="text-center py-12 text-xs text-ink-muted">
-              <History size={32} className="mx-auto mb-2 text-ink-faint opacity-50" />
-              <p className="font-semibold text-ink">{runs.length === 0 ? 'No runs recorded yet' : 'No runs match this filter'}</p>
-              <p className="text-ink-muted mt-1">{runs.length === 0 ? 'Trigger a process or agent chain to view execution history.' : 'Try selecting a different status filter.'}</p>
+              {filter === 'FAILED' ? (
+                <>
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 mx-auto flex items-center justify-center mb-2.5 shadow-xs">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <p className="font-bold text-ink text-sm">Zero Execution Failures</p>
+                  <p className="text-ink-muted mt-1 max-w-sm mx-auto">
+                    All orchestrated production chains and agent tasks have executed with 100% reliability.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <History size={32} className="mx-auto mb-2 text-ink-faint opacity-50" />
+                  <p className="font-semibold text-ink">{runs.length === 0 ? 'No runs recorded yet' : 'No runs match this filter'}</p>
+                  <p className="text-ink-muted mt-1">{runs.length === 0 ? 'Trigger a process or agent chain to view execution history.' : 'Try selecting a different status filter.'}</p>
+                </>
+              )}
             </div>
           ) : (
             <ul className="space-y-3">
