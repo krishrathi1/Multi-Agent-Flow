@@ -127,6 +127,7 @@ export interface TokenUsage {
   model: string;
   cost: number;
   createdAt: string;
+  agent?: { name?: string; displayName?: string; avatar?: string | null };
 }
 
 // Performance Metrics

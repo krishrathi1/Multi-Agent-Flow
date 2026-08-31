@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import Chart from 'react-apexcharts';
 import {
-  Bot,
   CircleDollarSign,
   Gauge,
   Hash,
@@ -10,6 +9,15 @@ import {
   TrendingUp,
   Wrench,
   Clock,
+  ArrowUpRight,
+  ArrowDownRight,
+  Layers,
+  ChevronRight,
+  Sparkles,
+  Bot,
+  Activity,
+  BarChart3,
+  Calendar,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -22,6 +30,7 @@ import { formatCompact, formatCurrency, formatMs } from '@/lib/design';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
 import { LiveWaveform } from '@/components/ui/LiveIcon';
+import { UsageDetailSheet } from '@/components/cost/UsageDetailSheet';
 
 interface TokenSummary {
   totalTokens: number;
@@ -49,55 +58,8 @@ interface MetricsSummary {
   }>;
 }
 
-const CHART_H = 260;
-
-/** Chart panel card container with consistent header and responsive body */
-function ChartPanel({
-  title,
-  description,
-  icon: Icon,
-  children,
-  empty,
-  emptyLabel = 'No data recorded for this time range.',
-  action,
-}: {
-  title: string;
-  description?: string;
-  icon: typeof Hash;
-  children: React.ReactNode;
-  empty?: boolean;
-  emptyLabel?: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs flex flex-col justify-between transition-all">
-      <div className="flex items-center justify-between border-b border-line-subtle pb-3 mb-4">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0">
-            <Icon size={16} />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-ink truncate">{title}</h3>
-            {description && (
-              <p className="text-[11px] text-ink-muted truncate">{description}</p>
-            )}
-          </div>
-        </div>
-        {action}
-      </div>
-
-      <div className="flex-1 flex flex-col justify-center">
-        {empty ? (
-          <div className="py-12 text-center text-xs text-ink-muted bg-inset/40 rounded-xl border border-dashed border-line">
-            {emptyLabel}
-          </div>
-        ) : (
-          children
-        )}
-      </div>
-    </div>
-  );
-}
+type TimeFilter = '24h' | '7d' | '30d' | 'all';
+type ViewTab = 'spend' | 'models' | 'performance' | 'activity';
 
 export function Metrics() {
   const [tokens, setTokens] = useState<TokenUsage[]>([]);
@@ -110,14 +72,27 @@ export function Metrics() {
   const [socketConnected, setSocketConnected] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  // Mobile filters & tabs
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('24h');
+  const [activeTab, setActiveTab] = useState<ViewTab>('spend');
+  const [selectedUsage, setSelectedUsage] = useState<TokenUsage | null>(null);
+
   const resolvedTheme = useUiStore((s) => s.resolvedTheme);
   const isDark = resolvedTheme === 'dark';
 
   const fetchData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
+      const hoursMap: Record<TimeFilter, number | undefined> = {
+        '24h': 24,
+        '7d': 168,
+        '30d': 720,
+        'all': undefined,
+      };
+      const hours = hoursMap[timeFilter];
+
       const [tokList, metList, tokSum, metSum, insList] = await Promise.all([
-        api.tokens.usage({ hours: 24 }).catch(() => []),
+        api.tokens.usage({ hours }).catch(() => []),
         api.metrics.list({ limit: 1000 }).catch(() => []),
         api.tokens.summary().catch(() => null),
         api.metrics.summary().catch(() => null),
@@ -136,81 +111,162 @@ export function Metrics() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [timeFilter]);
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
     const socket = getSocket();
     const update = () => fetchData(false);
     socket.on('activity:new', update);
     socket.on('metrics:new', update);
     socket.on('token:usage', update);
     setSocketConnected(socket.connected);
-    socket.on('connect', () => setSocketConnected(true));
-    socket.on('disconnect', () => setSocketConnected(false));
+    const onConn = () => setSocketConnected(true);
+    const onDis = () => setSocketConnected(false);
+    socket.on('connect', onConn);
+    socket.on('disconnect', onDis);
+
     return () => {
       socket.off('activity:new', update);
       socket.off('metrics:new', update);
       socket.off('token:usage', update);
+      socket.off('connect', onConn);
+      socket.off('disconnect', onDis);
     };
   }, [fetchData]);
 
-  const stats24h = useMemo(() => {
-    const totalTokens24h = tokenSummary?.totalTokens || tokens.reduce((a, t) => a + t.totalTokens, 0);
-    const totalCost24h = tokenSummary?.totalCost || tokens.reduce((a, t) => a + t.cost, 0);
+  // Aggregate KPIs
+  const kpis = useMemo(() => {
+    const totalTokens = tokens.reduce((a, t) => a + t.totalTokens, 0);
+    const inputTokens = tokens.reduce((a, t) => a + t.inputTokens, 0);
+    const outputTokens = tokens.reduce((a, t) => a + t.outputTokens, 0);
+    const totalCost = tokens.reduce((a, t) => a + t.cost, 0);
     const calls = metrics.length;
     const avgResponseTime = calls > 0 ? metrics.reduce((a, m) => a + m.responseTimeMs, 0) / calls : 0;
     const successCount = metrics.filter((m) => m.success).length;
     const successRate = calls > 0 ? Math.round((successCount / calls) * 100) : 100;
-    return { totalTokens24h, totalCost24h, avgResponseTime, calls, successRate };
+
+    return {
+      totalTokens: totalTokens || tokenSummary?.totalTokens || 0,
+      inputTokens,
+      outputTokens,
+      totalCost: totalCost || tokenSummary?.totalCost || 0,
+      calls,
+      avgResponseTime,
+      successRate,
+    };
   }, [tokens, metrics, tokenSummary]);
 
-  const hourlyTokenData = useMemo(() => {
-    const buckets: Record<string, { hour: string; input: number; output: number; total: number }> = {};
+  // Spending trend by time slices
+  const chartData = useMemo(() => {
+    if (timeFilter === '24h') {
+      const buckets: Record<string, { label: string; cost: number; tokens: number }> = {};
+      const now = new Date();
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 2 * 3600 * 1000);
+        const label = `${String(d.getHours()).padStart(2, '0')}:00`;
+        buckets[label] = { label, cost: 0, tokens: 0 };
+      }
+      for (const t of tokens) {
+        const d = new Date(t.createdAt);
+        const nearest2h = Math.floor(d.getHours() / 2) * 2;
+        const label = `${String(nearest2h).padStart(2, '0')}:00`;
+        if (buckets[label]) {
+          buckets[label].cost += t.cost;
+          buckets[label].tokens += t.totalTokens;
+        }
+      }
+      return Object.values(buckets);
+    }
+
+    // 7d or 30d daily buckets
+    const days = timeFilter === '7d' ? 7 : 14;
+    const buckets: Record<string, { label: string; cost: number; tokens: number }> = {};
     const now = new Date();
-    for (let i = 23; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 3600 * 1000);
-      const hourKey = `${String(d.getHours()).padStart(2, '0')}:00`;
-      buckets[hourKey] = { hour: hourKey, input: 0, output: 0, total: 0 };
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 3600 * 1000);
+      const label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+      buckets[label] = { label, cost: 0, tokens: 0 };
     }
     for (const t of tokens) {
       const d = new Date(t.createdAt);
-      if (now.getTime() - d.getTime() <= 24 * 3600 * 1000) {
-        const hourKey = `${String(d.getHours()).padStart(2, '0')}:00`;
-        if (buckets[hourKey]) {
-          buckets[hourKey].input += t.inputTokens;
-          buckets[hourKey].output += t.outputTokens;
-          buckets[hourKey].total += t.totalTokens;
-        }
+      const label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+      if (buckets[label]) {
+        buckets[label].cost += t.cost;
+        buckets[label].tokens += t.totalTokens;
       }
     }
     return Object.values(buckets);
-  }, [tokens]);
+  }, [tokens, timeFilter]);
 
-  const hasTokenSeries = useMemo(() => hourlyTokenData.some((d) => d.input > 0 || d.output > 0), [hourlyTokenData]);
+  const hasChartData = useMemo(() => chartData.some((d) => d.cost > 0 || d.tokens > 0), [chartData]);
 
-  const costByAgent = useMemo(() => {
+  // Model & Provider breakdown
+  const modelBreakdown = useMemo(() => {
+    const map = new Map<string, { model: string; tokens: number; cost: number; count: number }>();
+    for (const t of tokens) {
+      const modelName = t.model || 'nexus-engine';
+      const existing = map.get(modelName) || { model: modelName, tokens: 0, cost: 0, count: 0 };
+      existing.tokens += t.totalTokens;
+      existing.cost += t.cost;
+      existing.count += 1;
+      map.set(modelName, existing);
+    }
+    const totalSpent = kpis.totalCost || 0.0001;
+    return Array.from(map.values())
+      .map((item) => ({
+        ...item,
+        percentage: Math.min(100, Math.round((item.cost / totalSpent) * 100)),
+      }))
+      .sort((a, b) => b.cost - a.cost);
+  }, [tokens, kpis.totalCost]);
+
+  // Agent Cost Breakdown
+  const agentCostBreakdown = useMemo(() => {
     if (!tokenSummary?.byAgent) return [];
+    const totalSpent = tokenSummary.totalCost || 0.0001;
     return tokenSummary.byAgent
-      .map((a) => ({ name: a.displayName || a.agentName, cost: a.totalCost, tokens: a.totalTokens }))
+      .map((a) => ({
+        id: a.agentId,
+        name: a.displayName || a.agentName,
+        cost: a.totalCost,
+        tokens: a.totalTokens,
+        percentage: Math.min(100, Math.round((a.totalCost / totalSpent) * 100)),
+      }))
       .sort((a, b) => b.cost - a.cost);
   }, [tokenSummary]);
 
+  // Recent usage grouped by Day
+  const groupedUsage = useMemo(() => {
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+    const groups: { title: string; items: TokenUsage[] }[] = [
+      { title: 'Today', items: [] },
+      { title: 'Yesterday', items: [] },
+      { title: 'Earlier', items: [] },
+    ];
+
+    for (const t of tokens.slice(0, 30)) {
+      const itemDate = new Date(t.createdAt).toDateString();
+      if (itemDate === today) groups[0].items.push(t);
+      else if (itemDate === yesterday) groups[1].items.push(t);
+      else groups[2].items.push(t);
+    }
+
+    return groups.filter((g) => g.items.length > 0);
+  }, [tokens]);
+
+  // Latency & Success rate metrics
   const responseTimeByAgent = useMemo(() => {
     if (!metricsSummary?.byAgent) return [];
     return metricsSummary.byAgent.map((a) => ({
       name: a.displayName || a.agentName,
       avg: Math.round(a.avgResponseTime),
       p95: Math.round(a.p95ResponseTime),
-      calls: a.totalCalls,
-    }));
-  }, [metricsSummary]);
-
-  const successRateByAgent = useMemo(() => {
-    if (!metricsSummary?.byAgent) return [];
-    return metricsSummary.byAgent.map((a) => ({
-      name: a.displayName || a.agentName,
-      rate: Math.round(a.successRate),
       calls: a.totalCalls,
     }));
   }, [metricsSummary]);
@@ -224,392 +280,490 @@ export function Metrics() {
     return Array.from(toolMap.entries())
       .map(([name, calls]) => ({ name, calls }))
       .sort((a, b) => b.calls - a.calls)
-      .slice(0, 10);
+      .slice(0, 8);
   }, [metrics]);
 
-  const tokenAreaChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
-    chart: { type: 'area', height: CHART_H, toolbar: { show: false }, zoom: { enabled: false }, background: 'transparent', fontFamily: 'inherit' },
-    colors: ['#3b82f6', '#10b981'],
+  // Spend Area Chart Options
+  const spendChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
+    chart: {
+      type: 'area',
+      height: 220,
+      toolbar: { show: false },
+      zoom: { enabled: false },
+      background: 'transparent',
+      fontFamily: 'inherit',
+    },
+    colors: ['#10b981'],
     dataLabels: { enabled: false },
     stroke: { curve: 'smooth', width: 2.5 },
-    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: isDark ? 0.45 : 0.35, opacityTo: 0.02, stops: [0, 90, 100] } },
-    grid: { borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)', strokeDashArray: 3 },
-    xaxis: { categories: hourlyTokenData.map((d) => d.hour), labels: { style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
-    yaxis: { labels: { formatter: (v) => formatCompact(v), style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
-    tooltip: { theme: isDark ? 'dark' : 'light', y: { formatter: (v) => `${formatCompact(v)} tokens` } },
-    legend: { position: 'top', horizontalAlign: 'right', fontSize: '11px', labels: { colors: isDark ? '#a1a1aa' : '#64748b' } },
-  }), [hourlyTokenData, isDark]);
+    fill: {
+      type: 'gradient',
+      gradient: {
+        shadeIntensity: 1,
+        opacityFrom: isDark ? 0.45 : 0.35,
+        opacityTo: 0.02,
+        stops: [0, 90, 100],
+      },
+    },
+    grid: {
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)',
+      strokeDashArray: 3,
+      padding: { top: 0, right: 0, bottom: 0, left: 10 },
+    },
+    xaxis: {
+      categories: chartData.map((d) => d.label),
+      labels: {
+        style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' },
+        rotate: 0,
+      },
+      axisBorder: { show: false },
+      axisTicks: { show: false },
+    },
+    yaxis: {
+      labels: {
+        formatter: (v) => formatCurrency(v),
+        style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' },
+      },
+    },
+    tooltip: {
+      theme: isDark ? 'dark' : 'light',
+      y: { formatter: (v) => formatCurrency(v) },
+    },
+  }), [chartData, isDark]);
 
-  const tokenAreaSeries = useMemo(() => [
-    { name: 'Input', data: hourlyTokenData.map((d) => d.input) },
-    { name: 'Output', data: hourlyTokenData.map((d) => d.output) },
-  ], [hourlyTokenData]);
-
-  const latencyChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
-    chart: { type: 'bar', height: CHART_H, toolbar: { show: false }, background: 'transparent', fontFamily: 'inherit' },
-    plotOptions: { bar: { columnWidth: '40%', borderRadius: 4 } },
-    colors: ['#3b82f6', '#f97316'],
-    dataLabels: { enabled: false },
-    grid: { borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)', strokeDashArray: 3 },
-    xaxis: { categories: responseTimeByAgent.map((d) => d.name), labels: { style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' }, trim: true } },
-    yaxis: { labels: { formatter: (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}ms`), style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
-    tooltip: { theme: isDark ? 'dark' : 'light', y: { formatter: (v) => formatMs(v) } },
-    legend: { position: 'top', horizontalAlign: 'right', fontSize: '11px', labels: { colors: isDark ? '#a1a1aa' : '#64748b' } },
-  }), [responseTimeByAgent, isDark]);
-
-  const latencySeries = useMemo(() => [
-    { name: 'Average', data: responseTimeByAgent.map((d) => d.avg) },
-    { name: 'p95', data: responseTimeByAgent.map((d) => d.p95) },
-  ], [responseTimeByAgent]);
-
-  const successRateChartOptions: ApexCharts.ApexOptions = useMemo(() => ({
-    chart: { type: 'bar', height: CHART_H, toolbar: { show: false }, background: 'transparent', fontFamily: 'inherit' },
-    plotOptions: { bar: { horizontal: true, barHeight: '38%', borderRadius: 6 } },
-    colors: ['#10b981'],
-    dataLabels: { enabled: true, formatter: (val) => `${val}%`, style: { colors: [isDark ? '#e4e4e7' : '#18181b'] } },
-    grid: { borderColor: isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)', strokeDashArray: 3 },
-    xaxis: { categories: successRateByAgent.map((d) => d.name), max: 100, labels: { style: { colors: isDark ? '#71717a' : '#94a3b8', fontSize: '10px' } } },
-    yaxis: { labels: { style: { colors: isDark ? '#a1a1aa' : '#475569', fontSize: '11px', fontWeight: 600 } } },
-    tooltip: { theme: isDark ? 'dark' : 'light', y: { formatter: (v) => `${v}% Success` } },
-  }), [successRateByAgent, isDark]);
-
-  const successRateSeries = useMemo(() => [{ name: 'Success Rate', data: successRateByAgent.map((d) => d.rate) }], [successRateByAgent]);
+  const spendChartSeries = useMemo(() => [
+    { name: 'Estimated Cost', data: chartData.map((d) => Number(d.cost.toFixed(4))) },
+  ], [chartData]);
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <PageHeader icon={Gauge} title="Metrics & Cost" description="Loading telemetry..." />
-        <div className="flex flex-col items-center justify-center py-24">
-          <HourglassLoader size={52} />
+      <div className="space-y-4 max-w-4xl mx-auto pb-12">
+        <PageHeader icon={Gauge} title="Cost & Usage" description="Loading telemetry..." />
+        <div className="flex flex-col items-center justify-center py-20">
+          <HourglassLoader size={48} label="Loading real-time cost telemetry..." />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={Gauge}
-        title="Metrics & Cost"
-        description="Real-time telemetry, model token consumption, latency, and fleet spend analysis"
-        badge={<Badge tone={socketConnected ? 'success' : 'neutral'} dot pulse={socketConnected}>{socketConnected ? 'Live Feed' : 'Offline'}</Badge>}
-        actions={
-          <div className="flex items-center gap-3">
-            {lastUpdated && (
-              <span className="text-2xs font-semibold tabular-nums text-ink-muted flex items-center gap-1 bg-inset px-2.5 py-1 rounded-xl border border-line-subtle">
-                <Clock size={11} /> {timeAgo(lastUpdated.toISOString())}
+    <div className="space-y-4 sm:space-y-6 max-w-5xl mx-auto pb-16">
+      {/* Mobile Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+              <CircleDollarSign size={17} />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-lg font-bold text-ink tracking-tight flex items-center gap-2">
+                Cost & Usage
+                <Badge tone={socketConnected ? 'success' : 'neutral'} dot pulse={socketConnected}>
+                  {socketConnected ? 'Live' : 'Offline'}
+                </Badge>
+              </h1>
+              <p className="text-2xs text-ink-muted">AI token throughput, estimated spend, and model metrics</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {lastUpdated && (
+            <span className="text-2xs font-mono text-ink-muted flex items-center gap-1 bg-inset px-2.5 py-1 rounded-xl border border-line-subtle">
+              <Clock size={11} className="text-ink-faint" />
+              {timeAgo(lastUpdated.toISOString())}
+            </span>
+          )}
+          <Button
+            variant="secondary"
+            size="xs"
+            icon={RefreshCw}
+            loading={refreshing}
+            onClick={() => fetchData(true)}
+            aria-label="Refresh telemetry"
+          >
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {/* Date Range Selector Chips */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+        {(
+          [
+            { id: '24h', label: 'Today (24h)' },
+            { id: '7d', label: 'Last 7 Days' },
+            { id: '30d', label: 'Last 30 Days' },
+            { id: 'all', label: 'All Time' },
+          ] as const
+        ).map((chip) => (
+          <button
+            key={chip.id}
+            type="button"
+            onClick={() => setTimeFilter(chip.id)}
+            className={cn(
+              'shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+              timeFilter === chip.id
+                ? 'bg-brand-600 text-white shadow-xs'
+                : 'border border-line bg-surface text-ink-muted hover:text-ink hover:bg-hover'
+            )}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 1. PRIMARY COST HERO CARD */}
+      <div className="rounded-3xl border border-line-subtle bg-surface p-5 sm:p-6 shadow-xs relative overflow-hidden group">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+              <Sparkles size={13} className="text-brand-500" />
+              Total Estimated Spend
+            </span>
+            <div className="text-3xl sm:text-4xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 tracking-tight">
+              {formatCurrency(kpis.totalCost)}
+            </div>
+          </div>
+
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-500/20 font-mono">
+            <ArrowUpRight size={13} />
+            Active Fleet
+          </span>
+        </div>
+
+        <p className="text-2xs text-ink-muted">
+          Estimated AI spend across all connected LLM providers & autonomous agents.
+        </p>
+
+        {/* Mini progress track */}
+        <div className="mt-4 pt-4 border-t border-line-subtle flex flex-wrap items-center justify-between gap-2 text-2xs font-mono text-ink-muted">
+          <span>{formatCompact(kpis.totalTokens)} total tokens</span>
+          <span>{kpis.calls.toLocaleString()} LLM requests</span>
+          <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+            avg {kpis.calls > 0 ? formatCurrency(kpis.totalCost / kpis.calls) : '$0.00'}/call
+          </span>
+        </div>
+      </div>
+
+      {/* 2. SECONDARY 2-COLUMN METRICS GRID */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+        <div className="p-3.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-ink-muted text-2xs font-bold uppercase tracking-wider">
+            <span>Tokens</span>
+            <Hash size={13} className="text-brand-500" />
+          </div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-ink">
+            {formatCompact(kpis.totalTokens)}
+          </div>
+          <span className="text-[10px] text-ink-faint font-mono block truncate">
+            In: {formatCompact(kpis.inputTokens)} · Out: {formatCompact(kpis.outputTokens)}
+          </span>
+        </div>
+
+        <div className="p-3.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-ink-muted text-2xs font-bold uppercase tracking-wider">
+            <span>Requests</span>
+            <Activity size={13} className="text-purple-500" />
+          </div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-ink">
+            {kpis.calls.toLocaleString()}
+          </div>
+          <span className="text-[10px] text-ink-faint font-mono block truncate">
+            Total LLM tool calls
+          </span>
+        </div>
+
+        <div className="p-3.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-ink-muted text-2xs font-bold uppercase tracking-wider">
+            <span>Avg Latency</span>
+            <Timer size={13} className="text-amber-500" />
+          </div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-ink">
+            {formatMs(kpis.avgResponseTime)}
+          </div>
+          <span className="text-[10px] text-ink-faint font-mono block truncate">
+            Execution duration
+          </span>
+        </div>
+
+        <div className="p-3.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-ink-muted text-2xs font-bold uppercase tracking-wider">
+            <span>Success Rate</span>
+            <TrendingUp size={13} className="text-cyan-500" />
+          </div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-ink">
+            {kpis.successRate}%
+          </div>
+          <span className="text-[10px] text-ink-faint font-mono block truncate">
+            Zero-anomaly execution
+          </span>
+        </div>
+      </div>
+
+      {/* 3. INTERACTIVE SPENDING TREND CHART */}
+      <div className="rounded-3xl border border-line-subtle bg-surface p-4 sm:p-5 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <BarChart3 size={14} />
+            </div>
+            <span className="text-xs font-bold uppercase tracking-wider text-ink">Spending Trend</span>
+          </div>
+          <span className="text-2xs font-mono text-ink-muted">Cost over time</span>
+        </div>
+
+        <div className="w-full h-[220px]">
+          {hasChartData ? (
+            <Chart
+              options={spendChartOptions}
+              series={spendChartSeries}
+              type="area"
+              height={220}
+              width="100%"
+            />
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-center p-4 bg-inset/40 rounded-2xl border border-dashed border-line">
+              <p className="text-xs text-ink-muted">No spend recorded for this time range.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Section View Tabs: Models | Agents | Activity | Performance */}
+      <div className="border-b border-line-subtle flex items-center gap-2 overflow-x-auto no-scrollbar pt-2">
+        {(
+          [
+            { id: 'models', label: 'By Model', count: modelBreakdown.length },
+            { id: 'spend', label: 'By Agent', count: agentCostBreakdown.length },
+            { id: 'activity', label: 'Recent Usage', count: tokens.length },
+            { id: 'performance', label: 'Performance' },
+          ] as const
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              'pb-2.5 text-xs font-bold tracking-tight border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5',
+              activeTab === tab.id
+                ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                : 'border-transparent text-ink-muted hover:text-ink'
+            )}
+          >
+            <span>{tab.label}</span>
+            {'count' in tab && tab.count !== undefined && (
+              <span className="px-1.5 py-0.2 rounded-md bg-inset text-[10px] font-mono text-ink-muted">
+                {tab.count}
               </span>
             )}
-            <Button variant="secondary" icon={RefreshCw} loading={refreshing} onClick={() => fetchData(true)}>Refresh</Button>
-          </div>
-        }
-      />
-
-      {/* 4 Core Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Tokens</span>
-            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center">
-              <Hash size={16} />
-            </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
-            {formatCompact(stats24h.totalTokens24h)}
-          </div>
-          <p className="text-[11px] text-ink-muted mt-1 font-medium">Last 24 hours throughput</p>
-        </div>
-
-        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Total Spend</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
-              <CircleDollarSign size={16} />
-            </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono text-emerald-600 dark:text-emerald-400">
-            {formatCurrency(stats24h.totalCost24h)}
-          </div>
-          <p className="text-[11px] text-ink-muted mt-1 font-medium">Across all connected LLMs</p>
-        </div>
-
-        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Avg Response</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center">
-              <Timer size={16} />
-            </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
-            {formatMs(stats24h.avgResponseTime)}
-          </div>
-          <p className="text-[11px] text-ink-muted mt-1 font-medium">{formatCompact(stats24h.calls)} total LLM calls</p>
-        </div>
-
-        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Success Rate</span>
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 flex items-center justify-center">
-              <TrendingUp size={16} />
-            </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
-            {stats24h.successRate}%
-          </div>
-          <p className="text-[11px] text-ink-muted mt-1 font-medium">Zero-anomaly threshold</p>
-        </div>
+          </button>
+        ))}
       </div>
 
-      {/* Row 1: Token Usage ApexChart & Cost by Agent */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartPanel
-          icon={Hash}
-          title="Token Usage Over Time"
-          description="Input vs. Output tokens hourly breakdown (24h)"
-          empty={!hasTokenSeries}
-          emptyLabel="No token activity recorded in the past 24 hours."
-        >
-          <div className="w-full h-[260px]">
-            <Chart
-              options={tokenAreaChartOptions}
-              series={tokenAreaSeries}
-              type="area"
-              height={CHART_H}
-              width="100%"
-            />
-          </div>
-        </ChartPanel>
-
-        <ChartPanel
-          icon={CircleDollarSign}
-          title="Cost Breakdown by Agent"
-          description="Cumulative token expenditure per agent"
-          empty={costByAgent.length === 0}
-          emptyLabel="No spend incurred yet."
-        >
-          <div className="space-y-3.5 max-h-[260px] overflow-y-auto pr-1">
-            {costByAgent.map((agent, i) => {
-              const maxCost = Math.max(...costByAgent.map((a) => a.cost), 0.0001);
-              const percentage = Math.min(Math.round((agent.cost / maxCost) * 100), 100);
-              return (
-                <div key={agent.name} className="p-3 rounded-xl bg-inset/60 border border-line-subtle hover:border-line transition-all">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 h-5 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 text-[10px] font-bold flex items-center justify-center shrink-0">
-                        #{i + 1}
-                      </span>
-                      <span className="text-xs font-bold text-ink truncate">{agent.name}</span>
+      {/* TAB 1: BY MODEL BREAKDOWN */}
+      {activeTab === 'models' && (
+        <div className="space-y-2.5">
+          {modelBreakdown.length === 0 ? (
+            <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
+              No model usage records found for this period.
+            </div>
+          ) : (
+            modelBreakdown.map((item) => (
+              <div
+                key={item.model}
+                className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line transition-all space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
+                      <Layers size={15} />
                     </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(agent.cost)}
-                      </span>
-                      <span className="text-[10px] text-ink-faint font-mono ml-1.5">
-                        ({formatCompact(agent.tokens)} tok)
-                      </span>
+                    <div className="min-w-0">
+                      <h4 className="text-xs sm:text-sm font-bold font-mono text-ink truncate">{item.model}</h4>
+                      <p className="text-[10px] text-ink-muted font-mono">{formatCompact(item.tokens)} tokens · {item.count} calls</p>
                     </div>
                   </div>
-                  <div className="w-full h-2 rounded-full bg-surface border border-line-subtle overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-all duration-500"
-                      style={{ width: `${Math.max(percentage, 4)}%` }}
-                    />
+
+                  <div className="text-right shrink-0">
+                    <span className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(item.cost)}
+                    </span>
+                    <span className="text-[10px] text-ink-muted font-mono block">
+                      {item.percentage}% of total
+                    </span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </ChartPanel>
-      </div>
 
-      {/* Row 2: Response Time, Success Rate, Tool Usage */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <ChartPanel
-          icon={Timer}
-          title="Response Time (Latency)"
-          description="Average vs. p95 tail latency per agent"
-          empty={responseTimeByAgent.length === 0}
-        >
-          <div className="w-full h-[260px]">
-            <Chart
-              options={latencyChartOptions}
-              series={latencySeries}
-              type="bar"
-              height={CHART_H}
-              width="100%"
-            />
-          </div>
-        </ChartPanel>
+                {/* Progress bar */}
+                <div className="w-full h-1.5 rounded-full bg-inset overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-purple-500 transition-all duration-500"
+                    style={{ width: `${Math.max(item.percentage, 4)}%` }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
-        <ChartPanel
-          icon={TrendingUp}
-          title="Reliability & Success Rate"
-          description="Zero-error task execution benchmark"
-          empty={successRateByAgent.length === 0}
-        >
-          <div className="w-full h-[260px]">
-            <Chart
-              options={successRateChartOptions}
-              series={successRateSeries}
-              type="bar"
-              height={CHART_H}
-              width="100%"
-            />
-          </div>
-        </ChartPanel>
+      {/* TAB 2: BY AGENT BREAKDOWN */}
+      {activeTab === 'spend' && (
+        <div className="space-y-2.5">
+          {agentCostBreakdown.length === 0 ? (
+            <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
+              No agent spend recorded yet. Run a production chain to generate usage.
+            </div>
+          ) : (
+            agentCostBreakdown.map((agent, i) => (
+              <div
+                key={agent.id}
+                className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line transition-all space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-6 h-6 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 text-2xs font-bold flex items-center justify-center shrink-0">
+                      #{i + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <h4 className="text-xs sm:text-sm font-bold text-ink truncate">{agent.name}</h4>
+                      <p className="text-[10px] text-ink-muted font-mono">{formatCompact(agent.tokens)} tokens</p>
+                    </div>
+                  </div>
 
-        <ChartPanel
-          icon={Wrench}
-          title="Top Tool Invocations"
-          description="Most called agent functions & tools"
-          empty={toolUsage.length === 0}
-        >
-          <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
-            {toolUsage.map((tool, i) => {
-              const maxCalls = Math.max(...toolUsage.map((t) => t.calls), 1);
-              const percentage = Math.round((tool.calls / maxCalls) * 100);
-              return (
-                <div key={tool.name} className="p-2.5 rounded-xl bg-inset/50 border border-line-subtle flex items-center justify-between gap-3">
+                  <div className="text-right shrink-0">
+                    <span className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(agent.cost)}
+                    </span>
+                    <span className="text-[10px] text-ink-muted font-mono block">
+                      {agent.percentage}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="w-full h-1.5 rounded-full bg-inset overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-all duration-500"
+                    style={{ width: `${Math.max(agent.percentage, 4)}%` }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: RECENT USAGE ACTIVITY STREAM */}
+      {activeTab === 'activity' && (
+        <div className="space-y-4">
+          {groupedUsage.length === 0 ? (
+            <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
+              No recent usage entries found.
+            </div>
+          ) : (
+            groupedUsage.map((group) => (
+              <div key={group.title} className="space-y-2">
+                <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted px-1">
+                  {group.title}
+                </span>
+
+                <div className="space-y-1.5">
+                  {group.items.map((usage) => {
+                    const agentName = usage.agent?.displayName || usage.agent?.name || 'Agent Execution';
+                    return (
+                      <button
+                        key={usage.id}
+                        type="button"
+                        onClick={() => setSelectedUsage(usage)}
+                        className="w-full rounded-2xl border border-line-subtle bg-surface p-3 sm:p-3.5 shadow-2xs hover:border-line hover:bg-hover/40 transition-all flex items-center justify-between gap-3 text-left cursor-pointer active:scale-[0.99]"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+                            <Bot size={15} />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-ink block truncate">{agentName}</span>
+                            <div className="flex items-center gap-1.5 text-[10px] text-ink-muted font-mono mt-0.5">
+                              <span className="px-1.5 py-0.2 rounded bg-inset border border-line-subtle">{usage.model}</span>
+                              <span>•</span>
+                              <span>{formatCompact(usage.totalTokens)} tok</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="text-right">
+                            <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400 block">
+                              {formatCurrency(usage.cost)}
+                            </span>
+                            <span className="text-[10px] text-ink-faint font-mono">
+                              {timeAgo(usage.createdAt)}
+                            </span>
+                          </div>
+                          <ChevronRight size={14} className="text-ink-muted" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: PERFORMANCE & TOOL USAGE */}
+      {activeTab === 'performance' && (
+        <div className="space-y-4">
+          {/* Latency Breakdown */}
+          <div className="rounded-3xl border border-line-subtle bg-surface p-4.5 sm:p-5 shadow-2xs space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink block">
+              Response Time & Tail Latency
+            </span>
+            <div className="space-y-2">
+              {responseTimeByAgent.map((agent) => (
+                <div key={agent.name} className="p-3 rounded-xl bg-inset/50 border border-line-subtle flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-ink truncate">{agent.name}</span>
+                  <div className="text-2xs font-mono text-ink-muted flex items-center gap-3 shrink-0">
+                    <span>Avg: <strong className="text-ink">{agent.avg}ms</strong></span>
+                    <span>p95: <strong className="text-ink">{agent.p95}ms</strong></span>
+                    <span className="text-brand-600 dark:text-brand-400 font-bold">{agent.calls} calls</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Top Tools */}
+          <div className="rounded-3xl border border-line-subtle bg-surface p-4.5 sm:p-5 shadow-2xs space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink block">
+              Top Tool Invocations
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {toolUsage.map((tool, i) => (
+                <div key={tool.name} className="p-2.5 rounded-xl bg-inset/50 border border-line-subtle flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="w-5 h-5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 font-mono text-[10px] font-bold flex items-center justify-center shrink-0">
-                      {i + 1}
+                      #{i + 1}
                     </span>
                     <span className="text-xs font-mono font-semibold text-ink truncate">{tool.name}</span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="w-16 h-1.5 rounded-full bg-surface border border-line-subtle overflow-hidden hidden sm:block">
-                      <div
-                        className="h-full bg-purple-500 rounded-full"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                    <span className="px-2 py-0.5 rounded-md bg-surface border border-line text-2xs font-mono font-bold text-ink">
-                      {tool.calls} calls
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </ChartPanel>
-      </div>
-
-      {/* Row 3: Ranked Agent Performance Table */}
-      {insights.length > 0 && (
-        <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs">
-          <div className="flex items-center justify-between border-b border-line-subtle pb-3 mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400">
-                <Bot size={16} />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Agent Performance Ranking</h3>
-                <p className="text-[11px] text-ink-muted">Cumulative run metrics, duration, token usage, and total spend</p>
-              </div>
-            </div>
-            <LiveWaveform color="bg-brand-500" />
-          </div>
-
-          <div className="hidden sm:block overflow-x-auto no-scrollbar">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-line-subtle text-[11px] uppercase tracking-wider text-ink-muted font-bold">
-                  <th className="py-2.5 px-3">Agent</th>
-                  <th className="py-2.5 px-3 text-right">Steps/Runs</th>
-                  <th className="py-2.5 px-3 text-right">Success</th>
-                  <th className="py-2.5 px-3 text-right">Avg Time</th>
-                  <th className="py-2.5 px-3 text-right">Tokens</th>
-                  <th className="py-2.5 px-3 text-right">Spend</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line-subtle font-medium">
-                {insights.map((agent) => (
-                  <tr key={agent.agentId} className="hover:bg-hover/50 transition-colors">
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-7 h-7 rounded-lg bg-inset border border-line flex items-center justify-center text-xs shrink-0">
-                          🤖
-                        </div>
-                        <div className="min-w-0">
-                          <span className="font-bold text-ink block truncate max-w-[200px]">{agent.agentName}</span>
-                          <span className="text-[10px] text-ink-faint font-mono truncate max-w-[140px] block" title={agent.agentId}>
-                            {agent.agentId}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono font-semibold text-ink">
-                      {agent.runs}
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <span className={cn(
-                        'inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border',
-                        agent.successRate >= 90
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
-                          : agent.successRate >= 75
-                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
-                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25'
-                      )}>
-                        {agent.successRate}%
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono text-ink-muted">
-                      {formatMs(agent.avgDurationMs)}
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono text-ink-muted">
-                      {formatCompact(agent.totalTokens)}
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(agent.totalCostUsd)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="sm:hidden space-y-3">
-            {insights.map((agent) => (
-              <div key={agent.agentId} className="p-3.5 rounded-xl bg-inset/60 border border-line-subtle space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-6 h-6 rounded-lg bg-surface border border-line flex items-center justify-center text-xs shrink-0">
-                      🤖
-                    </div>
-                    <span className="font-bold text-ink text-xs truncate">{agent.agentName}</span>
-                  </div>
-                  <span className={cn(
-                    'inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0',
-                    agent.successRate >= 90
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
-                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
-                  )}>
-                    {agent.successRate}%
+                  <span className="px-2 py-0.5 rounded-md bg-surface border border-line text-2xs font-mono font-bold text-ink shrink-0">
+                    {tool.calls} calls
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-line-subtle text-[11px]">
-                  <div>
-                    <span className="text-ink-muted block text-[10px]">Spend</span>
-                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(agent.totalCostUsd)}</span>
-                  </div>
-                  <div>
-                    <span className="text-ink-muted block text-[10px]">Tokens</span>
-                    <span className="font-mono text-ink">{formatCompact(agent.totalTokens)}</span>
-                  </div>
-                  <div>
-                    <span className="text-ink-muted block text-[10px]">Avg Latency</span>
-                    <span className="font-mono text-ink">{formatMs(agent.avgDurationMs)}</span>
-                  </div>
-                  <div>
-                    <span className="text-ink-muted block text-[10px]">Steps/Runs</span>
-                    <span className="font-mono text-ink">{agent.runs}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Usage Detail Bottom Sheet */}
+      <UsageDetailSheet
+        usage={selectedUsage}
+        onClose={() => setSelectedUsage(null)}
+      />
     </div>
   );
 }
