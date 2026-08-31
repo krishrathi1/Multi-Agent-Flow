@@ -494,48 +494,110 @@ Use exactly ${requested} agents.`
 }
 
 async function planWithLlm(prompt: string, requested?: number): Promise<ProcessPlan | null> {
-  const apiKey = process.env.PLATFORM_ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-
   const ask = requested
     ? `${prompt}\n\nUse exactly ${requested} agents.`
     : prompt;
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45_000);
+  const geminiKey =
+    process.env.PLATFORM_GOOGLE_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY;
+  const anthropicKey = process.env.PLATFORM_ANTHROPIC_API_KEY;
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: PLANNER_MODEL,
-        max_tokens: 4096,
-        system: PLANNER_SYSTEM,
-        messages: [{ role: 'user', content: ask }],
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+  // 1. Try Google Gemini models
+  if (geminiKey) {
+    for (const model of ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']) {
+      try {
+        const combined = `${PLANNER_SYSTEM}\n\nUser Production Request:\n${ask}\n\nRespond ONLY with the JSON plan.`;
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: combined }] }],
+              generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+            }),
+            signal: AbortSignal.timeout(30000),
+          },
+        );
 
-    if (!res.ok) {
-      logger.warn({ status: res.status }, 'Planner LLM call failed; using heuristic');
-      return null;
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text && typeof text === 'string') {
+            const plan = parsePlanJson(text.trim(), prompt, `gemini:${model}`);
+            if (plan && plan.agents.length > 0) {
+              logger.info({ model, agents: plan.agents.length }, 'Planned production chain via Gemini API');
+              return plan;
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn({ err, model }, 'Gemini planner call failed, trying next candidate');
+      }
     }
-
-    const body = (await res.json()) as AnthropicResponse;
-    const text = body.content?.find((c) => c.type === 'text')?.text?.trim();
-    if (!text) return null;
-
-    return parsePlanJson(text, prompt, `llm:${body.model ?? PLANNER_MODEL}`);
-  } catch (err) {
-    logger.warn({ err }, 'Planner LLM error; using heuristic');
-    return null;
   }
+
+  // 2. Try Anthropic API if key is available
+  if (anthropicKey) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: PLANNER_MODEL,
+          max_tokens: 4096,
+          system: PLANNER_SYSTEM,
+          messages: [{ role: 'user', content: ask }],
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (res.ok) {
+        const body = (await res.json()) as AnthropicResponse;
+        const text = body.content?.find((c) => c.type === 'text')?.text?.trim();
+        if (text) {
+          const plan = parsePlanJson(text, prompt, `anthropic:${body.model ?? PLANNER_MODEL}`);
+          if (plan) return plan;
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Anthropic planner call failed');
+    }
+  }
+
+  // 3. Try Local PC Ollama
+  for (const ep of ['http://localhost:11434', 'http://127.0.0.1:11434', 'http://host.docker.internal:11434']) {
+    try {
+      const res = await fetch(`${ep}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'qwen2.5-coder:1.5b',
+          prompt: `${PLANNER_SYSTEM}\n\nTask:\n${ask}\n\nRespond ONLY with JSON plan:`,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as any;
+        if (data?.response) {
+          const plan = parsePlanJson(data.response, prompt, 'ollama:qwen2.5-coder');
+          if (plan && plan.agents.length > 0) return plan;
+        }
+      }
+    } catch {
+      // Continue to heuristic
+    }
+  }
+
+  return null;
 }
 
 /**
