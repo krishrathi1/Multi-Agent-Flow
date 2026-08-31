@@ -84,7 +84,7 @@ function ProcessCard({
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 shadow-2xs">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Active Chain
+            Active
           </span>
         );
       case 'PAUSED':
@@ -98,7 +98,7 @@ function ProcessCard({
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/25 shadow-2xs">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            Completed
+            Done
           </span>
         );
       case 'FAILED':
@@ -118,16 +118,18 @@ function ProcessCard({
   };
 
   return (
-    <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all flex flex-col justify-between space-y-4">
-      <div className="space-y-3.5">
+    <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 sm:p-5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all flex flex-col justify-between space-y-4">
+      <div className="space-y-3">
         {/* Header: Title + Status Pill */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
-              <Factory size={16} />
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+              <Factory size={15} />
             </div>
             <div className="min-w-0">
-              <h3 className="truncate text-xs sm:text-sm font-bold text-ink">{process.name}</h3>
+              <h3 className="truncate text-xs sm:text-sm font-bold text-ink" title={process.name}>
+                {process.name}
+              </h3>
               <p className="text-[10px] font-mono text-ink-muted mt-0.5">
                 Created {timeAgo(process.createdAt)}
               </p>
@@ -153,7 +155,7 @@ function ProcessCard({
           </span>
           <div className="space-y-1.5">
             {stages.map((stage) => (
-              <div key={stage} className="flex items-center gap-2 bg-inset/60 p-2 rounded-xl border border-line-subtle">
+              <div key={stage} className="flex items-center gap-2 bg-inset/50 p-2 rounded-xl border border-line-subtle">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-lg bg-surface text-[10px] font-mono font-bold text-brand-600 dark:text-brand-400 border border-line-subtle shadow-2xs">
                   {stage}
                 </span>
@@ -164,10 +166,10 @@ function ProcessCard({
                       <span
                         key={a.id}
                         title={`${a.displayName} — ${a.processRole ?? 'agent'}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface py-0.5 pl-1 pr-2 text-2xs font-semibold text-ink shadow-2xs"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-line-subtle bg-surface py-0.5 pl-1.5 pr-2.5 text-2xs font-semibold text-ink shadow-2xs"
                       >
                         <Avatar name={a.displayName} emoji={a.avatar} size="xs" />
-                        <span className="truncate max-w-[130px]">{a.displayName}</span>
+                        <span className="truncate max-w-[140px]">{a.displayName}</span>
                       </span>
                     ))}
                 </div>
@@ -178,16 +180,16 @@ function ProcessCard({
 
         {/* Telemetry Metrics Row */}
         <div className="flex items-center justify-between border-t border-line-subtle pt-3 text-2xs font-mono text-ink-muted">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <span className="flex items-center gap-1 bg-inset px-2 py-0.5 rounded-lg border border-line-subtle">
               <Bot size={11} className="text-brand-500" />
               {process.agentCount ?? agents.length} agents
             </span>
-            <span className="flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle">
+            <span className="flex items-center gap-1 bg-inset px-2 py-0.5 rounded-lg border border-line-subtle">
               <ListChecks size={11} className="text-emerald-500" />
               {process.taskCount ?? 0} tasks
             </span>
-            <span className="flex items-center gap-1 bg-inset px-2 py-0.5 rounded-md border border-line-subtle">
+            <span className="flex items-center gap-1 bg-inset px-2 py-0.5 rounded-lg border border-line-subtle">
               <ActivityIcon size={11} className="text-purple-500" />
               {process.activityCount ?? 0} events
             </span>
@@ -196,7 +198,7 @@ function ProcessCard({
       </div>
 
       {/* Action Footer */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-subtle pt-3.5 mt-2">
+      <div className="flex items-center justify-between gap-2 border-t border-line-subtle pt-3 mt-1 flex-wrap">
         {/* Primary Controls */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {running ? (
@@ -246,9 +248,10 @@ function ProcessCard({
 
           <Link
             to={`/activity?processId=${process.id}`}
-            className="rounded-lg px-2 py-1 text-xs font-semibold text-ink-muted transition-colors hover:text-brand-600 dark:hover:text-brand-400"
+            className="inline-flex items-center gap-1 rounded-xl border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-ink-muted hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-500/30 transition-all shadow-2xs"
           >
-            Activity
+            <ActivityIcon size={12} className="text-brand-500" />
+            <span>Activity</span>
           </Link>
         </div>
 
@@ -375,45 +378,45 @@ export function Processes() {
         }
       />
 
-      {/* 3 Stats Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
-        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted">Total Productions</span>
-            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center">
-              <Factory size={16} />
+      {/* 3 Stats Overview Cards - Fixed in 1 Row */}
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
+        <div className="rounded-xl sm:rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-ink-muted truncate">Total</span>
+            <div className="w-7 h-7 sm:w-8 h-8 rounded-lg sm:rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+              <Factory size={14} className="sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
+          <div className="text-lg sm:text-2xl font-bold text-ink tracking-tight font-mono">
             {stats?.total ?? processes.length}
           </div>
-          <p className="text-[11px] text-ink-muted mt-1 font-medium">Configured agent chains</p>
+          <p className="text-[10px] sm:text-[11px] text-ink-muted mt-0.5 sm:mt-1 font-medium truncate">Configured chains</p>
         </div>
 
-        <div className="rounded-2xl border border-emerald-500/20 bg-surface p-4.5 shadow-2xs hover:border-emerald-500/40 hover:shadow-xs transition-all">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Active Chains</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
-              <Workflow size={16} />
+        <div className="rounded-xl sm:rounded-2xl border border-emerald-500/20 bg-surface p-3 sm:p-4.5 shadow-2xs hover:border-emerald-500/40 hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 truncate">Active</span>
+            <div className="w-7 h-7 sm:w-8 h-8 rounded-lg sm:rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+              <Workflow size={14} className="sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="text-xl sm:text-2xl font-bold tracking-tight font-mono text-emerald-600 dark:text-emerald-400">
+          <div className="text-lg sm:text-2xl font-bold tracking-tight font-mono text-emerald-600 dark:text-emerald-400">
             {stats?.active ?? 0}
           </div>
-          <p className="text-[11px] text-ink-muted mt-1 font-medium">Running & executing</p>
+          <p className="text-[10px] sm:text-[11px] text-ink-muted mt-0.5 sm:mt-1 font-medium truncate">Running chains</p>
         </div>
 
-        <div className="rounded-2xl border border-purple-500/20 bg-surface p-4.5 shadow-2xs hover:border-purple-500/40 hover:shadow-xs transition-all">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Deployed Agents</span>
-            <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center">
-              <Bot size={16} />
+        <div className="rounded-xl sm:rounded-2xl border border-purple-500/20 bg-surface p-3 sm:p-4.5 shadow-2xs hover:border-purple-500/40 hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 truncate">Agents</span>
+            <div className="w-7 h-7 sm:w-8 h-8 rounded-lg sm:rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
+              <Bot size={14} className="sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="text-xl sm:text-2xl font-bold tracking-tight font-mono text-purple-600 dark:text-purple-400">
+          <div className="text-lg sm:text-2xl font-bold tracking-tight font-mono text-purple-600 dark:text-purple-400">
             {stats?.agentsInProcesses ?? 0}
           </div>
-          <p className="text-[11px] text-ink-muted mt-1 font-medium">Assigned stage workers</p>
+          <p className="text-[10px] sm:text-[11px] text-ink-muted mt-0.5 sm:mt-1 font-medium truncate">Assigned workers</p>
         </div>
       </div>
 
