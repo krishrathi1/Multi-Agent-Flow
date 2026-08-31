@@ -106,13 +106,13 @@ export function NotificationBell() {
           role="dialog"
           aria-label="Notifications"
           className={cn(
-            'absolute -right-14 sm:right-0 top-full z-50 mt-2.5 w-[360px] max-w-[calc(100vw-24px)]',
+            'absolute -right-8 sm:-right-6 lg:right-0 top-full z-50 mt-2 w-[330px] sm:w-[360px] max-w-[calc(100vw-2rem)]',
             'animate-scale-in origin-top-right overflow-hidden rounded-2xl border border-line-subtle',
-            'bg-surface shadow-2xl backdrop-blur-xl',
+            'bg-surface shadow-e3 backdrop-blur-xl',
           )}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-line-subtle px-4 py-3 bg-surface">
+          <div className="flex items-center justify-between border-b border-line-subtle/80 px-4 py-3 bg-surface">
             <div className="flex items-center gap-2">
               <p className="text-sm font-bold text-ink">Notifications</p>
               <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-2xs font-semibold text-brand-600 dark:text-brand-400">
