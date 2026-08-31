@@ -118,7 +118,7 @@ function FormattedStepSummary({ text }: { text: string }) {
   const lines = cleanText.split('\n');
 
   return (
-    <div className="space-y-2 text-xs leading-relaxed text-ink/90 font-sans mt-2">
+    <div className="space-y-2 text-xs leading-relaxed text-ink/90 font-sans mt-2 max-h-52 sm:max-h-60 overflow-y-auto no-scrollbar pr-1 scroll-smooth">
       {lines.map((line, idx) => {
         const trimmed = line.trim();
         if (!trimmed) return null;
