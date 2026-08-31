@@ -163,43 +163,56 @@ export function Metrics() {
   // Spending trend by time slices
   const chartData = useMemo(() => {
     if (timeFilter === '24h') {
-      const buckets: Record<string, { label: string; cost: number; tokens: number }> = {};
+      // Create 12 x 2h buckets, keyed by a unique date+hour string
+      const ordered: Array<{ key: string; label: string; cost: number; tokens: number }> = [];
       const now = new Date();
       for (let i = 11; i >= 0; i--) {
         const d = new Date(now.getTime() - i * 2 * 3600 * 1000);
-        const label = `${String(d.getHours()).padStart(2, '0')}:00`;
-        buckets[label] = { label, cost: 0, tokens: 0 };
+        // Round to 2h boundary (same formula used for matching below)
+        const roundedHour = Math.floor(d.getHours() / 2) * 2;
+        const dateStr = d.toISOString().slice(0, 10); // YYYY-MM-DD for uniqueness
+        const key = `${dateStr}-${String(roundedHour).padStart(2, '0')}`;
+        const label = `${String(roundedHour).padStart(2, '0')}:00`;
+        ordered.push({ key, label, cost: 0, tokens: 0 });
       }
+      const bucketMap: Record<string, typeof ordered[0]> = {};
+      for (const b of ordered) bucketMap[b.key] = b;
+
       for (const t of tokens) {
         const d = new Date(t.createdAt);
-        const nearest2h = Math.floor(d.getHours() / 2) * 2;
-        const label = `${String(nearest2h).padStart(2, '0')}:00`;
-        if (buckets[label]) {
-          buckets[label].cost += t.cost;
-          buckets[label].tokens += t.totalTokens;
+        const roundedHour = Math.floor(d.getHours() / 2) * 2;
+        const dateStr = d.toISOString().slice(0, 10);
+        const key = `${dateStr}-${String(roundedHour).padStart(2, '0')}`;
+        if (bucketMap[key]) {
+          bucketMap[key].cost += t.cost ?? 0;
+          bucketMap[key].tokens += t.totalTokens ?? 0;
         }
       }
-      return Object.values(buckets);
+      return ordered.map(({ label, cost, tokens: tk }) => ({ label, cost, tokens: tk }));
     }
 
     // 7d or 30d daily buckets
     const days = timeFilter === '7d' ? 7 : 14;
-    const buckets: Record<string, { label: string; cost: number; tokens: number }> = {};
+    const ordered: Array<{ key: string; label: string; cost: number; tokens: number }> = [];
     const now = new Date();
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 24 * 3600 * 1000);
+      const key = d.toISOString().slice(0, 10); // YYYY-MM-DD
       const label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
-      buckets[label] = { label, cost: 0, tokens: 0 };
+      ordered.push({ key, label, cost: 0, tokens: 0 });
     }
+    const bucketMap: Record<string, typeof ordered[0]> = {};
+    for (const b of ordered) bucketMap[b.key] = b;
+
     for (const t of tokens) {
       const d = new Date(t.createdAt);
-      const label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
-      if (buckets[label]) {
-        buckets[label].cost += t.cost;
-        buckets[label].tokens += t.totalTokens;
+      const key = d.toISOString().slice(0, 10);
+      if (bucketMap[key]) {
+        bucketMap[key].cost += t.cost ?? 0;
+        bucketMap[key].tokens += t.totalTokens ?? 0;
       }
     }
-    return Object.values(buckets);
+    return ordered.map(({ label, cost, tokens: tk }) => ({ label, cost, tokens: tk }));
   }, [tokens, timeFilter]);
 
   const hasChartData = useMemo(() => chartData.some((d) => d.cost > 0 || d.tokens > 0), [chartData]);
