@@ -149,9 +149,9 @@ export function ActivityItem({ activity }: { activity: Activity }) {
       )}
 
       {/* Message summary & files */}
-      <div className="px-4 pb-3.5 pt-0 space-y-2.5">
+      <div className="px-3.5 sm:px-4 pb-3.5 pt-0 space-y-2.5">
         {/* Main Message */}
-        <div className={cn('space-y-2', hasExpandableContent ? 'pl-7 sm:pl-7.5' : 'pl-12 sm:pl-12')}>
+        <div className="space-y-2">
           <div className="text-xs leading-relaxed text-ink/90 font-normal break-words">
             <MarkdownRenderer content={messageLead} hideScrollbar />
           </div>
@@ -176,11 +176,11 @@ export function ActivityItem({ activity }: { activity: Activity }) {
 
         {/* Collapsible extra details */}
         {open && hasExpandableContent && (
-          <div className="border-t border-line-subtle pt-3 pl-7 sm:pl-7.5 space-y-2.5 animate-scale-in">
+          <div className="border-t border-line-subtle pt-3 space-y-2.5 animate-scale-in">
             {/* Deliverable Summary Box */}
             {summary && (
-              <div className="rounded-xl border border-line-subtle bg-inset/70 p-3 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
+              <div className="rounded-xl border border-line-subtle bg-inset/50 p-3 sm:p-3.5 space-y-2">
+                <div className="flex items-center justify-between gap-2 pb-1 border-b border-line-subtle/60">
                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-muted">
                     <FileText size={12} className="text-brand-500" />
                     <span>Deliverable Summary</span>
@@ -198,7 +198,7 @@ export function ActivityItem({ activity }: { activity: Activity }) {
                     <span>{copied ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
-                <MarkdownRenderer content={summary} maxHeight="max-h-52 sm:max-h-60" />
+                <MarkdownRenderer content={summary} maxHeight="max-h-60 sm:max-h-72" />
               </div>
             )}
 
