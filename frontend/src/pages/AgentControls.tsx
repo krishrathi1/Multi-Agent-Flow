@@ -127,83 +127,85 @@ function AgentControlCard({ agent, onCommandSent }: { agent: Agent; onCommandSen
   const tone = agentStatusTone[agent.status] || 'neutral';
 
   return (
-    <Card padding="none" className="flex flex-col overflow-hidden border-line-subtle shadow-sm hover:shadow-md transition-shadow">
+    <Card padding="none" className="flex flex-col overflow-hidden border-line rounded-2xl shadow-2xs hover:shadow-xs transition-all">
       {/* Header Bar */}
-      <div className="flex items-center justify-between border-b border-line-subtle bg-raised/40 p-4">
-        <div className="flex items-center gap-3">
-          <Avatar name={agent.displayName} emoji={agent.avatar} size="md" />
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-ink">{agent.displayName}</h3>
-              <Badge tone={tone} dot pulse={agent.status === 'ONLINE'}>
-                {agent.status.toLowerCase()}
-              </Badge>
-            </div>
-            <div className="mt-0.5 flex items-center gap-2 text-xs text-ink-muted">
-              {agent.processRole ? (
-                <span className="font-medium text-brand-600 dark:text-brand-400">
-                  {agent.processRole} {agent.processStage != null ? `(Stage ${agent.processStage})` : ''}
-                </span>
-              ) : (
-                <span>Autonomous Agent</span>
-              )}
+      <div className="border-b border-line-subtle bg-raised/40 p-3.5 sm:p-4 space-y-2.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <Avatar name={agent.displayName} emoji={agent.avatar} size="md" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-ink truncate">{agent.displayName}</h3>
+                <Badge tone={tone} dot pulse={agent.status === 'ONLINE'}>
+                  {agent.status.toLowerCase()}
+                </Badge>
+              </div>
+              <div className="mt-0.5 text-xs text-ink-muted">
+                {agent.processRole ? (
+                  <p className="font-medium text-brand-600 dark:text-brand-400 line-clamp-2 leading-tight">
+                    {agent.processRole} {agent.processStage != null ? `(Stage ${agent.processStage})` : ''}
+                  </p>
+                ) : (
+                  <span>Autonomous Agent</span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Toggle Switch + Edit Profile */}
-        <div className="flex items-center gap-2.5">
-          <Link
-            to={`/agents/${agent.id}/edit`}
-            className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink-subtle hover:border-line-strong hover:text-ink transition-colors"
-          >
-            <Edit3 size={11} />
-            Edit
-          </Link>
+          {/* Toggle Switch + Edit Profile */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              to={`/agents/${agent.id}/edit`}
+              className="inline-flex items-center gap-1 rounded-xl border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-ink-subtle hover:border-line-strong hover:text-ink transition-colors shadow-2xs"
+            >
+              <Edit3 size={11} />
+              <span>Edit</span>
+            </Link>
 
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            onClick={handleToggleEnabled}
-            className={cn(
-              'relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
-              enabled ? 'bg-emerald-500' : 'bg-line-strong dark:bg-surface-700'
-            )}
-          >
-            <span
+            <button
+              type="button"
+              role="switch"
+              aria-checked={enabled}
+              onClick={handleToggleEnabled}
               className={cn(
-                'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out',
-                enabled ? 'translate-x-5' : 'translate-x-0'
+                'relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 shadow-2xs',
+                enabled ? 'bg-emerald-500' : 'bg-line-strong dark:bg-surface-700'
               )}
-            />
-          </button>
+            >
+              <span
+                className={cn(
+                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out',
+                  enabled ? 'translate-x-5' : 'translate-x-0'
+                )}
+              />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Card Body */}
-      <div className="p-4 space-y-3.5 flex-1 flex flex-col justify-between">
+      <div className="p-3.5 sm:p-4 space-y-3.5 flex-1 flex flex-col justify-between">
         {/* Current Task if any */}
         {agent.currentTask ? (
-          <div className="rounded-lg border border-line-subtle bg-inset p-2.5">
-            <span className="text-2xs font-semibold text-ink-faint uppercase tracking-wider block">Current Task</span>
-            <p className="text-xs text-ink mt-0.5 font-medium leading-relaxed truncate">{agent.currentTask}</p>
+          <div className="rounded-xl border border-line-subtle bg-inset p-3">
+            <span className="text-2xs font-bold text-ink-faint uppercase tracking-wider block">Current Task</span>
+            <p className="text-xs text-ink mt-0.5 font-medium leading-relaxed break-words">{agent.currentTask}</p>
           </div>
         ) : (
-          <div className="rounded-lg border border-line-subtle/50 bg-inset/40 p-2 text-2xs text-ink-faint italic">
+          <div className="rounded-xl border border-line-subtle/50 bg-inset/40 p-2.5 text-2xs text-ink-faint italic">
             Standing by for pipeline task dispatch...
           </div>
         )}
 
-        {/* Quick Command Buttons */}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        {/* Quick Command Buttons: 3 Columns Grid on Mobile */}
+        <div className="grid grid-cols-3 gap-2 pt-1">
           <Button
             variant="secondary"
             size="xs"
             icon={Pause}
             loading={sendingCmd === 'PAUSE'}
             onClick={() => handleSendCommand('PAUSE')}
-            className="hover:text-amber-600 dark:hover:text-amber-400"
+            className="hover:text-amber-600 dark:hover:text-amber-400 w-full justify-center"
           >
             Pause
           </Button>
@@ -214,7 +216,7 @@ function AgentControlCard({ agent, onCommandSent }: { agent: Agent; onCommandSen
             icon={Play}
             loading={sendingCmd === 'RESUME'}
             onClick={() => handleSendCommand('RESUME')}
-            className="hover:text-emerald-600 dark:hover:text-emerald-400"
+            className="hover:text-emerald-600 dark:hover:text-emerald-400 w-full justify-center"
           >
             Resume
           </Button>
@@ -224,9 +226,9 @@ function AgentControlCard({ agent, onCommandSent }: { agent: Agent; onCommandSen
             size="xs"
             icon={Zap}
             onClick={() => setInjectOpen(!injectOpen)}
-            className="hover:text-brand-600 dark:hover:text-brand-400"
+            className="hover:text-brand-600 dark:hover:text-brand-400 w-full justify-center truncate"
           >
-            Inject Instruction
+            Inject
           </Button>
         </div>
 
@@ -420,7 +422,7 @@ export function AgentControls() {
         title="Agent Controls"
         description="Human-in-the-loop command center — pause, resume, inject instructions, and update cognitive directives in real time."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
               size="sm"
@@ -449,15 +451,15 @@ export function AgentControls() {
       />
 
       {/* Quick Status Bar */}
-      <div className="mb-6 flex items-center justify-between rounded-xl border border-line-subtle bg-surface p-4 shadow-sm">
-        <div className="flex items-center gap-6">
+      <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-4 shadow-2xs">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
           <div className="flex items-center gap-2">
             <Bot size={16} className="text-brand-500" />
-            <span className="text-xs font-semibold text-ink">{agents.length} Total Agents</span>
+            <span className="text-xs font-bold text-ink">{agents.length} Total Agents</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-ink-muted">
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
               {agents.filter((a) => a.status === 'ONLINE').length} Online / Active
             </span>
           </div>
@@ -465,12 +467,12 @@ export function AgentControls() {
 
         <div className="flex items-center gap-2">
           {pendingCount > 0 ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-2xs font-semibold text-amber-600 dark:text-amber-400">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-2xs font-bold text-amber-600 dark:text-amber-400">
               <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
               {pendingCount} Pending Commands
             </span>
           ) : (
-            <span className="text-2xs text-ink-faint">All commands delivered</span>
+            <span className="text-2xs font-semibold text-ink-muted">✓ All commands delivered</span>
           )}
         </div>
       </div>
