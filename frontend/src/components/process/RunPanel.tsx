@@ -38,6 +38,38 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function renderInlineTokens(text: string) {
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+      const codeContent = part.slice(1, -1);
+      return (
+        <code
+          key={i}
+          className="rounded-md bg-inset px-1.5 py-0.5 font-mono text-[11px] font-semibold text-brand-600 dark:text-brand-400 border border-line-subtle inline-block my-0.5"
+        >
+          {codeContent}
+        </code>
+      );
+    }
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      return (
+        <strong key={i} className="font-bold text-ink">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
+      return (
+        <em key={i} className="italic text-ink font-medium">
+          {part.slice(1, -1)}
+        </em>
+      );
+    }
+    return part;
+  });
+}
+
 /**
  * Run report for a production chain: what each stage did, what it produced,
  * and options to read, preview, and download individual or all files.
@@ -288,8 +320,8 @@ export function RunPanel({
                         {Math.round(s.durationMs / 1000)}s · {formatCompact(s.tokens)} tok
                       </span>
                     </div>
-                    <p className="mt-1.5 line-clamp-4 whitespace-pre-wrap text-xs leading-relaxed text-ink-subtle">
-                      {s.summary}
+                    <p className="mt-1.5 line-clamp-4 text-xs leading-relaxed text-ink-subtle">
+                      {renderInlineTokens(s.summary)}
                     </p>
                   </li>
                 ))}
