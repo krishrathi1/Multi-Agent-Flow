@@ -37,6 +37,10 @@ const GATED_BY_MIDDLEWARE: Record<string, string> = {
   'webhook-inbound.ts': 'signature verification',
   // Operates on the caller's own user/session, which has no org id.
   'auth.ts': 'self-scoped',
+  // Static built-in prompt template catalog (in-memory registry).
+  'prompts.ts': 'static prompt template registry',
+  // In-memory AST and symbol graph intelligence analysis.
+  'code-intelligence.ts': 'in-memory AST analysis',
 };
 
 /** Names that read as an ownership gate rather than ordinary middleware. */

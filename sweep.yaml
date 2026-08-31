@@ -1,9 +1,0 @@
-# Sweep.dev AI Automation Configuration
-branch: 'main'
-draft: false
-rules:
-  - 'Use TypeScript strict typing across all backend and frontend services.'
-  - 'Always include unit tests with Vitest for new routes, services, and utilities.'
-  - 'Follow the 7-hub Groww-style visual design blueprint for all new UI views.'
-  - 'Never commit hardcoded secrets; use process.env and encrypted BYOK providers.'
-  - 'Ensure multi-tenant isolation by always scoping Prisma queries with organizationId.'
