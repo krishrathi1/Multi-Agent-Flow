@@ -23,6 +23,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { LiveWaveform, LiveRadarBeacon } from '@/components/ui/LiveIcon';
 import { LottieAnimation } from '@/components/ui/LottieAnimation';
+import { HourglassLoader } from '@/components/ui/HourglassLoader';
 
 const severityConfig: Record<Severity, { color: string; bg: string; border: string; label: string; dot: string; icon: typeof AlertTriangle }> = {
   INFO: { color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/25', label: 'Info', dot: 'bg-blue-500', icon: Info },
