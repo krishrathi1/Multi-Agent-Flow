@@ -242,24 +242,34 @@ body {
     color 0.2s var(--ease-out-soft);
 }
 
-h1, h2, h3, h4, h5, h6 {
-  letter-spacing: -0.014em;
-  line-height: 1.25;
-  text-wrap: balance;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-brand-500);
-  outline-offset: 2px;
-  border-radius: inherit;
+*:focus,
+*:focus-visible {
+  outline: none !important;
 }
-:focus:not(:focus-visible) { outline: none; }
 
-button:focus-visible,
+input,
+button,
+select,
+textarea {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input:focus,
 input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: none;
+textarea:focus,
+textarea:focus-visible,
+button:focus,
+button:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none !important;
 }
 
 button:not(:disabled),
