@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react';
+import { Mail, Plus, Send, Trash2, UserPlus, Users } from 'lucide-react';
 import { api } from '../lib/api';
+import { PageHeader, SectionHeading } from '../components/ui/PageHeader';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { EmptyState, Skeleton } from '../components/ui/States';
 import type { OrgInvite } from '../types';
 
 export function Invitations() {
@@ -16,11 +22,12 @@ export function Invitations() {
     }).catch(() => setLoading(false));
   }, []);
 
-  async function handleInvite() {
+  async function handleInvite(e?: React.FormEvent) {
+    e?.preventDefault();
     if (!email.trim()) return;
     setSending(true);
     try {
-      const invite = await api.invites.create({ invitedEmail: email, role });
+      const invite = await api.invites.create({ invitedEmail: email.trim(), role });
       setInvites(prev => [invite, ...prev]);
       setEmail('');
     } catch (err) {
@@ -35,68 +42,124 @@ export function Invitations() {
     setInvites(prev => prev.map(i => i.id === id ? { ...i, status: 'REVOKED' as const } : i));
   }
 
-  const statusColors: Record<string, string> = {
-    PENDING: 'text-amber-400 bg-amber-500/10',
-    ACCEPTED: 'text-emerald-400 bg-emerald-500/10',
-    EXPIRED: 'text-gray-400 bg-gray-500/10',
-    REVOKED: 'text-red-400 bg-red-500/10',
+  const statusTones: Record<string, 'warning' | 'success' | 'neutral' | 'danger'> = {
+    PENDING: 'warning',
+    ACCEPTED: 'success',
+    EXPIRED: 'neutral',
+    REVOKED: 'danger',
   };
 
-  if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Invitations</h1>
-        <p className="text-sm text-gray-500 mt-1">Invite team members to your organization</p>
-      </div>
+    <div className="space-y-6 max-w-5xl">
+      <PageHeader
+        icon={UserPlus}
+        title="Team Invitations"
+        description="Invite colleagues and collaborators to join your organization and manage access roles."
+      />
 
-      <div className="bg-surface-850 border border-white/5 rounded-xl p-5">
-        <h3 className="text-white font-medium mb-3">Send Invitation</h3>
-        <div className="flex gap-3">
+      {/* Send Invitation Card */}
+      <Card padding="md" className="border border-line-subtle bg-surface shadow-xs rounded-2xl">
+        <h3 className="text-sm font-bold text-ink mb-1.5 flex items-center gap-2">
+          <Mail size={16} className="text-brand-500" />
+          <span>Send Organization Invite</span>
+        </h3>
+        <p className="text-xs text-ink-muted mb-4">
+          Invited members will receive an email to join your workspace with the selected role.
+        </p>
+
+        <form onSubmit={handleInvite} className="flex flex-wrap items-center gap-3">
           <input
             value={email}
             onChange={e => setEmail(e.target.value)}
-            placeholder="Email address"
+            placeholder="colleague@company.com"
             type="email"
-            className="flex-1 px-4 py-2 bg-surface-800 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600"
+            required
+            className="flex-1 min-w-[240px] rounded-xl border border-line bg-surface px-3.5 py-2 text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
-          <select value={role} onChange={e => setRole(e.target.value)} className="px-3 py-2 bg-surface-800 border border-white/10 rounded-lg text-sm text-white">
-            <option value="MEMBER">Member</option>
-            <option value="ADMIN">Admin</option>
-            <option value="VIEWER">Viewer</option>
-          </select>
-          <button onClick={handleInvite} disabled={!email.trim() || sending} className="px-5 py-2 bg-nexus-600 hover:bg-nexus-500 text-white text-sm font-medium rounded-lg disabled:opacity-50">
-            {sending ? 'Sending...' : 'Invite'}
-          </button>
-        </div>
-      </div>
 
-      <div className="space-y-2">
-        {invites.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">No invitations sent yet</div>
-        ) : invites.map(invite => (
-          <div key={invite.id} className="bg-surface-850 border border-white/5 rounded-xl px-5 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-9 h-9 rounded-full bg-surface-700 flex items-center justify-center text-sm text-gray-400">
-                {invite.invitedEmail.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <p className="text-sm text-white">{invite.invitedEmail}</p>
-                <p className="text-xs text-gray-500">
-                  {invite.role.toLowerCase()} &middot; sent {new Date(invite.createdAt).toLocaleDateString()}
-                  {invite.expiresAt && ` &middot; expires ${new Date(invite.expiresAt).toLocaleDateString()}`}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className={`px-2 py-0.5 text-xs rounded-full ${statusColors[invite.status]}`}>{invite.status.toLowerCase()}</span>
-              {invite.status === 'PENDING' && (
-                <button onClick={() => handleRevoke(invite.id)} className="px-3 py-1 text-xs text-red-400 hover:bg-red-500/10 rounded">Revoke</button>
-              )}
-            </div>
+          <select
+            value={role}
+            onChange={e => setRole(e.target.value)}
+            className="rounded-xl border border-line bg-surface px-3 py-2 text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
+          >
+            <option value="MEMBER">Member (Standard Access)</option>
+            <option value="ADMIN">Admin (Full Management)</option>
+            <option value="VIEWER">Viewer (Read Only)</option>
+          </select>
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            icon={Send}
+            loading={sending}
+            disabled={!email.trim() || sending}
+          >
+            Send Invite
+          </Button>
+        </form>
+      </Card>
+
+      {/* Invitations List */}
+      <div className="space-y-3">
+        <SectionHeading
+          title="Pending & Past Invitations"
+          description={`${invites.length} invitation${invites.length === 1 ? '' : 's'} recorded`}
+        />
+
+        {loading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-16 rounded-xl" />
+            <Skeleton className="h-16 rounded-xl" />
           </div>
-        ))}
+        ) : invites.length === 0 ? (
+          <Card padding="lg" className="text-center">
+            <EmptyState
+              icon={Users}
+              title="No invitations sent yet"
+              description="Invite team members to collaborate on autonomous agent pipelines and workflows."
+            />
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {invites.map(invite => (
+              <Card
+                key={invite.id}
+                padding="sm"
+                className="flex items-center justify-between border border-line-subtle bg-surface shadow-2xs rounded-xl"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-xs font-bold text-brand-600 dark:text-brand-400 border border-brand-500/20">
+                    {invite.invitedEmail.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-ink">{invite.invitedEmail}</p>
+                    <p className="truncate text-[11px] text-ink-muted mt-0.5">
+                      Role: <span className="font-semibold text-ink">{invite.role.toLowerCase()}</span> &middot; Sent {new Date(invite.createdAt).toLocaleDateString()}
+                      {invite.expiresAt && ` &middot; Expires ${new Date(invite.expiresAt).toLocaleDateString()}`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <Badge tone={statusTones[invite.status] || 'neutral'}>
+                    {invite.status.toLowerCase()}
+                  </Badge>
+                  {invite.status === 'PENDING' && (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => handleRevoke(invite.id)}
+                      className="text-rose-500 hover:text-rose-600 hover:bg-rose-500/10"
+                    >
+                      Revoke
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

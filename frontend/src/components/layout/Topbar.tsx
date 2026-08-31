@@ -241,7 +241,7 @@ export function Topbar() {
               {/* Menu Links */}
               <div className="py-1">
                 <Link
-                  to="/controls"
+                  to="/settings"
                   role="menuitem"
                   onClick={() => setMenuOpen(false)}
                   className="flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-xs font-medium text-ink-muted hover:bg-hover hover:text-ink transition-colors"
