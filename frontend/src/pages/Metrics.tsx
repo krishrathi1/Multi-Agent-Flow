@@ -444,7 +444,7 @@ export function Metrics() {
           emptyLabel="No token activity recorded in the past 24 hours."
         >
           <ResponsiveContainer width="100%" height={CHART_H}>
-            <AreaChart data={hourlyTokenData} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
+            <AreaChart data={hourlyTokenData} margin={{ top: 8, right: 12, bottom: 0, left: -6 }}>
               <defs>
                 <linearGradient id="tokenInputGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.45} />
@@ -468,7 +468,7 @@ export function Metrics() {
                 tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
                 tickLine={false}
                 axisLine={false}
-                width={42}
+                width={46}
                 tickFormatter={formatCompact}
               />
               <Tooltip
@@ -479,9 +479,11 @@ export function Metrics() {
                 }
               />
               <Legend
+                verticalAlign="top"
+                align="right"
                 iconType="circle"
                 iconSize={8}
-                wrapperStyle={{ fontSize: 11, fontWeight: 600, color: 'var(--c-ink-muted)', paddingTop: 8 }}
+                wrapperStyle={{ fontSize: 11, fontWeight: 600, color: 'var(--c-ink-muted)', paddingBottom: 10 }}
                 formatter={(v) => (v === 'input' ? 'Input Tokens' : 'Output Tokens')}
               />
               <Area
@@ -562,7 +564,7 @@ export function Metrics() {
           <ResponsiveContainer width="100%" height={CHART_H}>
             <BarChart
               data={responseTimeByAgent}
-              margin={{ top: 8, right: 8, bottom: 25, left: 0 }}
+              margin={{ top: 8, right: 8, bottom: 42, left: -6 }}
               barGap={4}
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--c-line-subtle)" />
@@ -571,17 +573,18 @@ export function Metrics() {
                 tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
                 tickLine={false}
                 axisLine={{ stroke: 'var(--c-line)' }}
-                angle={-18}
+                tickFormatter={(n: string) => n.length > 14 ? `${n.slice(0, 12)}…` : n}
+                angle={-22}
                 textAnchor="end"
-                height={35}
+                height={42}
                 interval={0}
               />
               <YAxis
                 tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
                 tickLine={false}
                 axisLine={false}
-                width={44}
-                tickFormatter={(v) => `${v}ms`}
+                width={46}
+                tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}s` : `${v}ms`)}
               />
               <Tooltip
                 content={
@@ -591,9 +594,11 @@ export function Metrics() {
                 }
               />
               <Legend
+                verticalAlign="top"
+                align="right"
                 iconType="circle"
                 iconSize={8}
-                wrapperStyle={{ fontSize: 11, fontWeight: 600, color: 'var(--c-ink-muted)', paddingTop: 4 }}
+                wrapperStyle={{ fontSize: 11, fontWeight: 600, color: 'var(--c-ink-muted)', paddingBottom: 10 }}
                 formatter={(v) => (v === 'avg' ? 'Average Latency' : 'p95 Tail Latency')}
               />
               <Bar dataKey="avg" fill="#3b82f6" radius={[4, 4, 0, 0]} name="avg" maxBarSize={20} />
@@ -612,7 +617,7 @@ export function Metrics() {
           <ResponsiveContainer width="100%" height={CHART_H}>
             <BarChart
               data={successRateByAgent}
-              margin={{ top: 8, right: 8, bottom: 25, left: 0 }}
+              margin={{ top: 8, right: 8, bottom: 42, left: -14 }}
               barCategoryGap="28%"
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--c-line-subtle)" />
@@ -621,9 +626,10 @@ export function Metrics() {
                 tick={{ fill: 'var(--c-ink-subtle)', fontSize: 10, fontWeight: 500 }}
                 tickLine={false}
                 axisLine={{ stroke: 'var(--c-line)' }}
-                angle={-18}
+                tickFormatter={(n: string) => n.length > 14 ? `${n.slice(0, 12)}…` : n}
+                angle={-22}
                 textAnchor="end"
-                height={35}
+                height={42}
                 interval={0}
               />
               <YAxis
@@ -713,7 +719,7 @@ export function Metrics() {
           </div>
 
           <div className="overflow-x-auto no-scrollbar">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full text-left text-xs border-collapse min-w-[620px]">
               <thead>
                 <tr className="border-b border-line-subtle text-[11px] uppercase tracking-wider text-ink-muted font-bold">
                   <th className="py-2.5 px-3">Agent</th>
@@ -728,13 +734,15 @@ export function Metrics() {
                 {insights.map((agent) => (
                   <tr key={agent.agentId} className="hover:bg-hover/50 transition-colors">
                     <td className="py-3 px-3">
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <div className="w-7 h-7 rounded-lg bg-inset border border-line flex items-center justify-center text-xs shrink-0">
                           🤖
                         </div>
-                        <div>
-                          <span className="font-bold text-ink block">{agent.agentName}</span>
-                          <span className="text-[10px] text-ink-faint font-mono">{agent.agentId}</span>
+                        <div className="min-w-0">
+                          <span className="font-bold text-ink block truncate max-w-[200px]">{agent.agentName}</span>
+                          <span className="text-[10px] text-ink-faint font-mono truncate max-w-[140px] block" title={agent.agentId}>
+                            {agent.agentId}
+                          </span>
                         </div>
                       </div>
                     </td>
