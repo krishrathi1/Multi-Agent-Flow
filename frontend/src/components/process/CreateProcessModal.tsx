@@ -23,6 +23,7 @@ import { Button } from '../ui/Button';
 import { Badge, Chip } from '../ui/Badge';
 import { Avatar } from '../ui/Avatar';
 import { Modal } from '../ui/Modal';
+import { CustomSelect } from '../ui/CustomSelect';
 import { useProcessStore } from '../../stores/process-store';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -534,17 +535,14 @@ export function CreateProcessModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-ink mb-1">Target GitHub Repository</label>
-                  <select
+                  <CustomSelect
                     value={repoInput}
-                    onChange={(e) => setRepoInput(e.target.value)}
-                    className="w-full rounded-xl border border-line bg-surface p-2.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  >
-                    {repoList.map((r) => (
-                      <option key={r.full_name} value={r.full_name}>
-                        📦 {r.full_name} ({r.default_branch})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setRepoInput(val)}
+                    options={repoList.map((r) => ({
+                      value: r.full_name,
+                      label: `${r.full_name} (${r.default_branch})`,
+                    }))}
+                  />
                 </div>
 
                 <div>
@@ -582,7 +580,7 @@ export function CreateProcessModal({
                   value={repoGoal}
                   onChange={(e) => setRepoGoal(e.target.value)}
                   placeholder="Review code, execute Vercel build log inspection, fix compilation errors, and deploy deliverables..."
-                  className="w-full rounded-xl border border-line bg-surface p-3 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="w-full rounded-xl border border-line bg-surface p-3 text-xs text-ink placeholder:text-ink-muted shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500"
                 />
               </div>
             </div>
@@ -603,35 +601,32 @@ export function CreateProcessModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-2xs font-medium text-ink-muted mb-1">Select Model (Local Host Only)</label>
-                <select
+                <CustomSelect
                   value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-mono text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                >
-                  {localModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-[10px] text-ink-faint">
+                  onChange={(val) => setSelectedModel(val)}
+                  options={localModels.map((m) => ({
+                    value: m.id,
+                    label: m.name,
+                  }))}
+                />
+                <p className="mt-1 text-[10px] text-ink-muted">
                   * If Local Token Limit is reached, system automatically falls back to Cloud LLM to complete execution.
                 </p>
               </div>
 
               <div>
                 <label className="block text-2xs font-medium text-ink-muted mb-1">Fleet Team Size</label>
-                <select
+                <CustomSelect
                   value={agentCount}
-                  onChange={(e) => setAgentCount(e.target.value)}
-                  className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-                >
-                  <option value="auto">✨ Auto (AI decides optimal stages)</option>
-                  <option value="1">1 Agent (Solo Specialist)</option>
-                  <option value="2">2 Agents (Planner + Deliverables Engineer)</option>
-                  <option value="3">3 Agents (Planner + Engineer + QA Reviewer)</option>
-                  <option value="4">4 Agents (Full Autonomous Team)</option>
-                </select>
+                  onChange={(val) => setAgentCount(val)}
+                  options={[
+                    { value: 'auto', label: '✨ Auto (AI decides optimal stages)' },
+                    { value: '1', label: '1 Agent (Solo Specialist)' },
+                    { value: '2', label: '2 Agents (Planner + Deliverables Engineer)' },
+                    { value: '3', label: '3 Agents (Planner + Engineer + QA Reviewer)' },
+                    { value: '4', label: '4 Agents (Full Autonomous Team)' },
+                  ]}
+                />
               </div>
             </div>
           </div>

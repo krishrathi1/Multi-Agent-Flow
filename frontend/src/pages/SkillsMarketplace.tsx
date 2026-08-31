@@ -14,10 +14,14 @@ import {
   Layers,
   ExternalLink,
   ShieldAlert,
+  Server,
+  Zap,
 } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { LiveSparkleIcon } from '../components/ui/LiveIcon';
+import { HourglassLoader } from '../components/ui/HourglassLoader';
+import { CustomSelect } from '../components/ui/CustomSelect';
 import { cn } from '../lib/utils';
 
 export function SkillsMarketplace() {
@@ -150,7 +154,13 @@ export function SkillsMarketplace() {
     return s.name.toLowerCase().includes(q) || (s.description && s.description.toLowerCase().includes(q)) || s.category.toLowerCase().includes(q);
   });
 
-  if (loading) return <div className="p-6 text-xs text-ink-muted">Loading skills marketplace...</div>;
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <HourglassLoader size={48} label="Loading skills marketplace..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -161,17 +171,18 @@ export function SkillsMarketplace() {
         actions={
           <div className="flex items-center gap-2">
             {gateways.length > 1 && (
-              <select
-                value={selectedGateway}
-                onChange={(e) => setSelectedGateway(e.target.value)}
-                className="h-9 px-3 bg-surface border border-line rounded-xl text-xs font-semibold text-ink shadow-2xs focus:border-brand-500 focus:outline-none cursor-pointer"
-              >
-                {gateways.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
+              <div className="w-48">
+                <CustomSelect
+                  value={selectedGateway}
+                  onChange={(val) => setSelectedGateway(val)}
+                  options={gateways.map((g) => ({
+                    value: g.id,
+                    label: g.name,
+                    icon: Server,
+                  }))}
+                  size="md"
+                />
+              </div>
             )}
             <Button
               variant="primary"
@@ -220,7 +231,7 @@ export function SkillsMarketplace() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search skills & toolkits..."
-              className="w-full h-9 pl-8.5 pr-3 bg-surface border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-brand-500 focus:outline-none"
+              className="w-full h-9 pl-8.5 pr-3 bg-surface border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted shadow-2xs focus:border-brand-500 focus:outline-none"
             />
           </div>
         )}
@@ -232,7 +243,7 @@ export function SkillsMarketplace() {
             <div className="col-span-full bg-surface rounded-2xl border border-line p-12 text-center text-xs text-ink-muted shadow-2xs space-y-2">
               <Sparkles size={24} className="mx-auto text-brand-500 opacity-60" />
               <p className="font-semibold text-ink">No skills found</p>
-              <p className="text-2xs text-ink-faint">Try adjusting your search query or add a new skill capability.</p>
+              <p className="text-2xs text-ink-muted">Try adjusting your search query or add a new skill capability.</p>
             </div>
           ) : (
             filteredSkills.map((skill) => {
@@ -280,19 +291,19 @@ export function SkillsMarketplace() {
                 value={packForm.name}
                 onChange={(e) => setPackForm((p) => ({ ...p, name: e.target.value }))}
                 placeholder="Pack name"
-                className="px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+                className="px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs"
               />
               <input
                 value={packForm.sourceUrl}
                 onChange={(e) => setPackForm((p) => ({ ...p, sourceUrl: e.target.value }))}
                 placeholder="Git Repository URL"
-                className="px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+                className="px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
               />
               <input
                 value={packForm.description}
                 onChange={(e) => setPackForm((p) => ({ ...p, description: e.target.value }))}
                 placeholder="Description"
-                className="px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+                className="px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs"
               />
             </div>
             <Button
@@ -312,7 +323,7 @@ export function SkillsMarketplace() {
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-bold text-ink truncate">{pack.name}</h3>
                   <p className="text-2xs text-ink-muted truncate font-mono mt-0.5">{pack.sourceUrl} ({pack.branch})</p>
-                  {pack.lastSyncedAt && <p className="text-2xs text-ink-faint mt-1">Last synced: {new Date(pack.lastSyncedAt).toLocaleString()}</p>}
+                  {pack.lastSyncedAt && <p className="text-2xs text-ink-muted mt-1">Last synced: {new Date(pack.lastSyncedAt).toLocaleString()}</p>}
                 </div>
                 <Button
                   size="xs"
@@ -360,7 +371,7 @@ export function SkillsMarketplace() {
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   placeholder="e.g. GitHub Pull Request Audit"
-                  className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+                  className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs"
                 />
               </div>
 
@@ -371,37 +382,37 @@ export function SkillsMarketplace() {
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   placeholder="What does this skill enable agents to do?"
                   rows={3}
-                  className="w-full p-3 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none resize-none shadow-2xs leading-relaxed"
+                  className="w-full p-3 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none resize-none shadow-2xs leading-relaxed"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">Category</label>
-                  <select
+                  <CustomSelect
                     value={form.category}
-                    onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                    className="w-full h-10 px-3 bg-inset border border-line rounded-xl text-xs font-semibold text-ink focus:border-brand-500 focus:outline-none shadow-2xs cursor-pointer"
-                  >
-                    <option value="general">General</option>
-                    <option value="coding">Coding</option>
-                    <option value="research">Research</option>
-                    <option value="writing">Writing</option>
-                    <option value="data">Data</option>
-                    <option value="devops">DevOps</option>
-                  </select>
+                    onChange={(val) => setForm((f) => ({ ...f, category: val }))}
+                    options={[
+                      { value: 'general', label: 'General' },
+                      { value: 'coding', label: 'Coding' },
+                      { value: 'research', label: 'Research' },
+                      { value: 'writing', label: 'Writing' },
+                      { value: 'data', label: 'Data' },
+                      { value: 'devops', label: 'DevOps' },
+                    ]}
+                  />
                 </div>
                 <div>
                   <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">Risk Profile</label>
-                  <select
+                  <CustomSelect
                     value={form.risk}
-                    onChange={(e) => setForm((f) => ({ ...f, risk: e.target.value }))}
-                    className="w-full h-10 px-3 bg-inset border border-line rounded-xl text-xs font-semibold text-ink focus:border-brand-500 focus:outline-none shadow-2xs cursor-pointer"
-                  >
-                    <option value="low">Low Risk</option>
-                    <option value="medium">Medium Risk</option>
-                    <option value="high">High Risk</option>
-                  </select>
+                    onChange={(val) => setForm((f) => ({ ...f, risk: val }))}
+                    options={[
+                      { value: 'low', label: 'Low Risk' },
+                      { value: 'medium', label: 'Medium Risk' },
+                      { value: 'high', label: 'High Risk' },
+                    ]}
+                  />
                 </div>
               </div>
 
@@ -412,7 +423,7 @@ export function SkillsMarketplace() {
                   value={form.sourceUrl}
                   onChange={(e) => setForm((f) => ({ ...f, sourceUrl: e.target.value }))}
                   placeholder="https://github.com/..."
-                  className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
+                  className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
                 />
               </div>
 
@@ -442,3 +453,4 @@ export function SkillsMarketplace() {
     </div>
   );
 }
+

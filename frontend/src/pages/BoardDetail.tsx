@@ -4,6 +4,7 @@ import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-p
 import { Header } from '@/components/layout/Header';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import type { Board, Task, TaskStatus, Agent } from '@/types';
 
 const COLUMNS: TaskStatus[] = ['BACKLOG', 'ASSIGNED', 'IN_PROGRESS', 'REVIEW', 'DONE'];
@@ -504,16 +505,16 @@ function AddTaskInline({
 
           <div>
             <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Priority</label>
-            <select
+            <CustomSelect
               value={priority}
-              onChange={e => setPriority(e.target.value)}
-              className="w-full bg-surface-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-nexus-500/50"
-            >
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-              <option value="CRITICAL">Critical</option>
-            </select>
+              onChange={(val) => setPriority(val)}
+              options={[
+                { value: 'LOW', label: 'Low' },
+                { value: 'MEDIUM', label: 'Medium' },
+                { value: 'HIGH', label: 'High' },
+                { value: 'CRITICAL', label: 'Critical' },
+              ]}
+            />
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -588,18 +589,15 @@ function AddAgentModal({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Agent</label>
-              <select
+              <CustomSelect
                 value={selectedAgent}
-                onChange={e => setSelectedAgent(e.target.value)}
-                className="w-full bg-surface-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-nexus-500/50"
-              >
-                <option value="">Select an agent...</option>
-                {availableAgents.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.avatar} {a.displayName}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedAgent(val)}
+                placeholder="Select an agent..."
+                options={availableAgents.map((a) => ({
+                  value: a.id,
+                  label: `${a.avatar} ${a.displayName}`,
+                }))}
+              />
             </div>
 
             <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-surface-900 border border-white/10">

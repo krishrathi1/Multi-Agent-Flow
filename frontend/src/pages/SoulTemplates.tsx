@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import type { SoulTemplate } from '../types';
-import { Sparkles, Plus, Search, Trash2, BookOpen } from 'lucide-react';
+import { Sparkles, Plus, Search, Trash2, BookOpen, Layers } from 'lucide-react';
+import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
+import { CustomSelect } from '../components/ui/CustomSelect';
+import { HourglassLoader } from '../components/ui/HourglassLoader';
 import { cn } from '../lib/utils';
 
 export function SoulTemplates() {
@@ -48,29 +51,30 @@ export function SoulTemplates() {
 
   const categories = [...new Set(templates.map(t => t.category))].sort();
 
-  if (loading) return <div className="p-6 text-xs text-ink-muted">Loading soul templates...</div>;
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <HourglassLoader size={48} label="Loading soul templates..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-xs">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            Soul Templates
-          </h1>
-          <p className="text-sm text-ink-muted mt-1">Predefined system personas, operating constraints, and instructions for agents</p>
-        </div>
-        <Button
-          variant="primary"
-          size="sm"
-          icon={Plus}
-          onClick={() => setShowCreate(true)}
-        >
-          Create Template
-        </Button>
-      </div>
+      <PageHeader
+        icon={Sparkles}
+        title="Soul Templates"
+        description="Predefined system personas, operating constraints, and instructions for autonomous agents"
+        actions={
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => setShowCreate(true)}
+          >
+            Create Template
+          </Button>
+        }
+      />
 
       <div className="flex gap-3">
         <div className="relative flex-1">
@@ -80,27 +84,27 @@ export function SoulTemplates() {
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
             placeholder="Search templates by name, keyword, or capability..."
-            className="w-full pl-10 pr-4 py-2.5 bg-canvas border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+            className="w-full pl-10 pr-4 py-2.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs"
           />
         </div>
-        <Button variant="secondary" size="sm" onClick={handleSearch}>Search</Button>
+        <Button variant="secondary" onClick={handleSearch}>Search</Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-4 space-y-4">
-          <div className="bg-surface rounded-xl border border-line p-4 shadow-2xs space-y-3">
+          <div className="bg-surface rounded-2xl border border-line p-4 shadow-2xs space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Template Directory</h3>
             {categories.map(cat => (
               <div key={cat} className="space-y-1.5 pt-1">
-                <p className="text-2xs font-bold text-ink-faint uppercase tracking-wider px-1">{cat}</p>
+                <p className="text-2xs font-bold text-ink-muted uppercase tracking-wider px-1">{cat}</p>
                 {templates.filter(t => t.category === cat).map(template => (
                   <button
                     key={template.id}
                     onClick={() => setSelectedTemplate(template)}
                     className={cn(
-                      'w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all border shadow-2xs',
+                      'w-full text-left px-3.5 py-2.5 rounded-xl text-xs transition-all border shadow-2xs cursor-pointer',
                       selectedTemplate?.id === template.id
-                        ? 'bg-brand-500/15 border-brand-500 text-brand-700 dark:text-brand-300 ring-1 ring-brand-500/40'
+                        ? 'bg-brand-500/10 border-brand-500 text-brand-700 dark:text-brand-300 ring-1 ring-brand-500/30'
                         : 'bg-surface border-line text-ink-muted hover:text-ink hover:border-line-strong',
                     )}
                   >
@@ -116,7 +120,7 @@ export function SoulTemplates() {
 
         <div className="lg:col-span-8">
           {selectedTemplate ? (
-            <div className="bg-surface border border-line rounded-xl p-6 shadow-2xs space-y-4">
+            <div className="bg-surface border border-line rounded-2xl p-6 shadow-2xs space-y-4">
               <div className="flex items-start justify-between gap-3 border-b border-line pb-4">
                 <div>
                   <h2 className="text-lg font-bold text-ink">{selectedTemplate.name}</h2>
@@ -137,13 +141,13 @@ export function SoulTemplates() {
               )}
               <div>
                 <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-2">SOUL Instructions (SOUL.md)</label>
-                <pre className="bg-canvas border border-line rounded-xl p-4 text-xs font-mono text-ink leading-relaxed overflow-auto max-h-[500px] whitespace-pre-wrap shadow-2xs">
+                <pre className="bg-inset border border-line rounded-xl p-4 text-xs font-mono text-ink leading-relaxed overflow-auto max-h-[500px] whitespace-pre-wrap shadow-2xs">
                   {selectedTemplate.content}
                 </pre>
               </div>
             </div>
           ) : (
-            <div className="bg-surface border border-line rounded-xl p-12 text-center text-xs text-ink-muted shadow-2xs">
+            <div className="bg-surface border border-line rounded-2xl p-12 text-center text-xs text-ink-muted shadow-2xs">
               Select a template to preview its operating instructions
             </div>
           )}
@@ -152,7 +156,7 @@ export function SoulTemplates() {
 
       {showCreate && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
-          <div className="bg-surface border border-line rounded-2xl p-6 w-full max-w-lg shadow-xl space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-surface border border-line rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
             <h2 className="text-sm font-bold uppercase tracking-wider text-ink">Create Soul Template</h2>
             <div className="space-y-3">
               <div>
@@ -161,23 +165,23 @@ export function SoulTemplates() {
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="e.g. SRE Incident Commander"
-                  className="w-full px-3.5 py-2 bg-canvas border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+                  className="w-full px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1">Category</label>
-                  <select
+                  <CustomSelect
                     value={form.category}
-                    onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-canvas border border-line rounded-xl text-xs font-semibold text-ink focus:border-brand-500 focus:outline-none shadow-2xs"
-                  >
-                    <option value="general">General</option>
-                    <option value="coding">Coding</option>
-                    <option value="research">Research</option>
-                    <option value="support">Support</option>
-                    <option value="creative">Creative</option>
-                  </select>
+                    onChange={val => setForm(f => ({ ...f, category: val }))}
+                    options={[
+                      { value: 'general', label: 'General' },
+                      { value: 'coding', label: 'Coding' },
+                      { value: 'research', label: 'Research' },
+                      { value: 'support', label: 'Support' },
+                      { value: 'creative', label: 'Creative' },
+                    ]}
+                  />
                 </div>
                 <div>
                   <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1">Brief Description</label>
@@ -185,7 +189,7 @@ export function SoulTemplates() {
                     value={form.description}
                     onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                     placeholder="Short summary of role"
-                    className="w-full px-3.5 py-2 bg-canvas border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+                    className="w-full px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs"
                   />
                 </div>
               </div>
@@ -196,7 +200,7 @@ export function SoulTemplates() {
                   onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
                   placeholder="# Agent Role&#10;&#10;Instructions, boundaries, output rules..."
                   rows={8}
-                  className="w-full px-3.5 py-2 bg-canvas border border-line rounded-xl text-xs text-ink font-mono placeholder:text-ink-faint focus:border-brand-500 focus:outline-none resize-none shadow-2xs"
+                  className="w-full px-3.5 py-2 bg-inset border border-line rounded-xl text-xs text-ink font-mono placeholder:text-ink-muted focus:border-brand-500 focus:outline-none resize-none shadow-2xs"
                 />
               </div>
             </div>
@@ -210,3 +214,4 @@ export function SoulTemplates() {
     </div>
   );
 }
+

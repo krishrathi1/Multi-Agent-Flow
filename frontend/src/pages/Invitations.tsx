@@ -5,7 +5,9 @@ import { PageHeader, SectionHeading } from '../components/ui/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
-import { EmptyState, Skeleton } from '../components/ui/States';
+import { EmptyState } from '../components/ui/States';
+import { CustomSelect } from '../components/ui/CustomSelect';
+import { HourglassLoader } from '../components/ui/HourglassLoader';
 import type { OrgInvite } from '../types';
 
 export function Invitations() {
@@ -50,18 +52,17 @@ export function Invitations() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
       <PageHeader
         icon={UserPlus}
-        title="Team Invitations"
-        description="Invite colleagues and collaborators to join your organization and manage access roles."
+        title="Workspace Invitations"
+        description="Invite team members to collaborate and manage autonomous agent workflows"
       />
 
-      {/* Send Invitation Card */}
-      <Card padding="md" className="border border-line-subtle bg-surface shadow-xs rounded-2xl">
-        <h3 className="text-sm font-bold text-ink mb-1.5 flex items-center gap-2">
-          <Mail size={16} className="text-brand-500" />
-          <span>Send Organization Invite</span>
+      {/* Invite Form */}
+      <Card className="p-5">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-ink mb-1">
+          Invite New Member
         </h3>
         <p className="text-xs text-ink-muted mb-4">
           Invited members will receive an email to join your workspace with the selected role.
@@ -74,18 +75,20 @@ export function Invitations() {
             placeholder="colleague@company.com"
             type="email"
             required
-            className="flex-1 min-w-[240px] rounded-xl border border-line bg-surface px-3.5 py-2 text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="flex-1 min-w-[240px] rounded-xl border border-line bg-inset px-3.5 py-2 text-xs text-ink placeholder:text-ink-muted shadow-2xs focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
 
-          <select
-            value={role}
-            onChange={e => setRole(e.target.value)}
-            className="rounded-xl border border-line bg-surface px-3 py-2 text-xs font-medium text-ink focus:outline-none focus:ring-1 focus:ring-brand-500"
-          >
-            <option value="MEMBER">Member (Standard Access)</option>
-            <option value="ADMIN">Admin (Full Management)</option>
-            <option value="VIEWER">Viewer (Read Only)</option>
-          </select>
+          <div className="w-56">
+            <CustomSelect
+              value={role}
+              onChange={val => setRole(val)}
+              options={[
+                { value: 'MEMBER', label: 'Member (Standard Access)' },
+                { value: 'ADMIN', label: 'Admin (Full Management)' },
+                { value: 'VIEWER', label: 'Viewer (Read Only)' },
+              ]}
+            />
+          </div>
 
           <Button
             type="submit"
@@ -108,9 +111,8 @@ export function Invitations() {
         />
 
         {loading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-16 rounded-xl" />
-            <Skeleton className="h-16 rounded-xl" />
+          <div className="flex flex-col items-center justify-center py-16">
+            <HourglassLoader size={40} label="Loading workspace invitations..." />
           </div>
         ) : invites.length === 0 ? (
           <Card padding="lg" className="text-center">

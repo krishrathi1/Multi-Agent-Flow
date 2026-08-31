@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import type { TaskCustomFieldDefinition, Board } from '../types';
 import { Sliders, Plus, Trash2, Link as LinkIcon, CheckCircle2 } from 'lucide-react';
+import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
+import { CustomSelect } from '../components/ui/CustomSelect';
+import { HourglassLoader } from '../components/ui/HourglassLoader';
 import { cn } from '../lib/utils';
 
 export function CustomFields() {
@@ -57,30 +60,30 @@ export function CustomFields() {
     BOOLEAN: 'Boolean', DATE: 'Date', DATE_TIME: 'Date & Time', URL: 'URL', JSON: 'JSON',
   };
 
-  if (loading) return <div className="p-6 text-xs text-ink-muted">Loading custom fields...</div>;
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <HourglassLoader size={48} label="Loading custom fields..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-ink flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-xs">
-              <Sliders className="w-5 h-5 text-white" />
-            </div>
-            Custom Fields
-          </h1>
-          <p className="text-sm text-ink-muted mt-1">Define custom schema attributes for tasks and bind them to specific project boards</p>
-        </div>
-        <Button
-          variant="primary"
-          size="sm"
-          icon={Plus}
-          onClick={() => setShowCreate(true)}
-        >
-          Create Field
-        </Button>
-      </div>
-
+      <PageHeader
+        icon={Sliders}
+        title="Custom Fields"
+        description="Extend task schema with structured metadata definitions across boards"
+        actions={
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => setShowCreate(true)}
+          >
+            Add Custom Field
+          </Button>
+        }
+      />
       <div className="space-y-3">
         {definitions.length === 0 ? (
           <div className="rounded-2xl border border-line bg-surface p-12 text-center shadow-2xs space-y-4">
@@ -144,7 +147,7 @@ export function CustomFields() {
       {/* Create Modal */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
-          <div className="bg-surface border border-line rounded-2xl p-6 w-full max-w-md shadow-xl space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-surface border border-line rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
             <h2 className="text-sm font-bold uppercase tracking-wider text-ink">Create Custom Field</h2>
             <div className="space-y-3">
               <div>
@@ -153,7 +156,7 @@ export function CustomFields() {
                   value={form.label}
                   onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
                   placeholder="e.g. Deployment Environment"
-                  className="w-full px-3.5 py-2.5 bg-canvas border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+                  className="w-full px-3.5 py-2.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs"
                 />
               </div>
               <div>
@@ -162,31 +165,29 @@ export function CustomFields() {
                   value={form.fieldKey}
                   onChange={e => setForm(f => ({ ...f, fieldKey: e.target.value }))}
                   placeholder="e.g. deploy_env (auto-generated if blank)"
-                  className="w-full px-3.5 py-2.5 bg-canvas border border-line rounded-xl text-xs font-mono text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+                  className="w-full px-3.5 py-2.5 bg-inset border border-line rounded-xl text-xs font-mono text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1">Field Type</label>
-                  <select
+                  <CustomSelect
                     value={form.fieldType}
-                    onChange={e => setForm(f => ({ ...f, fieldType: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-canvas border border-line rounded-xl text-xs font-semibold text-ink focus:border-brand-500 focus:outline-none shadow-2xs"
-                  >
-                    {Object.entries(fieldTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
+                    onChange={val => setForm(f => ({ ...f, fieldType: val }))}
+                    options={Object.entries(fieldTypeLabels).map(([k, v]) => ({ value: k, label: v }))}
+                  />
                 </div>
                 <div>
                   <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1">Visibility</label>
-                  <select
+                  <CustomSelect
                     value={form.uiVisibility}
-                    onChange={e => setForm(f => ({ ...f, uiVisibility: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-canvas border border-line rounded-xl text-xs font-semibold text-ink focus:border-brand-500 focus:outline-none shadow-2xs"
-                  >
-                    <option value="ALWAYS">Always Visible</option>
-                    <option value="IF_SET">Show If Set</option>
-                    <option value="HIDDEN">Hidden</option>
-                  </select>
+                    onChange={val => setForm(f => ({ ...f, uiVisibility: val }))}
+                    options={[
+                      { value: 'ALWAYS', label: 'Always Visible' },
+                      { value: 'IF_SET', label: 'Show If Set' },
+                      { value: 'HIDDEN', label: 'Hidden' },
+                    ]}
+                  />
                 </div>
               </div>
               <div>

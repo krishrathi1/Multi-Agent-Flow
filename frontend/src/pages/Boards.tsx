@@ -6,6 +6,8 @@ import { cn, timeAgo } from '@/lib/utils';
 import type { Board, BoardGroup } from '@/types';
 import { LayoutGrid, Plus, ChevronRight, Users, CheckCircle, Calendar, ShieldCheck, Sparkles, Folder } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { CustomSelect } from '@/components/ui/CustomSelect';
+import { HourglassLoader } from '@/components/ui/HourglassLoader';
 
 const boardTypeStyles: Record<string, { badge: string; label: string }> = {
   goal: { badge: 'text-blue-700 dark:text-blue-300 bg-blue-500/15 border-blue-500/30', label: 'Goal' },
@@ -48,22 +50,27 @@ export function Boards() {
       setBoards(boardsData as BoardWithGroup[]);
       setGroups(groupsData);
     } catch (err) {
-      console.error('Failed to load boards:', err);
+      console.error('Failed to load boards data:', err);
     } finally {
       setLoading(false);
     }
   }
 
-  function toggleGroup(groupId: string) {
+  const toggleGroup = (groupId: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
-      if (next.has(groupId)) {
-        next.delete(groupId);
-      } else {
-        next.add(groupId);
-      }
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
       return next;
     });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <HourglassLoader size={48} label="Loading task boards..." />
+      </div>
+    );
   }
 
   async function handleCreateBoard(data: CreateBoardData) {
@@ -313,31 +320,29 @@ function CreateBoardModal({
               <label className="text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5 block">
                 Board Type
               </label>
-              <select
+              <CustomSelect
                 value={boardType}
-                onChange={e => setBoardType(e.target.value)}
-                className="w-full bg-canvas border border-line rounded-xl px-3.5 py-2.5 text-xs font-semibold text-ink shadow-2xs focus:outline-none focus:border-brand-500"
-              >
-                <option value="goal">Goal Oriented</option>
-                <option value="sprint">Sprint Timeline</option>
-                <option value="continuous">Continuous Ops</option>
-              </select>
+                onChange={(val) => setBoardType(val)}
+                options={[
+                  { value: 'goal', label: 'Goal Oriented' },
+                  { value: 'sprint', label: 'Sprint Timeline' },
+                  { value: 'continuous', label: 'Continuous Ops' },
+                ]}
+              />
             </div>
 
             <div>
               <label className="text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5 block">
                 Board Group
               </label>
-              <select
+              <CustomSelect
                 value={boardGroupId}
-                onChange={e => setBoardGroupId(e.target.value)}
-                className="w-full bg-canvas border border-line rounded-xl px-3.5 py-2.5 text-xs font-semibold text-ink shadow-2xs focus:outline-none focus:border-brand-500"
-              >
-                <option value="">None (Top Level)</option>
-                {groups.map(g => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
-                ))}
-              </select>
+                onChange={(val) => setBoardGroupId(val)}
+                options={[
+                  { value: '', label: 'None (Top Level)' },
+                  ...groups.map((g) => ({ value: g.id, label: g.name })),
+                ]}
+              />
             </div>
           </div>
 
