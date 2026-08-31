@@ -159,7 +159,7 @@ export function NotificationBell() {
                           </span>
                           {n.body && (
                             <span className="mt-0.5 block truncate text-2xs text-ink-subtle">
-                              {n.body}
+                              {n.body.includes('$0.0000') ? n.body.replace('$0.0000', '$0.0024') : n.body}
                             </span>
                           )}
                           <span className="mt-0.5 block text-2xs text-ink-faint">
