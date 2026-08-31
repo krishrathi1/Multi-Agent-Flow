@@ -570,10 +570,18 @@ export function AgentCreate() {
 
   if (loading) {
     return (
-      <div>
-        <Header title={isEditMode ? 'Edit Agent' : 'Create Agent'} subtitle="Loading..." />
+      <div className="space-y-6">
+        <PageHeader
+          icon={Bot}
+          title={isEditMode ? 'Edit Agent' : 'Create Agent'}
+          description="Loading agent configuration..."
+          breadcrumbs={[
+            { label: 'Fleet Controls', to: '/controls' },
+            { label: isEditMode ? 'Edit Agent' : 'Create Agent' },
+          ]}
+        />
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-nexus-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
         </div>
       </div>
     );
