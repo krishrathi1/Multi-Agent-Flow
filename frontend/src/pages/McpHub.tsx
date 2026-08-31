@@ -334,66 +334,68 @@ export function McpHub() {
         }
       />
 
-      {/* ── Telemetry Deck: Standalone Horizontal Deck ── */}
-      <div className="flex sm:grid sm:grid-cols-4 gap-2.5 sm:gap-3.5 overflow-x-auto no-scrollbar pb-1">
-        {/* Connected Servers */}
-        <div className="min-w-[140px] sm:min-w-0 flex-1 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3 sm:p-4 shadow-2xs hover:border-emerald-500/40 transition-all flex flex-col justify-between shrink-0">
-          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-            <span className="text-[11px] sm:text-2xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
-              Connected MCP
-            </span>
-            <LiveRadarBeacon size={8} tone="emerald" />
+      {/* ── 4 Core Stat Cards ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        {/* Connected MCP Servers */}
+        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted truncate">Connected MCP</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+              <Cpu size={16} />
+            </div>
           </div>
-          <p className="text-xl sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1 font-mono">
+          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
             {connectedCount}
-            <span className="text-[11px] sm:text-xs font-normal text-ink-muted whitespace-nowrap">/ {servers.length} online</span>
-          </p>
+            <span className="text-xs font-normal text-ink-muted font-sans ml-1.5">/ {servers.length}</span>
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Live server endpoints</p>
         </div>
 
         {/* Discovered Tools */}
-        <div className="min-w-[140px] sm:min-w-0 flex-1 rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between shrink-0">
-          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-            <span className="text-[11px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted whitespace-nowrap">
-              Discovered Tools
-            </span>
-            <Wrench size={13} className="text-brand-500 shrink-0" />
+        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted truncate">Callable Tools</span>
+            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+              <Wrench size={16} />
+            </div>
           </div>
-          <p className="text-xl sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1 font-mono">
+          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
             {totalToolsCount}
-            <span className="text-[11px] sm:text-xs font-normal text-ink-muted whitespace-nowrap">active tools</span>
-          </p>
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Direct execution tools</p>
         </div>
 
         {/* Standalone Endpoints */}
-        <div className="min-w-[140px] sm:min-w-0 flex-1 rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between shrink-0">
-          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-            <span className="text-[11px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted whitespace-nowrap">
-              Individual Endpoints
-            </span>
-            <Zap size={13} className="text-amber-500 shrink-0" />
+        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted truncate">Individual Endpoints</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
+              <Zap size={16} />
+            </div>
           </div>
-          <p className="text-xl sm:text-2xl font-bold text-ink tabular-nums flex items-baseline gap-1 font-mono">
+          <div className="text-xl sm:text-2xl font-bold text-ink tracking-tight font-mono">
             {servers.length}
-            <span className="text-[11px] sm:text-xs font-normal text-ink-muted whitespace-nowrap">callable servers</span>
-          </p>
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Workspace tool hosts</p>
         </div>
 
-        {/* Protocol Transports */}
-        <div className="min-w-[140px] sm:min-w-0 flex-1 rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4 shadow-2xs hover:border-line transition-all flex flex-col justify-between shrink-0">
-          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-            <span className="text-[11px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted whitespace-nowrap">
-              Transport Stack
-            </span>
-            <LiveWaveform color="bg-brand-500" />
+        {/* Transport Protocols */}
+        <div className="rounded-2xl border border-line-subtle bg-surface p-4.5 shadow-2xs hover:border-line-strong hover:shadow-xs transition-all relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-ink-muted truncate">Transport Stack</span>
+            <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
+              <Server size={16} />
+            </div>
           </div>
-          <p className="text-xs sm:text-sm font-bold text-ink flex items-center gap-1.5 mt-0.5">
-            <span className="px-2 py-0.5 rounded-md bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 text-[10px] font-mono font-bold">
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <span className="px-2.5 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 text-xs font-mono font-bold">
               SSE
             </span>
-            <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-[10px] font-mono font-bold">
+            <span className="px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-xs font-mono font-bold">
               STDIO
             </span>
-          </p>
+          </div>
+          <p className="text-[11px] text-ink-muted mt-1 font-medium">Streaming & STDIO</p>
         </div>
       </div>
 
