@@ -40,7 +40,8 @@ export function Column({
             ref={provided.innerRef}
             {...provided.droppableProps}
             className={cn(
-              'flex-1 rounded-b-3xl p-2.5 sm:p-3 transition-colors duration-150',
+              'flex-1 rounded-b-3xl p-2.5 sm:p-3 transition-colors duration-150 overflow-y-auto no-scrollbar',
+              'max-h-[560px] sm:max-h-[600px]',
               snapshot.isDraggingOver && 'bg-brand-500/5',
             )}
           >
