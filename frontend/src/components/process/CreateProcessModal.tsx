@@ -83,16 +83,6 @@ const AI_TEMPLATES = [
   },
 ];
 
-const CURL_EXAMPLES = [
-  `curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \\
-  -H 'Content-Type: application/json' \\
-  -X POST \\
-  -d '{"contents":[{"parts":[{"text":"Explain multi-agent architecture"}]}]}'`,
-  `curl -X POST https://api.stripe.com/v1/payment_intents \\
-  -H "Authorization: Bearer $STRIPE_SECRET_KEY" \\
-  -d "amount=2000" -d "currency=usd"`,
-];
-
 function parseCurlCommand(raw: string): ParsedCurl | null {
   if (!raw || !raw.trim()) return null;
   const clean = raw.replace(/\\\r?\n/g, ' ').replace(/\n/g, ' ').trim();
@@ -729,27 +719,9 @@ export function CreateProcessModal({
                   className="w-full rounded-xl border border-line bg-surface p-3 font-mono text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
                 />
               </div>
-
-              {/* Quick Example Loaders */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">Quick Load:</span>
-                {CURL_EXAMPLES.map((ex, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => {
-                      setCurlInput(ex);
-                      handleParseAndSaveCurl(ex);
-                    }}
-                    className="rounded-md border border-line-subtle bg-inset/50 px-2 py-0.5 text-[10px] font-mono text-ink-muted hover:border-brand-500 hover:text-ink transition-colors cursor-pointer"
-                  >
-                    {i === 0 ? '⚡ Gemini API' : '💳 Stripe API'}
-                  </button>
-                ))}
-              </div>
             </div>
 
-            {/* Extracted API Endpoint & Test / Save Card */}
+              {/* Extracted API Endpoint & Test / Save Card */}
             <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
                 <div className="flex items-center gap-2">
