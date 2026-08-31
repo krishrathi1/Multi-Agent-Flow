@@ -158,8 +158,9 @@ export function CreateProcessModal({
   const [repoGoal, setRepoGoal] = useState('');
   const [loadingRepos, setLoadingRepos] = useState(false);
 
-  // Vercel State: Simple check/uncheck for full autonomous deployment via linked Settings
-  const [vercelAutoDeploy, setVercelAutoDeploy] = useState(true);
+  // Vercel State: Dynamic check against Settings localStorage token
+  const [isVercelConnected, setIsVercelConnected] = useState(() => !!localStorage.getItem('nexus:vercel_token'));
+  const [vercelAutoDeploy, setVercelAutoDeploy] = useState(() => !!localStorage.getItem('nexus:vercel_token'));
 
   const [isExpandingPrompt, setIsExpandingPrompt] = useState(false);
 
@@ -253,6 +254,11 @@ export function CreateProcessModal({
 
   useEffect(() => {
     if (open) {
+      const vTok = localStorage.getItem('nexus:vercel_token');
+      const hasVercel = !!vTok;
+      setIsVercelConnected(hasVercel);
+      setVercelAutoDeploy(hasVercel);
+
       const ghToken = localStorage.getItem('nexus:github_token') || undefined;
       setLoadingRepos(true);
       api.processes.githubRepos(ghToken).then((res) => {
@@ -1028,19 +1034,27 @@ export function CreateProcessModal({
 
             {/* Vercel Auto-Deployment Check / Uncheck Card */}
             <div
-              onClick={() => setVercelAutoDeploy(!vercelAutoDeploy)}
+              onClick={() => {
+                if (isVercelConnected) {
+                  setVercelAutoDeploy(!vercelAutoDeploy);
+                }
+              }}
               className={cn(
-                'rounded-2xl border p-4 shadow-2xs transition-all cursor-pointer flex items-start justify-between gap-3',
-                vercelAutoDeploy
-                  ? 'border-emerald-500/30 bg-surface ring-1 ring-emerald-500/15'
-                  : 'border-line-subtle bg-inset/40 hover:bg-surface'
+                'rounded-2xl border p-4 shadow-2xs transition-all flex items-start justify-between gap-3',
+                !isVercelConnected
+                  ? 'border-rose-500/30 bg-rose-500/5 cursor-not-allowed'
+                  : vercelAutoDeploy
+                  ? 'border-emerald-500/30 bg-surface ring-1 ring-emerald-500/15 cursor-pointer'
+                  : 'border-line-subtle bg-inset/40 hover:bg-surface cursor-pointer'
               )}
             >
               <div className="flex items-start gap-3">
                 <div
                   className={cn(
                     'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors',
-                    vercelAutoDeploy
+                    !isVercelConnected
+                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25'
+                      : vercelAutoDeploy
                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                       : 'bg-inset text-ink-muted border border-line-subtle'
                   )}
@@ -1050,29 +1064,46 @@ export function CreateProcessModal({
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-ink">Auto-Deploy to Vercel</span>
-                    {vercelAutoDeploy ? (
+                    {!isVercelConnected ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 border border-rose-500/25">
+                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                        Not Connected in Settings
+                      </span>
+                    ) : vercelAutoDeploy ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Enabled
+                        Connected & Enabled
                       </span>
                     ) : (
                       <span className="inline-flex items-center rounded-full bg-inset px-2 py-0.5 text-[10px] font-medium text-ink-muted border border-line-subtle">
-                        Disabled
+                        Disabled (Local / Git Only)
                       </span>
                     )}
                   </div>
                   <p className="text-2xs text-ink-muted leading-relaxed">
-                    Connects via your Settings credentials. Autonomous agents will automatically detect framework, configure cloud build, and deploy live.
+                    {!isVercelConnected
+                      ? 'Vercel is not connected. Add your Vercel Token in Settings > Integrations to enable automatic cloud deployments.'
+                      : 'Connected via Settings credentials. Autonomous agents will automatically detect framework, configure cloud build, and deploy live.'}
                   </p>
                 </div>
               </div>
 
               <input
                 type="checkbox"
-                checked={vercelAutoDeploy}
-                onChange={(e) => setVercelAutoDeploy(e.target.checked)}
+                disabled={!isVercelConnected}
+                checked={isVercelConnected && vercelAutoDeploy}
+                onChange={(e) => {
+                  if (isVercelConnected) {
+                    setVercelAutoDeploy(e.target.checked);
+                  }
+                }}
                 onClick={(e) => e.stopPropagation()}
-                className="h-4 w-4 rounded border-line text-emerald-600 focus:ring-emerald-500 cursor-pointer mt-1"
+                className={cn(
+                  'h-4 w-4 rounded border-line mt-1',
+                  !isVercelConnected
+                    ? 'opacity-40 cursor-not-allowed'
+                    : 'text-emerald-600 focus:ring-emerald-500 cursor-pointer'
+                )}
               />
             </div>
 
