@@ -372,16 +372,16 @@ export function Metrics() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 max-w-5xl mx-auto pb-16">
+    <div className="space-y-3 sm:space-y-3.5 max-w-5xl mx-auto pb-4">
       {/* Mobile Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
-              <CircleDollarSign size={17} />
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+              <CircleDollarSign size={15} />
             </div>
             <div>
-              <h1 className="text-base sm:text-lg font-bold text-ink tracking-tight flex items-center gap-2">
+              <h1 className="text-sm sm:text-base font-bold text-ink tracking-tight flex items-center gap-2">
                 Cost & Usage
                 <Badge tone={socketConnected ? 'success' : 'neutral'} dot pulse={socketConnected}>
                   {socketConnected ? 'Live' : 'Offline'}
@@ -394,7 +394,7 @@ export function Metrics() {
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {lastUpdated && (
-            <span className="text-2xs font-mono text-ink-muted flex items-center gap-1 bg-inset px-2.5 py-1 rounded-xl border border-line-subtle">
+            <span className="text-2xs font-mono text-ink-muted flex items-center gap-1 bg-inset px-2 py-0.5 rounded-lg border border-line-subtle">
               <Clock size={11} className="text-ink-faint" />
               {timeAgo(lastUpdated.toISOString())}
             </span>
@@ -427,7 +427,7 @@ export function Metrics() {
             type="button"
             onClick={() => setTimeFilter(chip.id)}
             className={cn(
-              'shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+              'shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs',
               timeFilter === chip.id
                 ? 'bg-brand-600 text-white shadow-xs'
                 : 'border border-line bg-surface text-ink-muted hover:text-ink hover:bg-hover'
@@ -439,20 +439,20 @@ export function Metrics() {
       </div>
 
       {/* 1. PRIMARY COST HERO CARD */}
-      <div className="rounded-3xl border border-line-subtle bg-surface p-5 sm:p-6 shadow-xs relative overflow-hidden group">
-        <div className="flex items-start justify-between gap-3 mb-2">
+      <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-xs relative overflow-hidden group">
+        <div className="flex items-start justify-between gap-3 mb-1.5">
           <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
-              <Sparkles size={13} className="text-brand-500" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+              <Sparkles size={12} className="text-brand-500" />
               Total Estimated Spend
             </span>
-            <div className="text-3xl sm:text-4xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 tracking-tight">
+            <div className="text-2xl sm:text-3xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5 tracking-tight">
               {formatCurrency(kpis.totalCost)}
             </div>
           </div>
 
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-500/20 font-mono">
-            <ArrowUpRight size={13} />
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-2xs font-bold border border-emerald-500/20 font-mono">
+            <ArrowUpRight size={12} />
             Active Fleet
           </span>
         </div>
@@ -462,7 +462,7 @@ export function Metrics() {
         </p>
 
         {/* Mini progress track */}
-        <div className="mt-4 pt-4 border-t border-line-subtle flex flex-wrap items-center justify-between gap-2 text-2xs font-mono text-ink-muted">
+        <div className="mt-2.5 pt-2.5 border-t border-line-subtle flex flex-wrap items-center justify-between gap-2 text-2xs font-mono text-ink-muted">
           <span>{formatCompact(kpis.totalTokens)} total tokens</span>
           <span>{kpis.calls.toLocaleString()} LLM requests</span>
           <span className="text-emerald-600 dark:text-emerald-400 font-bold">
@@ -472,13 +472,13 @@ export function Metrics() {
       </div>
 
       {/* 2. SECONDARY 2-COLUMN METRICS GRID */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-        <div className="p-3.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
+        <div className="p-2.5 sm:p-3 rounded-xl border border-line-subtle bg-surface shadow-2xs space-y-0.5">
           <div className="flex items-center justify-between text-ink-muted text-2xs font-bold uppercase tracking-wider">
             <span>Tokens</span>
-            <Hash size={13} className="text-brand-500" />
+            <Hash size={12} className="text-brand-500" />
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-ink">
+          <div className="text-base sm:text-lg font-bold font-mono text-ink">
             {formatCompact(kpis.totalTokens)}
           </div>
           <span className="text-[10px] text-ink-faint font-mono block truncate">
@@ -486,12 +486,12 @@ export function Metrics() {
           </span>
         </div>
 
-        <div className="p-3.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+        <div className="p-2.5 sm:p-3 rounded-xl border border-line-subtle bg-surface shadow-2xs space-y-0.5">
           <div className="flex items-center justify-between text-ink-muted text-2xs font-bold uppercase tracking-wider">
             <span>Requests</span>
-            <Activity size={13} className="text-purple-500" />
+            <Activity size={12} className="text-purple-500" />
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-ink">
+          <div className="text-base sm:text-lg font-bold font-mono text-ink">
             {kpis.calls.toLocaleString()}
           </div>
           <span className="text-[10px] text-ink-faint font-mono block truncate">
@@ -499,12 +499,12 @@ export function Metrics() {
           </span>
         </div>
 
-        <div className="p-3.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+        <div className="p-2.5 sm:p-3 rounded-xl border border-line-subtle bg-surface shadow-2xs space-y-0.5">
           <div className="flex items-center justify-between text-ink-muted text-2xs font-bold uppercase tracking-wider">
             <span>Avg Latency</span>
-            <Timer size={13} className="text-amber-500" />
+            <Timer size={12} className="text-amber-500" />
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-ink">
+          <div className="text-base sm:text-lg font-bold font-mono text-ink">
             {formatMs(kpis.avgResponseTime)}
           </div>
           <span className="text-[10px] text-ink-faint font-mono block truncate">
@@ -512,12 +512,12 @@ export function Metrics() {
           </span>
         </div>
 
-        <div className="p-3.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
+        <div className="p-2.5 sm:p-3 rounded-xl border border-line-subtle bg-surface shadow-2xs space-y-0.5">
           <div className="flex items-center justify-between text-ink-muted text-2xs font-bold uppercase tracking-wider">
             <span>Success Rate</span>
-            <TrendingUp size={13} className="text-cyan-500" />
+            <TrendingUp size={12} className="text-cyan-500" />
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-ink">
+          <div className="text-base sm:text-lg font-bold font-mono text-ink">
             {kpis.successRate}%
           </div>
           <span className="text-[10px] text-ink-faint font-mono block truncate">
@@ -527,16 +527,16 @@ export function Metrics() {
       </div>
 
       {/* 3. INTERACTIVE SPENDING TREND CHART */}
-      <div className="rounded-3xl border border-line-subtle bg-surface p-4 sm:p-5 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
-          <div className="flex items-center gap-2">
+      <div className="rounded-2xl border border-line-subtle bg-surface p-3 sm:p-3.5 shadow-2xs space-y-2">
+        <div className="flex items-center justify-between border-b border-line-subtle pb-2">
+          <div className="flex items-center gap-1.5">
             <div className={cn(
-              'w-7 h-7 rounded-lg flex items-center justify-center',
+              'w-6 h-6 rounded-md flex items-center justify-center',
               chartMode === 'cost'
                 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                 : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
             )}>
-              <BarChart3 size={14} />
+              <BarChart3 size={13} />
             </div>
             <span className="text-xs font-bold uppercase tracking-wider text-ink">
               {chartMode === 'cost' ? 'Spending Trend' : 'Token Usage Trend'}
@@ -547,19 +547,19 @@ export function Metrics() {
           </span>
         </div>
 
-        <div className="w-full h-[220px]">
+        <div className="w-full h-[180px]">
           {hasChartData ? (
             <Chart
               options={spendChartOptions}
               series={spendChartSeries}
               type="area"
-              height={220}
+              height={180}
               width="100%"
             />
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center p-4 bg-inset/40 rounded-2xl border border-dashed border-line-subtle">
-              <BarChart3 size={24} className="text-ink-faint mb-2 opacity-40" />
-              <p className="text-xs font-bold text-ink mb-1">No usage data yet</p>
+            <div className="h-full flex flex-col items-center justify-center text-center p-3 bg-inset/40 rounded-xl border border-dashed border-line-subtle">
+              <BarChart3 size={20} className="text-ink-faint mb-1 opacity-40" />
+              <p className="text-xs font-bold text-ink mb-0.5">No usage data yet</p>
               <p className="text-2xs text-ink-muted">
                 Run agents or LLM calls to see token usage and cost trends here.
               </p>
@@ -569,7 +569,7 @@ export function Metrics() {
       </div>
 
       {/* Section View Tabs: Models | Agents | Activity | Performance */}
-      <div className="border-b border-line-subtle flex items-center gap-2 overflow-x-auto no-scrollbar pt-2 mb-3">
+      <div className="border-b border-line-subtle flex items-center gap-2 overflow-x-auto no-scrollbar pt-1 mb-2">
         {(
           [
             { id: 'models', label: 'By Model', count: modelBreakdown.length },
@@ -583,7 +583,7 @@ export function Metrics() {
             type="button"
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'pb-2.5 px-1 text-xs font-bold tracking-tight border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5',
+              'pb-2 px-1 text-xs font-bold tracking-tight border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5',
               activeTab === tab.id
                 ? 'border-brand-500 text-brand-600 dark:text-brand-400'
                 : 'border-transparent text-ink-muted hover:text-ink'
@@ -601,31 +601,31 @@ export function Metrics() {
 
       {/* TAB 1: BY MODEL BREAKDOWN */}
       {activeTab === 'models' && (
-        <div className="pt-1">
+        <div>
           {modelBreakdown.length === 0 ? (
-            <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
+            <div className="py-8 text-center text-xs text-ink-muted bg-surface rounded-xl border border-line-subtle">
               No model usage records found for this period.
             </div>
           ) : (
-            <div className="p-1 max-h-[460px] overflow-y-auto no-scrollbar space-y-3">
+            <div className="space-y-2">
               {modelBreakdown.map((item) => (
                 <div
                   key={item.model}
-                  className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-2xs hover:border-line transition-all space-y-2.5"
+                  className="rounded-xl border border-line-subtle bg-surface p-2.5 sm:p-3 shadow-2xs hover:border-line transition-all space-y-1.5"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
-                        <Layers size={15} />
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
+                        <Layers size={14} />
                       </div>
                       <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-bold font-mono text-ink truncate">{item.model}</h4>
+                        <h4 className="text-xs font-bold font-mono text-ink truncate">{item.model}</h4>
                         <p className="text-[10px] text-ink-muted font-mono">{formatCompact(item.tokens)} tokens · {item.count} calls</p>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                      <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400">
                         {formatCurrency(item.cost)}
                       </span>
                       <span className="text-[10px] text-ink-muted font-mono block">
@@ -635,7 +635,7 @@ export function Metrics() {
                   </div>
 
                   {/* Progress bar */}
-                  <div className="w-full h-1.5 rounded-full bg-inset overflow-hidden">
+                  <div className="w-full h-1 rounded-full bg-inset overflow-hidden">
                     <div
                       className="h-full rounded-full bg-purple-500 transition-all duration-500"
                       style={{ width: `${Math.max(item.percentage, 4)}%` }}
@@ -650,31 +650,31 @@ export function Metrics() {
 
       {/* TAB 2: BY AGENT BREAKDOWN */}
       {activeTab === 'spend' && (
-        <div className="pt-1">
+        <div>
           {agentCostBreakdown.length === 0 ? (
-            <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
+            <div className="py-8 text-center text-xs text-ink-muted bg-surface rounded-xl border border-line-subtle">
               No agent spend recorded yet. Run a production chain to generate usage.
             </div>
           ) : (
-            <div className="p-1 max-h-[460px] overflow-y-auto no-scrollbar space-y-3">
+            <div className="space-y-2">
               {agentCostBreakdown.map((agent, i) => (
                 <div
                   key={agent.id}
-                  className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-2xs hover:border-line transition-all space-y-2.5"
+                  className="rounded-xl border border-line-subtle bg-surface p-2.5 sm:p-3 shadow-2xs hover:border-line transition-all space-y-1.5"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-6 h-6 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 text-2xs font-bold flex items-center justify-center shrink-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-5 h-5 rounded-md bg-brand-500/10 text-brand-600 dark:text-brand-400 text-[10px] font-bold flex items-center justify-center shrink-0">
                         #{i + 1}
                       </span>
                       <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-bold text-ink truncate">{agent.name}</h4>
+                        <h4 className="text-xs font-bold text-ink truncate">{agent.name}</h4>
                         <p className="text-[10px] text-ink-muted font-mono">{formatCompact(agent.tokens)} tokens</p>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                      <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400">
                         {formatCurrency(agent.cost)}
                       </span>
                       <span className="text-[10px] text-ink-muted font-mono block">
@@ -683,7 +683,7 @@ export function Metrics() {
                     </div>
                   </div>
 
-                  <div className="w-full h-1.5 rounded-full bg-inset overflow-hidden">
+                  <div className="w-full h-1 rounded-full bg-inset overflow-hidden">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-all duration-500"
                       style={{ width: `${Math.max(agent.percentage, 4)}%` }}
@@ -698,20 +698,20 @@ export function Metrics() {
 
       {/* TAB 3: RECENT USAGE ACTIVITY STREAM */}
       {activeTab === 'activity' && (
-        <div className="pt-1">
+        <div>
           {groupedUsage.length === 0 ? (
-            <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
+            <div className="py-8 text-center text-xs text-ink-muted bg-surface rounded-xl border border-line-subtle">
               No recent usage entries found.
             </div>
           ) : (
-            <div className="p-1 max-h-[460px] overflow-y-auto no-scrollbar space-y-4">
+            <div className="space-y-3">
               {groupedUsage.map((group) => (
-                <div key={group.title} className="space-y-1.5">
+                <div key={group.title} className="space-y-1">
                   <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted px-1 block sticky top-0 bg-canvas/80 backdrop-blur-xs py-0.5 z-10">
                     {group.title}
                   </span>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {group.items.map((usage) => {
                       const agentName = usage.agent?.displayName || usage.agent?.name || 'Agent Execution';
                       return (
@@ -719,11 +719,11 @@ export function Metrics() {
                           key={usage.id}
                           type="button"
                           onClick={() => setSelectedUsage(usage)}
-                          className="w-full rounded-2xl border border-line-subtle bg-surface p-3 sm:p-3.5 shadow-2xs hover:border-line hover:bg-hover/40 transition-all flex items-center justify-between gap-3 text-left cursor-pointer active:scale-[0.99]"
+                          className="w-full rounded-xl border border-line-subtle bg-surface p-2.5 sm:p-3 shadow-2xs hover:border-line hover:bg-hover/40 transition-all flex items-center justify-between gap-2.5 text-left cursor-pointer active:scale-[0.99]"
                         >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
-                              <Bot size={15} />
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-7 h-7 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 flex items-center justify-center shrink-0">
+                              <Bot size={14} />
                             </div>
                             <div className="min-w-0">
                               <span className="text-xs font-bold text-ink block truncate">{agentName}</span>
@@ -744,7 +744,7 @@ export function Metrics() {
                                 {timeAgo(usage.createdAt)}
                               </span>
                             </div>
-                            <ChevronRight size={14} className="text-ink-muted" />
+                            <ChevronRight size={13} className="text-ink-muted" />
                           </div>
                         </button>
                       );
@@ -759,17 +759,17 @@ export function Metrics() {
 
       {/* TAB 4: PERFORMANCE & TOOL USAGE */}
       {activeTab === 'performance' && (
-        <div className="pt-1 space-y-4">
+        <div className="space-y-3">
           {/* Latency Breakdown */}
-          <div className="rounded-3xl border border-line-subtle bg-surface p-4.5 sm:p-5 shadow-2xs space-y-3">
+          <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs space-y-2">
             <span className="text-xs font-bold uppercase tracking-wider text-ink block">
               Response Time & Tail Latency
             </span>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {responseTimeByAgent.map((agent) => (
-                <div key={agent.name} className="p-3 rounded-xl bg-inset/50 border border-line-subtle flex items-center justify-between gap-2">
+                <div key={agent.name} className="p-2.5 rounded-lg bg-inset/50 border border-line-subtle flex items-center justify-between gap-2">
                   <span className="text-xs font-bold text-ink truncate">{agent.name}</span>
-                  <div className="text-2xs font-mono text-ink-muted flex items-center gap-3 shrink-0">
+                  <div className="text-2xs font-mono text-ink-muted flex items-center gap-2.5 shrink-0">
                     <span>Avg: <strong className="text-ink">{agent.avg}ms</strong></span>
                     <span>p95: <strong className="text-ink">{agent.p95}ms</strong></span>
                     <span className="text-brand-600 dark:text-brand-400 font-bold">{agent.calls} calls</span>
@@ -780,20 +780,20 @@ export function Metrics() {
           </div>
 
           {/* Top Tools */}
-          <div className="rounded-3xl border border-line-subtle bg-surface p-4.5 sm:p-5 shadow-2xs space-y-3">
+          <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs space-y-2">
             <span className="text-xs font-bold uppercase tracking-wider text-ink block">
               Top Tool Invocations
             </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {toolUsage.map((tool, i) => (
-                <div key={tool.name} className="p-2.5 rounded-xl bg-inset/50 border border-line-subtle flex items-center justify-between gap-2">
+                <div key={tool.name} className="p-2 rounded-lg bg-inset/50 border border-line-subtle flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="w-5 h-5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 font-mono text-[10px] font-bold flex items-center justify-center shrink-0">
                       #{i + 1}
                     </span>
                     <span className="text-xs font-mono font-semibold text-ink truncate">{tool.name}</span>
                   </div>
-                  <span className="px-2 py-0.5 rounded-md bg-surface border border-line text-2xs font-mono font-bold text-ink shrink-0">
+                  <span className="px-1.5 py-0.5 rounded-md bg-surface border border-line text-2xs font-mono font-bold text-ink shrink-0">
                     {tool.calls} calls
                   </span>
                 </div>
