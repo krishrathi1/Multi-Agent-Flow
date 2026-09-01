@@ -33,7 +33,6 @@ import { SkillsMarketplace } from './pages/SkillsMarketplace';
 import { McpHub } from './pages/McpHub';
 import { SoulTemplates } from './pages/SoulTemplates';
 import { Invitations } from './pages/Invitations';
-import { LandingPage } from './pages/landing/LandingPage';
 import { DocsLayout } from './pages/docs/DocsLayout';
 import { DocsGettingStarted } from './pages/docs/DocsGettingStarted';
 import { DocsMcpIntegration } from './pages/docs/DocsMcpIntegration';
@@ -64,7 +63,7 @@ function RootRedirect() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <LandingPage />;
+  return <Navigate to="/login" replace />;
 }
 
 export function App() {

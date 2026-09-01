@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { ProcessStatus, ApprovalMode } from '@prisma/client';
 import * as processService from '../services/process.service.js';
 import * as runner from '../services/agent-runner.service.js';
+import { prisma } from '../lib/prisma.js';
 import { validate } from '../middleware/validate.js';
+import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from '../services/git-deploy.service.js';
 
 const router = Router();
 
@@ -63,6 +65,23 @@ router.post('/', validate(createSchema), async (req, res) => {
   const vToken = req.headers['x-vercel-token'] || req.body.vercelToken;
   if (ghToken && typeof ghToken === 'string') process.env.GITHUB_TOKEN = ghToken;
   if (vToken && typeof vToken === 'string') process.env.VERCEL_TOKEN = vToken;
+
+  if (ghToken || vToken) {
+    try {
+      const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
+      const currentSettings = (org?.settings as any) || {};
+      await prisma.organization.update({
+        where: { id: req.organizationId! },
+        data: {
+          settings: {
+            ...currentSettings,
+            ...(ghToken ? { githubToken: ghToken } : {}),
+            ...(vToken ? { vercelToken: vToken } : {}),
+          },
+        },
+      });
+    } catch { /* ignore */ }
+  }
 
   const proc = await processService.createProcess(req.organizationId!, req.body);
   req.app.get('io')?.to(`org:${req.organizationId}`).emit('process:created', proc);
@@ -433,6 +452,100 @@ router.post('/github-create-repo', async (req, res) => {
       success: false,
       error: err.message || 'Network error connecting to GitHub API.',
     });
+  }
+});
+/** Fetch live Vercel & GitHub deployment logs for a process */
+router.get('/:id/deployment-logs', async (req, res) => {
+  const proc = await processService.getProcessById(paramId(req.params.id), req.organizationId!);
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+
+  const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
+  const orgSettings = (org?.settings as any) || {};
+  const vToken = process.env.VERCEL_TOKEN || process.env.PLATFORM_VERCEL_TOKEN || orgSettings.vercelToken;
+
+  if (!vToken) {
+    return res.json({
+      name: proc.name,
+      state: 'UNKNOWN',
+      logs: [{ date: Date.now(), text: 'No Vercel Token connected in Settings.', type: 'info' }],
+      diagnosis: 'Connect your Vercel Token in Settings to stream live cloud deployment logs.',
+    });
+  }
+
+  const logsData = await getVercelDeploymentLogs({
+    projectName: proc.name,
+    vercelToken: vToken,
+  });
+
+  res.json(logsData);
+});
+
+/** Trigger autonomous self-healing pass on process workspace and re-deploy */
+router.post('/:id/auto-heal', async (req, res) => {
+  const proc = await processService.getProcessById(paramId(req.params.id), req.organizationId!);
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+
+  const workspace = runner.workspaceFor(proc.id);
+  const healResult = await autoHealWorkspace(workspace);
+
+  const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
+  const orgSettings = (org?.settings as any) || {};
+  const ghToken = process.env.GITHUB_TOKEN || orgSettings.githubToken;
+  const vToken = process.env.VERCEL_TOKEN || orgSettings.vercelToken;
+
+  let pushResult: any = null;
+  let deployResult: any = null;
+
+  const repoMatch =
+    proc.prompt.match(/Target GitHub Repository:\s*([^\s\(\n]+)/i) ||
+    proc.prompt.match(/Action:\s*Create New GitHub Repository[\s\S]*?Name:\s*([^\n]+)/i);
+  let targetRepo = repoMatch ? repoMatch[1].trim() : null;
+  if (targetRepo && !targetRepo.includes('/')) targetRepo = `krishrathi1/${targetRepo}`;
+
+  if (targetRepo && ghToken) {
+    pushResult = await pushWorkspaceToGitHub({
+      workspace,
+      repoFullName: targetRepo,
+      githubToken: ghToken,
+      commitMessage: `fix(auto-heal): Autonomous zero-error patch by DevOps Auto-Healer Agent`,
+    });
+  }
+
+  if (vToken) {
+    deployResult = await deployToVercel({
+      workspace,
+      projectName: proc.name,
+      vercelToken: vToken,
+    });
+  }
+
+  res.json({
+    success: true,
+    fixedFiles: healResult.fixedFiles,
+    pushResult,
+    deployResult,
+    message: 'Auto-healing complete. Zero-error patch pushed to GitHub and re-deployed to Vercel.',
+  });
+});
+
+/** Ask AI: Analyzes error, recruits specialist agent if needed, applies zero-error fix & re-deploys */
+router.post('/:id/ask-ai-fix', async (req, res) => {
+  try {
+    const result = await processService.askAiAndSpawnFixerAgent({
+      processId: paramId(req.params.id),
+      organizationId: req.organizationId!,
+      userInstruction: req.body?.instruction,
+    });
+
+    const updated = await processService.getProcessById(paramId(req.params.id), req.organizationId!);
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('process:updated', updated);
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

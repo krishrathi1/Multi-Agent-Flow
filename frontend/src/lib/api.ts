@@ -263,6 +263,41 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    deploymentLogs: (id: string) =>
+      request<{
+        deploymentId?: string;
+        name: string;
+        state: 'QUEUED' | 'BUILDING' | 'INITIALIZING' | 'READY' | 'ERROR' | 'UNKNOWN';
+        previewUrl?: string;
+        logs: Array<{ date: number; text: string; type: string }>;
+        diagnosis?: string;
+        error?: string;
+      }>(`/processes/${id}/deployment-logs`),
+    autoHeal: (id: string) =>
+      request<{
+        success: boolean;
+        fixedFiles: string[];
+        pushResult?: any;
+        deployResult?: any;
+        message: string;
+      }>(`/processes/${id}/auto-heal`, { method: 'POST' }),
+    askAiFix: (id: string, instruction?: string) =>
+      request<{
+        success: boolean;
+        diagnosis: string;
+        needsNewAgent: boolean;
+        agentSpawned?: {
+          id: string;
+          displayName: string;
+          avatar: string;
+          processRole: string;
+          processStage: number;
+        };
+        fixedFiles: string[];
+        pushResult?: any;
+        deployResult?: any;
+        message: string;
+      }>(`/processes/${id}/ask-ai-fix`, { method: 'POST', body: JSON.stringify({ instruction }) }),
   },
 
   auth: {

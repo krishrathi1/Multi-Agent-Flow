@@ -1,4 +1,5 @@
 ﻿import { cn } from '../../lib/utils';
+import { Sparkles } from 'lucide-react';
 
 interface HourglassLoaderProps {
   size?: number;
@@ -6,78 +7,53 @@ interface HourglassLoaderProps {
   label?: string;
 }
 
-export function HourglassLoader({ size = 52, className, label }: HourglassLoaderProps) {
+export function HourglassLoader({ size = 56, className, label }: HourglassLoaderProps) {
+  const scaledSize = Math.max(size, 48);
+
   return (
-    <div className={cn('inline-flex flex-col items-center justify-center gap-3 select-none', className)}>
+    <div className={cn('inline-flex flex-col items-center justify-center gap-4 select-none', className)}>
       <div
-        style={{ width: size, height: size * 1.3 }}
-        className="relative flex items-center justify-center animate-[hourglass-flip_3s_cubic-bezier(0.45,0.05,0.55,0.95)_infinite]"
+        style={{ width: scaledSize, height: scaledSize }}
+        className="relative flex items-center justify-center"
       >
-        <svg
-          viewBox="0 0 100 130"
-          className="w-full h-full drop-shadow-xs"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          {/* Top Cap */}
-          <rect x="15" y="6" width="70" height="9" rx="4.5" fill="#ea580c" />
+        {/* Ambient Glow Backdrop */}
+        <div
+          className="absolute inset-0 rounded-full bg-gradient-to-tr from-indigo-600/30 via-purple-600/25 to-cyan-500/20 blur-xl animate-[quantum-pulse_3s_ease-in-out_infinite]"
+        />
 
-          {/* Bottom Cap */}
-          <rect x="15" y="115" width="70" height="9" rx="4.5" fill="#ea580c" />
+        {/* Outer Orbital Ring 1 */}
+        <div
+          className="absolute inset-0 rounded-full border border-indigo-500/40 border-t-indigo-400 border-r-transparent animate-[quantum-spin-cw_4s_linear_infinite]"
+        />
 
-          {/* Glass Contour / Bulb */}
-          <path
-            d="M22 15 Q22 45 46 65 Q22 85 22 115 L78 115 Q78 85 54 65 Q78 45 78 15 Z"
-            fill="currentColor"
-            className="text-slate-100 dark:text-slate-800/80"
-            stroke="#cbd5e1"
-            strokeWidth="2.5"
-            strokeLinejoin="round"
-          />
+        {/* Middle Orbital Ring 2 (Counter Rotating) */}
+        <div
+          className="absolute inset-1.5 rounded-full border border-purple-500/40 border-b-purple-400 border-l-transparent animate-[quantum-spin-ccw_3s_ease-in-out_infinite]"
+        />
 
-          {/* Glass Shine Highlight */}
-          <path
-            d="M26 20 Q26 40 44 58"
-            stroke="white"
-            strokeWidth="2"
-            strokeLinecap="round"
-            className="opacity-70"
-          />
+        {/* Inner Gyro Ring 3 */}
+        <div
+          className="absolute inset-3 rounded-full border border-cyan-500/40 border-t-cyan-300 border-b-transparent animate-[quantum-spin-cw_2s_linear_infinite]"
+        />
 
-          {/* Top Sand draining */}
-          <g className="animate-[sand-drain_3s_linear_infinite] origin-bottom">
-            <path
-              d="M28 22 Q50 34 72 22 L62 50 Q50 56 38 50 Z"
-              fill="#ea580c"
-            />
-          </g>
+        {/* Quantum Energy Orbiting Particle */}
+        <div
+          className="absolute w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee] animate-[quantum-particle_2.5s_linear_infinite]"
+        />
 
-          {/* Continuous Sand Stream */}
-          <line
-            x1="50"
-            y1="55"
-            x2="50"
-            y2="108"
-            stroke="#ea580c"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            className="animate-[sand-stream_3s_ease-in-out_infinite]"
-          />
-
-          {/* Bottom Sand filling */}
-          <g className="animate-[sand-fill_3s_linear_infinite] origin-bottom">
-            <path
-              d="M26 113 Q50 92 74 113 Z"
-              fill="#ea580c"
-            />
-          </g>
-        </svg>
+        {/* Center Nucleus AI Core */}
+        <div className="relative z-10 w-4 h-4 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-400 shadow-[0_0_12px_rgba(129,140,248,0.9)] animate-[quantum-pulse_2s_ease-in-out_infinite] flex items-center justify-center">
+          <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping opacity-75" />
+        </div>
       </div>
 
       {label && (
-        <span className="text-xs font-semibold text-ink-muted animate-pulse">
-          {label}
-        </span>
+        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface/80 dark:bg-slate-900/80 border border-line/60 dark:border-indigo-500/20 shadow-xs backdrop-blur-md">
+          <Sparkles size={13} className="text-indigo-500 dark:text-indigo-400 animate-spin animate-duration-[4s]" />
+          <span className="text-xs font-semibold tracking-wide bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 dark:from-indigo-300 dark:via-purple-300 dark:to-cyan-300 bg-clip-text text-transparent bg-[length:200%_auto] animate-[shimmer-text_3s_linear_infinite]">
+            {label}
+          </span>
+        </div>
       )}
     </div>
   );

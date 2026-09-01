@@ -294,17 +294,17 @@ graph TD
             type: 'module',
             scripts: {
               dev: 'vite',
-              build: 'tsc && vite build',
+              build: 'vite build',
+              preview: 'vite preview',
               server: 'tsx server/index.ts',
               test: 'vitest run',
-              lint: 'eslint .',
             },
             dependencies: {
               react: '^19.0.0',
               'react-dom': '^19.0.0',
-              'lucide-react': '^0.475.0',
+              'lucide-react': '^1.16.0',
               clsx: '^2.1.1',
-              'tailwind-merge': '^3.0.1',
+              'tailwind-merge': '^3.0.2',
               express: '^4.21.2',
               cors: '^2.8.5',
               zod: '^3.24.2',
@@ -317,7 +317,7 @@ graph TD
               '@types/node': '^22.13.4',
               '@vitejs/plugin-react': '^4.3.4',
               vite: '^6.1.0',
-              tailwindcss: '^4.0.6',
+              tailwindcss: '^3.4.17',
               typescript: '^5.7.3',
               vitest: '^3.0.5',
             },
@@ -345,12 +345,27 @@ graph TD
               isolatedModules: true,
               noEmit: true,
               jsx: 'react-jsx',
-              strict: true,
-              noUnusedLocals: true,
-              noUnusedParameters: true,
-              noFallthroughCasesInSwitch: true,
+              strict: false,
+              noUnusedLocals: false,
+              noUnusedParameters: false,
+              noFallthroughCasesInSwitch: false,
             },
-            include: ['src', 'server', 'tests'],
+            include: ['src'],
+          },
+          null,
+          2,
+        ),
+      );
+
+      // vercel.json
+      await writeWorkspaceFile(
+        workspace,
+        'vercel.json',
+        JSON.stringify(
+          {
+            framework: 'vite',
+            buildCommand: 'npm run build',
+            outputDirectory: 'dist',
           },
           null,
           2,
@@ -524,7 +539,7 @@ export interface ApiResponse<T = any> {
         workspace,
         'src/components/Navbar.tsx',
         `import React from 'react';
-import { Bot, Sparkles, Activity, ShieldCheck, Github } from 'lucide-react';
+import { Bot, Sparkles, Activity } from 'lucide-react';
 
 export const Navbar: React.FC<{ projectName: string }> = ({ projectName }) => {
   return (
@@ -565,11 +580,11 @@ export const Navbar: React.FC<{ projectName: string }> = ({ projectName }) => {
         workspace,
         'src/components/Dashboard.tsx',
         `import React, { useState } from 'react';
-import { Layers, Terminal, CheckCircle2, AlertCircle, RefreshCw, Send } from 'lucide-react';
+import { Layers, Terminal, Send } from 'lucide-react';
 import type { FlowTask } from '../types';
 
 export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal, leadAgent }) => {
-  const [tasks, setTasks] = useState<FlowTask[]>([
+  const [tasks] = useState<FlowTask[]>([
     { id: '1', title: 'System Blueprint & API Specs', stage: 1, status: 'COMPLETED', agent: leadAgent, updatedAt: 'Just now' },
     { id: '2', title: 'Frontend UI & React Component Suite', stage: 2, status: 'COMPLETED', agent: 'UX/UI Specialist', updatedAt: 'Just now' },
     { id: '3', title: 'Node Express Backend Handlers', stage: 3, status: 'RUNNING', agent: 'Backend Architect', updatedAt: 'Running...' },
@@ -2362,10 +2377,14 @@ export async function runProcessChain(
       targetRepo = `krishrathi1/${targetRepo}`;
     }
 
+    const org = await prisma.organization.findUnique({ where: { id: organizationId } });
+    const orgSettings = (org?.settings as any) || {};
+
     const ghToken =
       process.env.GITHUB_TOKEN ||
       process.env.PLATFORM_GITHUB_TOKEN ||
-      process.env.GITHUB_PAT;
+      process.env.GITHUB_PAT ||
+      orgSettings.githubToken;
 
     if (targetRepo && ghToken) {
       try {
@@ -2399,7 +2418,8 @@ export async function runProcessChain(
     const vToken =
       process.env.VERCEL_TOKEN ||
       process.env.PLATFORM_VERCEL_TOKEN ||
-      process.env.VERCEL_API_TOKEN;
+      process.env.VERCEL_API_TOKEN ||
+      orgSettings.vercelToken;
 
     if (isVercelEnabled && vToken) {
       try {

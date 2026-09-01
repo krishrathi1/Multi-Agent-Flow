@@ -20,6 +20,7 @@ import {
   Radio,
   ArrowRight,
   ShieldCheck,
+  Cloud,
 } from 'lucide-react';
 import { cn, timeAgo } from '../lib/utils';
 import { tones } from '../lib/design';
@@ -30,6 +31,7 @@ import { RunPanel } from '../components/process/RunPanel';
 import { ChainSettingsModal } from '../components/process/ChainSettingsModal';
 import { ProcessReportModal } from '../components/process/ProcessReportModal';
 import { EditProcessModal } from '../components/process/EditProcessModal';
+import { DeploymentLogsModal } from '../components/process/DeploymentLogsModal';
 import { api } from '../lib/api';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button, ButtonLink } from '../components/ui/Button';
@@ -57,6 +59,7 @@ function ProcessCard({
   onPause,
   onRun,
   onReport,
+  onLogs,
   onEdit,
   onSettings,
   busy,
@@ -68,6 +71,7 @@ function ProcessCard({
   onPause: (p: Process) => void;
   onRun: (p: Process) => void;
   onReport: (p: Process) => void;
+  onLogs: (p: Process) => void;
   onEdit: (p: Process) => void;
   onSettings: (p: Process) => void;
   busy: boolean;
@@ -246,6 +250,17 @@ function ProcessCard({
             Report
           </Button>
 
+          <Button
+            variant="secondary"
+            size="xs"
+            icon={Cloud}
+            onClick={() => onLogs(process)}
+            className="text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10 shadow-2xs font-semibold"
+            aria-label={`View deployment logs for ${process.name}`}
+          >
+            Cloud Logs
+          </Button>
+
           <Link
             to={`/activity?processId=${process.id}`}
             className="inline-flex items-center gap-1 rounded-xl border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-ink-muted hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-500/30 transition-all shadow-2xs shrink-0"
@@ -314,6 +329,7 @@ export function Processes() {
   const [runError, setRunError] = useState<string | null>(null);
   const [runTarget, setRunTarget] = useState<Process | null>(null);
   const [reportTarget, setReportTarget] = useState<Process | null>(null);
+  const [logsTarget, setLogsTarget] = useState<Process | null>(null);
   const [editTarget, setEditTarget] = useState<Process | null>(null);
   const [settingsTarget, setSettingsTarget] = useState<Process | null>(null);
   const [sites, setSites] = useState<Record<string, boolean>>({});
@@ -459,6 +475,7 @@ export function Processes() {
                 onPause={(x) => runControl(x, 'pause')}
                 onRun={setRunTarget}
                 onReport={setReportTarget}
+                onLogs={setLogsTarget}
                 onEdit={setEditTarget}
                 onSettings={setSettingsTarget}
                 hasSite={!!sites[p.id]}
@@ -495,6 +512,12 @@ export function Processes() {
           onClose={() => setReportTarget(null)}
         />
       )}
+
+      <DeploymentLogsModal
+        process={logsTarget}
+        isOpen={!!logsTarget}
+        onClose={() => setLogsTarget(null)}
+      />
 
       {runTarget && (
         <RunPanel

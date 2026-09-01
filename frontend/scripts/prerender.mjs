@@ -20,15 +20,6 @@ const PORT = 4173;
 
 // Public routes to pre-render
 const ROUTES = [
-  '/',
-  '/docs',
-  '/docs/agent-management',
-  '/docs/mcp-integration',
-  '/docs/remote-agents',
-  '/docs/alerts',
-  '/docs/api-reference',
-  '/docs/organizations',
-  '/docs/websocket-events',
   '/login',
   '/signup',
 ];
