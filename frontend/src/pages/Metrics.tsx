@@ -607,7 +607,7 @@ export function Metrics() {
               No model usage records found for this period.
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="max-h-[380px] overflow-y-auto no-scrollbar space-y-2 p-0.5">
               {modelBreakdown.map((item) => (
                 <div
                   key={item.model}
@@ -656,7 +656,7 @@ export function Metrics() {
               No agent spend recorded yet. Run a production chain to generate usage.
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="max-h-[380px] overflow-y-auto no-scrollbar space-y-2 p-0.5">
               {agentCostBreakdown.map((agent, i) => (
                 <div
                   key={agent.id}
@@ -704,7 +704,7 @@ export function Metrics() {
               No recent usage entries found.
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="max-h-[340px] sm:max-h-[350px] overflow-y-auto no-scrollbar space-y-3 p-0.5">
               {groupedUsage.map((group) => (
                 <div key={group.title} className="space-y-1">
                   <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted px-1 block sticky top-0 bg-canvas/80 backdrop-blur-xs py-0.5 z-10">
