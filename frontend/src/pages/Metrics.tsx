@@ -569,7 +569,7 @@ export function Metrics() {
       </div>
 
       {/* Section View Tabs: Models | Agents | Activity | Performance */}
-      <div className="border-b border-line-subtle flex items-center gap-2 overflow-x-auto no-scrollbar pt-2">
+      <div className="border-b border-line-subtle flex items-center gap-2 overflow-x-auto no-scrollbar pt-2 mb-3">
         {(
           [
             { id: 'models', label: 'By Model', count: modelBreakdown.length },
@@ -583,7 +583,7 @@ export function Metrics() {
             type="button"
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'pb-2.5 text-xs font-bold tracking-tight border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5',
+              'pb-2.5 px-1 text-xs font-bold tracking-tight border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5',
               activeTab === tab.id
                 ? 'border-brand-500 text-brand-600 dark:text-brand-400'
                 : 'border-transparent text-ink-muted hover:text-ink'
@@ -601,17 +601,17 @@ export function Metrics() {
 
       {/* TAB 1: BY MODEL BREAKDOWN */}
       {activeTab === 'models' && (
-        <div>
+        <div className="pt-1">
           {modelBreakdown.length === 0 ? (
             <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
               No model usage records found for this period.
             </div>
           ) : (
-            <div className="max-h-[300px] sm:max-h-[340px] overflow-y-auto no-scrollbar pr-0.5 space-y-2">
+            <div className="p-1 max-h-[460px] overflow-y-auto no-scrollbar space-y-3">
               {modelBreakdown.map((item) => (
                 <div
                   key={item.model}
-                  className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line transition-all space-y-2"
+                  className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-2xs hover:border-line transition-all space-y-2.5"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -650,17 +650,17 @@ export function Metrics() {
 
       {/* TAB 2: BY AGENT BREAKDOWN */}
       {activeTab === 'spend' && (
-        <div>
+        <div className="pt-1">
           {agentCostBreakdown.length === 0 ? (
             <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
               No agent spend recorded yet. Run a production chain to generate usage.
             </div>
           ) : (
-            <div className="max-h-[300px] sm:max-h-[340px] overflow-y-auto no-scrollbar pr-0.5 space-y-2">
+            <div className="p-1 max-h-[460px] overflow-y-auto no-scrollbar space-y-3">
               {agentCostBreakdown.map((agent, i) => (
                 <div
                   key={agent.id}
-                  className="rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line transition-all space-y-2"
+                  className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-2xs hover:border-line transition-all space-y-2.5"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -698,13 +698,13 @@ export function Metrics() {
 
       {/* TAB 3: RECENT USAGE ACTIVITY STREAM */}
       {activeTab === 'activity' && (
-        <div>
+        <div className="pt-1">
           {groupedUsage.length === 0 ? (
             <div className="py-12 text-center text-xs text-ink-muted bg-surface rounded-2xl border border-line-subtle">
               No recent usage entries found.
             </div>
           ) : (
-            <div className="max-h-[320px] sm:max-h-[360px] overflow-y-auto no-scrollbar pr-0.5 space-y-4">
+            <div className="p-1 max-h-[460px] overflow-y-auto no-scrollbar space-y-4">
               {groupedUsage.map((group) => (
                 <div key={group.title} className="space-y-1.5">
                   <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted px-1 block sticky top-0 bg-canvas/80 backdrop-blur-xs py-0.5 z-10">
@@ -759,7 +759,7 @@ export function Metrics() {
 
       {/* TAB 4: PERFORMANCE & TOOL USAGE */}
       {activeTab === 'performance' && (
-        <div className="space-y-4">
+        <div className="pt-1 space-y-4">
           {/* Latency Breakdown */}
           <div className="rounded-3xl border border-line-subtle bg-surface p-4.5 sm:p-5 shadow-2xs space-y-3">
             <span className="text-xs font-bold uppercase tracking-wider text-ink block">
