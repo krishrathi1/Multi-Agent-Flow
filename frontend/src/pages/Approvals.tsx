@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { api } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
 import { cn, timeAgo } from '@/lib/utils';
 import type { Approval, Board, ApprovalStatus } from '@/types';
 import {
@@ -20,8 +21,11 @@ import {
   Sparkles,
   Bot,
   Activity,
+  RefreshCw,
+  Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
 import { LiveWaveform } from '@/components/ui/LiveIcon';
 
@@ -145,40 +149,81 @@ export function Approvals() {
   const [boards, setBoards] = useState<Board[]>([]);
   const [stats, setStats] = useState<ApprovalStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [creatingTest, setCreatingTest] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ApprovalStatus | 'ALL'>('ALL');
   const [boardFilter, setBoardFilter] = useState<string>('ALL');
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isManualRefresh = false) => {
+    if (isManualRefresh) setRefreshing(true);
     try {
       const params: Record<string, string> = {};
       if (statusFilter !== 'ALL') params.status = statusFilter;
       if (boardFilter !== 'ALL') params.boardId = boardFilter;
 
       const [approvalsData, statsData, boardsData] = await Promise.all([
-        api.approvals.list(params),
-        api.approvals.stats(),
-        api.boards.list(),
+        api.approvals.list(params).catch(() => []),
+        api.approvals.stats().catch(() => null),
+        api.boards.list().catch(() => []),
       ]);
-      setApprovals(approvalsData);
+      setApprovals(Array.isArray(approvalsData) ? approvalsData : []);
       setStats(statsData);
-      setBoards(boardsData);
+      setBoards(Array.isArray(boardsData) ? boardsData : []);
     } catch (err) {
       console.error('Failed to fetch approvals:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [statusFilter, boardFilter]);
 
+  // Real-time socket events & fallback polling interval
   useEffect(() => {
     fetchData();
+
+    const socket = getSocket();
+    const handleUpdate = () => fetchData(false);
+
+    socket.on('approval:created', handleUpdate);
+    socket.on('approval:resolved', handleUpdate);
+    socket.on('approval:updated', handleUpdate);
+    socket.on('run:awaiting-approval', handleUpdate);
+    socket.on('gate:pending', handleUpdate);
+    socket.on('gate:decided', handleUpdate);
+    socket.on('activity:new', handleUpdate);
+
+    setSocketConnected(socket.connected);
+    const onConn = () => setSocketConnected(true);
+    const onDis = () => setSocketConnected(false);
+    socket.on('connect', onConn);
+    socket.on('disconnect', onDis);
+
+    // Auto-sync polling every 5s to guarantee fresh state
+    const interval = setInterval(() => {
+      fetchData(false);
+    }, 5000);
+
+    return () => {
+      socket.off('approval:created', handleUpdate);
+      socket.off('approval:resolved', handleUpdate);
+      socket.off('approval:updated', handleUpdate);
+      socket.off('run:awaiting-approval', handleUpdate);
+      socket.off('gate:pending', handleUpdate);
+      socket.off('gate:decided', handleUpdate);
+      socket.off('activity:new', handleUpdate);
+      socket.off('connect', onConn);
+      socket.off('disconnect', onDis);
+      clearInterval(interval);
+    };
   }, [fetchData]);
 
   const handleApprove = async (id: string) => {
     try {
       const updated = await api.approvals.approve(id);
       setApprovals((prev) => prev.map((a) => (a.id === id ? updated : a)));
-      const newStats = await api.approvals.stats();
-      setStats(newStats);
+      const newStats = await api.approvals.stats().catch(() => null);
+      if (newStats) setStats(newStats);
     } catch (err) {
       console.error('Failed to approve:', err);
     }
@@ -188,10 +233,38 @@ export function Approvals() {
     try {
       const updated = await api.approvals.reject(id);
       setApprovals((prev) => prev.map((a) => (a.id === id ? updated : a)));
-      const newStats = await api.approvals.stats();
-      setStats(newStats);
+      const newStats = await api.approvals.stats().catch(() => null);
+      if (newStats) setStats(newStats);
     } catch (err) {
       console.error('Failed to reject:', err);
+    }
+  };
+
+  const handleCreateTestApproval = async () => {
+    try {
+      setCreatingTest(true);
+      let targetBoardId = boards[0]?.id;
+      if (!targetBoardId) {
+        const createdBoard = await api.boards.create({ name: 'Production Operations' });
+        targetBoardId = createdBoard.id;
+      }
+      await api.approvals.create({
+        boardId: targetBoardId,
+        actionType: 'DEPLOY_CODE_RELEASE',
+        confidence: 0.94,
+        payload: {
+          release: 'v1.4.2-production',
+          trigger: 'Autonomous Multi-Agent CI/CD Chain',
+          environment: 'production',
+          automatedChecksPassed: 18,
+          requiresHumanSignOff: true,
+        },
+      });
+      await fetchData(false);
+    } catch (err) {
+      console.error('Failed to create test approval:', err);
+    } finally {
+      setCreatingTest(false);
     }
   };
 
@@ -208,11 +281,37 @@ export function Approvals() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         icon={ShieldCheck}
-        title="Approvals"
+        title="Approvals & Audit Gate"
         description="Human-in-the-loop review pipeline and audit gate for sensitive autonomous agent executions"
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge tone={socketConnected ? 'success' : 'neutral'} dot pulse={socketConnected}>
+              {socketConnected ? 'Live Real-Time' : 'Offline'}
+            </Badge>
+            <Button
+              variant="secondary"
+              size="xs"
+              icon={RefreshCw}
+              loading={refreshing}
+              onClick={() => fetchData(true)}
+              aria-label="Refresh approvals"
+            >
+              Refresh
+            </Button>
+            <Button
+              variant="primary"
+              size="xs"
+              icon={Plus}
+              loading={creatingTest}
+              onClick={handleCreateTestApproval}
+            >
+              Simulate Request
+            </Button>
+          </div>
+        }
       />
 
       {/* 4 Stats Cards */}

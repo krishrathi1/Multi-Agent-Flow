@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { intParam } from '../lib/query.js';
 import * as approvalService from '../services/approval.service.js';
+import * as runner from '../services/agent-runner.service.js';
+import { prisma } from '../lib/prisma.js';
 import type { ApprovalStatus } from '@prisma/client';
 
 const router = Router();
@@ -43,13 +45,56 @@ router.post('/', async (req, res) => {
 
 router.post('/:id/approve', async (req, res) => {
   const approval = await approvalService.resolveApproval(req.params.id, req.organizationId!, 'APPROVED');
-  req.app.get('io')?.to(`org:${req.organizationId}`).emit('approval:resolved', approval);
+  const io = req.app.get('io');
+  io?.to(`org:${req.organizationId}`).emit('approval:resolved', approval);
+
+  // If this approval was a stage gate approval, also resolve chainApproval and resume chain
+  if (approval.actionType === 'STAGE_GATE_APPROVAL' && approval.payload && typeof approval.payload === 'object') {
+    const payload = approval.payload as any;
+    if (payload.processId) {
+      const gate = await prisma.chainApproval.findFirst({
+        where: { processId: payload.processId, status: 'PENDING', organizationId: req.organizationId! },
+      });
+      if (gate) {
+        await prisma.chainApproval.update({
+          where: { id: gate.id },
+          data: { status: 'APPROVED', decidedAt: new Date() },
+        });
+        const emit = (event: string, p: unknown) =>
+          io?.to(`org:${req.organizationId}`).emit(event, p);
+        if (!runner.isRunning(gate.processId)) {
+          runner.startChainRun(gate.processId, req.organizationId!, emit, 'RETRY', gate.stage);
+        }
+        emit('gate:decided', { id: gate.id, status: 'APPROVED', processId: gate.processId });
+      }
+    }
+  }
+
   res.json(approval);
 });
 
 router.post('/:id/reject', async (req, res) => {
   const approval = await approvalService.resolveApproval(req.params.id, req.organizationId!, 'REJECTED');
-  req.app.get('io')?.to(`org:${req.organizationId}`).emit('approval:resolved', approval);
+  const io = req.app.get('io');
+  io?.to(`org:${req.organizationId}`).emit('approval:resolved', approval);
+
+  // If this approval was a stage gate approval, mark chainApproval as REJECTED
+  if (approval.actionType === 'STAGE_GATE_APPROVAL' && approval.payload && typeof approval.payload === 'object') {
+    const payload = approval.payload as any;
+    if (payload.processId) {
+      const gate = await prisma.chainApproval.findFirst({
+        where: { processId: payload.processId, status: 'PENDING', organizationId: req.organizationId! },
+      });
+      if (gate) {
+        await prisma.chainApproval.update({
+          where: { id: gate.id },
+          data: { status: 'REJECTED', decidedAt: new Date() },
+        });
+        io?.to(`org:${req.organizationId}`).emit('gate:decided', { id: gate.id, status: 'REJECTED', processId: gate.processId });
+      }
+    }
+  }
+
   res.json(approval);
 });
 

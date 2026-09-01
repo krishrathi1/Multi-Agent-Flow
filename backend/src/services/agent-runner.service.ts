@@ -2063,7 +2063,7 @@ async function requestStageApproval(
   handoffs: Array<{ agent: string; summary: string }>,
 ): Promise<void> {
   const last = handoffs[handoffs.length - 1];
-  await prisma.chainApproval.create({
+  const chainApproval = await prisma.chainApproval.create({
     data: {
       organizationId,
       processId: proc.id,
@@ -2079,6 +2079,49 @@ ${last.summary.slice(0, 1500)}` : ''),
       status: ApprovalStatus.PENDING,
     },
   });
+
+  // Mirror into unified Board Approvals dashboard
+  try {
+    const agent = await prisma.agent.findUnique({ where: { id: agentId }, select: { boardId: true } });
+    let boardId = agent?.boardId;
+    if (!boardId) {
+      const firstBoard = await prisma.board.findFirst({ where: { organizationId } });
+      boardId = firstBoard?.id;
+    }
+    if (!boardId) {
+      const newBoard = await prisma.board.create({
+        data: {
+          organizationId,
+          name: 'Production Operations',
+          slug: 'production-operations',
+          description: 'Automated Multi-Agent Production Workspace',
+        },
+      });
+      boardId = newBoard.id;
+    }
+
+    if (boardId) {
+      await prisma.approval.create({
+        data: {
+          boardId,
+          agentId,
+          actionType: 'STAGE_GATE_APPROVAL',
+          confidence: 0.95,
+          payload: {
+            processId: proc.id,
+            processName: proc.name,
+            runId,
+            stage,
+            gateId: chainApproval.id,
+            lastSummary: last?.summary?.slice(0, 500),
+          },
+          status: 'PENDING',
+        },
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Could not mirror stage approval to board approval');
+  }
 
   await prisma.activity.create({
     data: {
