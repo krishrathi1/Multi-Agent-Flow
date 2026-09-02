@@ -44,6 +44,7 @@ import processExtrasRoutes from './routes/process-extras.js';
 import codeIntelligenceRoutes from './routes/code-intelligence.js';
 import promptRoutes from './routes/prompts.js';
 import gitWebhookRoutes from './routes/git-webhook.js';
+import incidentRoutes from './routes/incidents.js';
 import { startScheduler } from './services/scheduler.js';
 import { startGitWatcher } from './services/git-watcher.service.js';
 import { recoverOrphanedRuns } from './services/agent-runner.service.js';
@@ -163,6 +164,9 @@ app.use('/api/code-intelligence', requireAuth, codeIntelligenceRoutes);
 
 // Prompt Engineering (template registry + playground)
 app.use('/api/prompts', requireAuth, promptRoutes);
+
+// Autonomous DevOps Incident Investigation Agent & Doctor
+app.use('/api/incidents', requireAuth, incidentRoutes);
 
 // Global error handler for unhandled async errors in routes
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

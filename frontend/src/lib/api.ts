@@ -561,6 +561,13 @@ export const api = {
     create: (data: { boardId: string; taskId?: string; agentId?: string; actionType: string; payload?: Record<string, unknown>; confidence?: number }) =>
       request<Approval>('/approvals', { method: 'POST', body: JSON.stringify(data) }),
   },
+  incidents: {
+    list: () => request<any[]>('/incidents'),
+    investigate: (data: { alertTitle?: string; symptom?: string; scenario?: string }) =>
+      request<any>('/incidents/investigate', { method: 'POST', body: JSON.stringify(data) }),
+    simulate: (scenario: string) =>
+      request<any>('/incidents/simulate', { method: 'POST', body: JSON.stringify({ scenario }) }),
+  },
   agentTokens: {
     generate: (agentId: string) =>
       request<{ token: string }>(`/agents/${agentId}/token`, { method: 'POST' }),
