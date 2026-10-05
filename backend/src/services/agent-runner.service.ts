@@ -1234,9 +1234,34 @@ function systemPromptFor(agent: {
   description: string;
   soulMd: string | null;
   processRole: string | null;
+  agentSkills?: Array<{
+    enabled: boolean;
+    customName?: string | null;
+    customDescription?: string | null;
+    skill: { name: string; description: string; category: string; risk?: string; metadata?: any };
+  }>;
 }): string {
-  return [
+  const parts = [
     agent.soulMd?.trim() || `# ${agent.displayName}\n\n${agent.description}`,
+  ];
+
+  const activeSkills = agent.agentSkills?.filter((s) => s.enabled) || [];
+  if (activeSkills.length > 0) {
+    parts.push(
+      '',
+      '## Active Skills & Domain Capabilities (Skill Library)',
+      'You are equipped with the following specialized skills, toolkits, and best practices from the organization skill library:',
+      ...activeSkills.map((s) => {
+        const name = s.customName || s.skill.name;
+        const desc = s.customDescription || s.skill.description;
+        return `- **${name}** [${s.skill.category.toUpperCase()}]: ${desc}`;
+      }),
+      '',
+      'Incorporate these skill methodologies, safety protocols, and implementation standards into all code generation and stage tasks.',
+    );
+  }
+
+  parts.push(
     '',
     '## Execution rules',
     'You are working inside a shared team workspace (your current directory).',
@@ -1245,7 +1270,9 @@ function systemPromptFor(agent: {
     'Do not ask questions — you are running unattended. Make reasonable',
     'decisions and record them. Finish with a 2-3 sentence summary of what',
     'you produced and which files you created or changed.',
-  ].join('\n');
+  );
+
+  return parts.join('\n');
 }
 
 /** Builds the task prompt, including what previous stages handed over. */
@@ -1302,6 +1329,12 @@ async function runStep(
     soulMd: string | null;
     processRole: string | null;
     processStage: number;
+    agentSkills?: Array<{
+      enabled: boolean;
+      customName?: string | null;
+      customDescription?: string | null;
+      skill: { name: string; description: string; category: string; risk?: string; metadata?: any };
+    }>;
   },
   organizationId: string,
   processId: string,
@@ -1312,6 +1345,16 @@ async function runStep(
 ): Promise<RunStepResult> {
   const workspace = workspaceFor(processId);
   await fs.mkdir(workspace, { recursive: true });
+
+  // Ensure agent skills are loaded for system prompt injection
+  if (!agent.agentSkills) {
+    try {
+      agent.agentSkills = (await prisma.agentSkill.findMany({
+        where: { agentId: agent.id },
+        include: { skill: true },
+      })) as any;
+    } catch { /* ignore */ }
+  }
 
   const session = await prisma.session.create({
     data: {
@@ -2158,7 +2201,16 @@ export async function runProcessChain(
 ): Promise<ChainRunResult | null> {
   const proc = await prisma.process.findFirst({
     where: { id: processId, organizationId },
-    include: { agents: { orderBy: { processStage: 'asc' } } },
+    include: {
+      agents: {
+        orderBy: { processStage: 'asc' },
+        include: {
+          agentSkills: {
+            include: { skill: true },
+          },
+        },
+      },
+    },
   });
   if (!proc) return null;
 

@@ -310,14 +310,41 @@ function buildSystemPrompt(agent: {
   description: string;
   soulMd: string | null;
   processRole: string | null;
+  agentSkills?: Array<{
+    enabled: boolean;
+    customName?: string | null;
+    customDescription?: string | null;
+    skill: { name: string; description: string; category: string };
+  }>;
 }): string {
-  return [
+  const parts = [
     agent.soulMd?.trim() || `# ${agent.displayName}\n\n${agent.description}`,
+  ];
+
+  const activeSkills = agent.agentSkills?.filter((s) => s.enabled) || [];
+  if (activeSkills.length > 0) {
+    parts.push(
+      '',
+      '## Active Skills & Domain Capabilities (from Skill Library)',
+      'You are equipped with the following specialized skills, toolkits, and best practices:',
+      ...activeSkills.map((s) => {
+        const name = s.customName || s.skill.name;
+        const desc = s.customDescription || s.skill.description;
+        return `- **${name}** (${s.skill.category}): ${desc}`;
+      }),
+      '',
+      'Apply these skills actively when answering questions, reviewing code, and generating solutions.',
+    );
+  }
+
+  parts.push(
     '',
     '## Conversation rules',
     `You are "${agent.displayName}"${agent.processRole ? `, the ${agent.processRole} agent` : ''}.`,
     'Stay in that role. Answer directly and concisely in the operator\'s language.',
-  ].join('\n');
+  );
+
+  return parts.join('\n');
 }
 
 /**
@@ -594,6 +621,11 @@ export async function chatLocally(
 ): Promise<{ result: string; model: string; sessionKey: string } | null> {
   const agent = await prisma.agent.findFirst({
     where: { id: agentId, organizationId },
+    include: {
+      agentSkills: {
+        include: { skill: true },
+      },
+    },
   });
   if (!agent) return null;
 

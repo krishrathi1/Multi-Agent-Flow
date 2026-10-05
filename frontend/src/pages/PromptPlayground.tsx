@@ -435,10 +435,47 @@ export function PromptPlayground() {
             </div>
           )}
 
+          {/* Live AI Execution Output */}
+          {testResult?.output && (
+            <div className="bg-surface rounded-xl border border-brand-500/30 overflow-hidden shadow-xs animate-fade-in">
+              <div className="flex items-center justify-between px-4 py-3 bg-brand-500/10 border-b border-brand-500/20">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-bold text-ink">
+                    AI Execution Output ({testResult.model || 'LLM Engine'})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(testResult.output);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? 'Copied Output' : 'Copy Output'}
+                </button>
+              </div>
+              <pre className="p-4 text-xs font-mono text-ink bg-canvas whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto">
+                {testResult.output}
+              </pre>
+            </div>
+          )}
+
           {/* Test result note */}
           {testResult?.note && (
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-xs font-semibold text-amber-700 dark:text-amber-300">
-              <strong>Note:</strong> {testResult.note}
+            <div className="bg-brand-500/10 border border-brand-500/20 rounded-xl p-3.5 text-xs font-medium text-ink flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-brand-500 shrink-0" />
+                <span>{testResult.note}</span>
+              </div>
+              {testResult.model && (
+                <span className="px-2 py-0.5 rounded-md bg-inset border border-line text-[10px] font-mono text-ink-muted shrink-0">
+                  {testResult.model}
+                </span>
+              )}
             </div>
           )}
         </div>

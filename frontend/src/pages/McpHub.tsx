@@ -150,6 +150,77 @@ export function McpHub() {
   const [transport, setTransport] = useState<'SSE' | 'STREAMABLE_HTTP'>('SSE');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<'ALL' | 'DEPLOY' | 'DEV' | 'DATA' | 'SEARCH'>('ALL');
+
+  // Popular standard MCP Server Presets (including Vercel, GitHub, Postgres, etc.)
+  const MCP_PRESETS = [
+    {
+      id: 'vercel',
+      name: 'Vercel Deployment MCP',
+      category: 'DEPLOY',
+      icon: '▲',
+      badge: 'Deploy & Serverless',
+      url: 'https://mcp.vercel.com/sse',
+      transport: 'SSE' as const,
+      description: 'Trigger instant frontend deployments, manage preview domains, inspect Vercel logs, and fetch environment variables directly from AI agents.',
+      tools: ['deploy_project', 'list_deployments', 'get_deployment_logs', 'manage_env_vars', 'alias_domain'],
+    },
+    {
+      id: 'github',
+      name: 'GitHub Cloud & Git MCP',
+      category: 'DEV',
+      icon: '🐙',
+      badge: 'Code & PRs',
+      url: 'http://host.docker.internal:8000/sse',
+      transport: 'SSE' as const,
+      description: 'Create pull requests, search repositories, push commits, review diffs, and inspect workflow CI statuses.',
+      tools: ['create_pull_request', 'get_file_contents', 'push_files', 'search_code', 'list_issues'],
+    },
+    {
+      id: 'filesystem',
+      name: 'Secure Filesystem MCP',
+      category: 'DEV',
+      icon: '📁',
+      badge: 'Local Workspace',
+      url: 'http://host.docker.internal:8001/sse',
+      transport: 'SSE' as const,
+      description: 'Local workspace file manipulation, directory trees, diff patching, and file creation with granular safety permissions.',
+      tools: ['read_file', 'write_file', 'list_directory', 'directory_tree', 'move_file'],
+    },
+    {
+      id: 'postgres',
+      name: 'PostgreSQL Database MCP',
+      category: 'DATA',
+      icon: '🐘',
+      badge: 'Database & SQL',
+      url: 'http://host.docker.internal:8002/sse',
+      transport: 'SSE' as const,
+      description: 'Run parameterized read-only queries, introspect database schemas, generate ER diagrams, and check execution plans.',
+      tools: ['query', 'list_tables', 'describe_table', 'explain_query'],
+    },
+    {
+      id: 'docker',
+      name: 'Docker & Container MCP',
+      category: 'DEPLOY',
+      icon: '🐳',
+      badge: 'Containers',
+      url: 'http://host.docker.internal:8003/sse',
+      transport: 'SSE' as const,
+      description: 'Inspect running containers, stream container logs, trigger docker builds, and manage volumes.',
+      tools: ['list_containers', 'container_logs', 'restart_container', 'inspect_image'],
+    },
+    {
+      id: 'brave-search',
+      name: 'Brave Web Search MCP',
+      category: 'SEARCH',
+      icon: '🦁',
+      badge: 'Web & Research',
+      url: 'http://host.docker.internal:8004/sse',
+      transport: 'SSE' as const,
+      description: 'Real-time web search index, documentation retrieval, news scanning, and fact-checking for autonomous research agents.',
+      tools: ['brave_web_search', 'brave_local_search', 'extract_webpage'],
+    },
+  ];
 
   // Interactive Tool Calling Modal State
   const [activeToolCall, setActiveToolCall] = useState<{
@@ -399,8 +470,124 @@ export function McpHub() {
         </div>
       </div>
 
-      {/* ── Search Bar ── */}
-      <div className="flex items-center justify-between gap-3">
+      {/* ── 1-Click Connect Popular MCP Presets (Vercel, GitHub, Postgres, etc.) ── */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
+              <Sparkles size={14} className="text-brand-500" />
+              <span>1-Click Connect: Ecosystem & Cloud MCP Servers</span>
+            </h3>
+            <p className="text-[11px] text-ink-muted">
+              Connect popular external tools (Vercel, GitHub, Filesystem, PostgreSQL, Docker, Brave) with pre-configured schemas.
+            </p>
+          </div>
+
+          {/* Category Tabs */}
+          <div className="flex items-center gap-1 bg-surface border border-line-subtle p-0.5 rounded-xl self-start sm:self-auto">
+            {(['ALL', 'DEPLOY', 'DEV', 'DATA', 'SEARCH'] as const).map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setActiveCategory(cat)}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider cursor-pointer transition-colors',
+                  activeCategory === cat
+                    ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-extrabold'
+                    : 'text-ink-muted hover:text-ink'
+                )}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {MCP_PRESETS.filter((p) => activeCategory === 'ALL' || p.category === activeCategory).map((preset) => {
+            const isAlreadyAdded = servers.some((s) => s.name.toLowerCase().includes(preset.id) || s.url === preset.url);
+            return (
+              <div
+                key={preset.id}
+                className="group relative flex flex-col justify-between rounded-2xl border border-line bg-surface p-4 hover:border-brand-500/40 hover:shadow-xs transition-all shadow-2xs"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-inset border border-line-subtle flex items-center justify-center text-base shrink-0 group-hover:scale-105 transition-transform">
+                        {preset.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-ink truncate group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
+                          {preset.name}
+                        </h4>
+                        <span className="text-[10px] text-ink-faint font-mono truncate block">
+                          {preset.url}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge tone="neutral" size="sm">
+                      {preset.badge}
+                    </Badge>
+                  </div>
+
+                  <p className="text-[11px] text-ink-muted line-clamp-2 leading-relaxed">
+                    {preset.description}
+                  </p>
+
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {preset.tools.slice(0, 3).map((t) => (
+                      <span
+                        key={t}
+                        className="px-1.5 py-0.5 rounded bg-inset border border-line text-[9px] font-mono text-ink-muted"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                    {preset.tools.length > 3 && (
+                      <span className="px-1 py-0.5 text-[9px] font-mono text-ink-faint">
+                        +{preset.tools.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-3 mt-3 border-t border-line-subtle flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-ink-muted">
+                    Transport: <strong className="text-ink">{preset.transport}</strong>
+                  </span>
+                  <Button
+                    variant={isAlreadyAdded ? 'secondary' : 'primary'}
+                    size="xs"
+                    icon={isAlreadyAdded ? Check : Plus}
+                    disabled={isAlreadyAdded}
+                    onClick={() => {
+                      setServerName(preset.name);
+                      setServerUrl(preset.url);
+                      setTransport(preset.transport);
+                      setShowAddModal(true);
+                    }}
+                  >
+                    {isAlreadyAdded ? 'Connected' : 'Quick Connect'}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Search Bar & Section Heading ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+        <div>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
+            <Cpu size={14} className="text-brand-500" />
+            <span>Connected Workspace MCP Servers ({servers.length})</span>
+          </h3>
+          <p className="text-[11px] text-ink-muted">
+            Manage live server connections, discover tool schemas, or trigger direct executions.
+          </p>
+        </div>
         <div className="relative w-full max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
           <input
@@ -616,6 +803,35 @@ export function McpHub() {
             )}
 
             <form onSubmit={handleAddServer} className="space-y-4">
+              {/* Quick preset selector buttons inside modal */}
+              <div>
+                <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">
+                  Or pick a popular preset:
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {MCP_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setServerName(p.name);
+                        setServerUrl(p.url);
+                        setTransport(p.transport);
+                      }}
+                      className={cn(
+                        'px-2 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors',
+                        serverUrl === p.url
+                          ? 'bg-brand-500/10 border-brand-500 text-brand-600 dark:text-brand-400 font-bold'
+                          : 'bg-inset border-line text-ink-muted hover:text-ink'
+                      )}
+                    >
+                      <span>{p.icon}</span>
+                      <span>{p.name.split(' ')[0]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-ink-muted mb-1.5">Server Name *</label>
                 <input
@@ -623,7 +839,7 @@ export function McpHub() {
                   required
                   value={serverName}
                   onChange={(e) => setServerName(e.target.value)}
-                  placeholder="e.g. filesystem-tools, github-mcp, or postgres-mcp"
+                  placeholder="e.g. Vercel Deployment MCP, filesystem-tools, or postgres-mcp"
                   className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
                 />
               </div>

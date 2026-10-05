@@ -202,8 +202,10 @@ async function createProcessOnce(
       },
     });
 
+    const orgSkills = await tx.marketplaceSkill.findMany({ where: { organizationId } });
+
     for (const [i, spec] of plan.agents.entries()) {
-      await tx.agent.create({
+      const createdAgent = await tx.agent.create({
         data: {
           organizationId,
           name: resolvedNames[i],
@@ -219,6 +221,35 @@ async function createProcessOnce(
           processStage: spec.stage,
         },
       });
+
+      // Auto-assign matching skills based on agent role & description
+      if (orgSkills.length > 0) {
+        const text = `${spec.displayName} ${spec.role || ''} ${spec.description || ''}`.toLowerCase();
+        const matchedSkills = orgSkills.filter((s) => {
+          const sName = s.name.toLowerCase();
+          const sCat = s.category.toLowerCase();
+          if (sName.includes('file system')) return true;
+          if ((text.includes('github') || text.includes('git') || text.includes('review') || text.includes('code')) && sName.includes('github')) return true;
+          if ((text.includes('database') || text.includes('sql') || text.includes('data') || text.includes('backend') || text.includes('state')) && sName.includes('database')) return true;
+          if ((text.includes('api') || text.includes('http') || text.includes('rest') || text.includes('route')) && sName.includes('http')) return true;
+          if ((text.includes('devops') || text.includes('docker') || text.includes('deploy') || text.includes('infra')) && (sName.includes('docker') || sCat === 'devops')) return true;
+          if ((text.includes('search') || text.includes('research') || text.includes('doc')) && sName.includes('search')) return true;
+          if ((text.includes('test') || text.includes('qa') || text.includes('e2e') || text.includes('browser')) && sName.includes('puppeteer')) return true;
+          if ((text.includes('monitor') || text.includes('metric') || text.includes('telemetry') || text.includes('alert')) && sName.includes('metrics')) return true;
+          return false;
+        });
+
+        if (matchedSkills.length > 0) {
+          await tx.agentSkill.createMany({
+            data: matchedSkills.map((s) => ({
+              agentId: createdAgent.id,
+              skillId: s.id,
+              enabled: true,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
     }
 
     await tx.activity.create({
