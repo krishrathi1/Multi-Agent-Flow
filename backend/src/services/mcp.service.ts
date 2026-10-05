@@ -24,7 +24,8 @@ export async function addMcpServer(agentId: string, data: {
       span.setAttribute('mcp.name', data.name);
       span.setAttribute('mcp.transport', data.transport || 'SSE');
       // SSRF protection: validate the MCP server URL
-      validateExternalUrl(data.url, 'MCP server URL');
+      const allowPrivate = process.env.ALLOW_PRIVATE_URLS === 'true' || process.env.ALLOW_LOCAL_URLS === 'true';
+      validateExternalUrl(data.url, 'MCP server URL', allowPrivate);
 
       const server = await prisma.mcpServer.create({
         data: {
@@ -60,7 +61,8 @@ export async function updateMcpServer(id: string, agentId: string, data: {
   if (!server) throw new Error('MCP server not found for this agent');
 
   // SSRF protection: validate URL if being updated
-  if (data.url) validateExternalUrl(data.url, 'MCP server URL');
+  const allowPrivate = process.env.ALLOW_PRIVATE_URLS === 'true' || process.env.ALLOW_LOCAL_URLS === 'true';
+  if (data.url) validateExternalUrl(data.url, 'MCP server URL', allowPrivate);
 
   return prisma.mcpServer.update({
     where: { id },

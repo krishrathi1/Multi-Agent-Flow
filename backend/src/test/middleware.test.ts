@@ -40,8 +40,9 @@ function listenOnRandomPort(app: express.Express): Promise<{ server: Server; bas
   });
 }
 
-function closeServer(server: Server): Promise<void> {
+function closeServer(server?: Server | null): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (!server || typeof server.close !== 'function') return resolve();
     server.close((err) => (err ? reject(err) : resolve()));
   });
 }

@@ -62,7 +62,7 @@ router.post('/render', (req, res) => {
  *
  * Body: { templateId: string, variables: Record<string, string>, model?: string }
  */
-router.post('/test', (req, res) => {
+router.post('/test', async (req, res) => {
   const { templateId, variables, model } = req.body as {
     templateId: string;
     variables: Record<string, string>;
@@ -74,16 +74,46 @@ router.post('/test', (req, res) => {
 
   const rendered = renderPrompt(template, variables || {});
 
-  // For now, return the rendered prompt and a note that LLM execution would happen here.
-  // When a gateway is connected, this would call the LLM via the gateway RPC.
+  const apiKey = process.env.GEMINI_API_KEY || process.env.PLATFORM_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
+  let generatedOutput: string | null = null;
+
+  if (apiKey) {
+    try {
+      const targetModel = model || template.models[0] || 'gemini-2.0-flash';
+      const cleanModel = targetModel.replace(/^google\//, '').replace(/^gemini\//, '');
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: rendered }] }],
+            generationConfig: {
+              temperature: template.temperature ?? 0.3,
+              maxOutputTokens: template.maxTokens ?? 2048,
+            },
+          }),
+          signal: AbortSignal.timeout(25000),
+        },
+      );
+      if (geminiRes.ok) {
+        const data = (await geminiRes.json()) as any;
+        generatedOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+      }
+    } catch {
+      // ignore, fall back to rendered prompt note
+    }
+  }
+
   res.json({
     templateId,
     model: model || template.models[0],
     renderedPrompt: rendered,
+    output: generatedOutput,
     fewShotExamples: template.fewShotExamples,
-    note: 'LLM execution is available when a gateway with an active LLM provider is connected. ' +
-          'Use the Chat page to test prompts interactively with a live agent.',
-    // In production: response = await gatewayClient.rpc('agent', { message: rendered, model })
+    note: generatedOutput
+      ? 'Executed successfully via configured LLM provider.'
+      : 'Rendered prompt ready. Connect an active LLM provider or gateway for live generation.',
   });
 });
 

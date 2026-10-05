@@ -28,6 +28,16 @@ router.post('/marketplace/:id/uninstall', async (req, res) => {
   res.status(204).end();
 });
 
+router.delete('/marketplace/:id', async (req, res) => {
+  try {
+    await skillService.deleteSkill(req.params.id, req.organizationId!);
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:deleted', { skillId: req.params.id });
+    res.status(204).end();
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
 router.get('/packs', async (req, res) => {
   const packs = await skillService.listPacks(req.organizationId!);
   res.json(packs);
@@ -41,6 +51,16 @@ router.post('/packs', async (req, res) => {
 router.post('/packs/:id/sync', async (req, res) => {
   const result = await skillService.syncPack(req.params.id, req.organizationId!);
   res.json(result);
+});
+
+router.delete('/packs/:id', async (req, res) => {
+  try {
+    await skillService.deletePack(req.params.id, req.organizationId!);
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:pack:deleted', { packId: req.params.id });
+    res.status(204).end();
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
 });
 
 export default router;

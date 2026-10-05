@@ -21,7 +21,7 @@ import { Card, CardHeader } from '../ui/Card';
 import { Skeleton } from '../ui/States';
 import { LiveWaveform, LiveRadarBeacon } from '../ui/LiveIcon';
 
-const FEED_LIMIT = 8;
+const FEED_LIMIT = 5;
 
 export function SystemHealth() {
   const { activities, fetchActivities, loading } = useActivityStore();
@@ -100,7 +100,7 @@ export function SystemHealth() {
           }
         />
 
-        <div className="max-h-[440px] overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin scrollbar-thumb-line scrollbar-track-transparent">
+        <div className="max-h-[290px] overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin scrollbar-thumb-line scrollbar-track-transparent">
           {loading && items.length === 0 ? (
             <div className="space-y-2 p-1.5">
               {Array.from({ length: 4 }).map((_, i) => (

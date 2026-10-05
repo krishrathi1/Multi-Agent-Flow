@@ -25,7 +25,7 @@ import { useUiStore } from '@/stores/ui-store';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { cn, timeAgo } from '@/lib/utils';
-import type { TokenUsage, MetricSnapshot, AgentInsight } from '@/types';
+import type { TokenUsage, MetricSnapshot, AgentInsight, RunStats } from '@/types';
 import { formatCompact, formatCurrency, formatMs } from '@/lib/design';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
@@ -67,6 +67,7 @@ export function Metrics() {
   const [tokenSummary, setTokenSummary] = useState<TokenSummary | null>(null);
   const [metricsSummary, setMetricsSummary] = useState<MetricsSummary | null>(null);
   const [insights, setInsights] = useState<AgentInsight[]>([]);
+  const [runStats, setRunStats] = useState<RunStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
@@ -91,12 +92,13 @@ export function Metrics() {
       };
       const hours = hoursMap[timeFilter];
 
-      const [tokList, metList, tokSum, metSum, insList] = await Promise.all([
+      const [tokList, metList, tokSum, metSum, insList, rStats] = await Promise.all([
         api.tokens.usage({ hours }).catch(() => []),
         api.metrics.list({ limit: 1000 }).catch(() => []),
         api.tokens.summary().catch(() => null),
         api.metrics.summary().catch(() => null),
         api.orchestration.agentInsights().catch(() => []),
+        api.orchestration.runStats().catch(() => null),
       ]);
 
       setTokens(Array.isArray(tokList) ? tokList : []);
@@ -104,6 +106,7 @@ export function Metrics() {
       setTokenSummary(tokSum);
       setMetricsSummary(metSum);
       setInsights(Array.isArray(insList) ? insList : []);
+      setRunStats(rStats);
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Failed to load metrics:', err);
@@ -123,6 +126,8 @@ export function Metrics() {
     socket.on('activity:new', update);
     socket.on('metrics:new', update);
     socket.on('token:usage', update);
+    socket.on('process:run:created', update);
+    socket.on('process:run:updated', update);
     setSocketConnected(socket.connected);
     const onConn = () => setSocketConnected(true);
     const onDis = () => setSocketConnected(false);
@@ -133,6 +138,8 @@ export function Metrics() {
       socket.off('activity:new', update);
       socket.off('metrics:new', update);
       socket.off('token:usage', update);
+      socket.off('process:run:created', update);
+      socket.off('process:run:updated', update);
       socket.off('connect', onConn);
       socket.off('disconnect', onDis);
     };
@@ -146,19 +153,35 @@ export function Metrics() {
     const totalCost = tokens.reduce((a, t) => a + t.cost, 0);
     const calls = metrics.length;
     const avgResponseTime = calls > 0 ? metrics.reduce((a, m) => a + m.responseTimeMs, 0) / calls : 0;
-    const successCount = metrics.filter((m) => m.success).length;
-    const successRate = calls > 0 ? Math.round((successCount / calls) * 100) : 100;
+    const metricSuccessCount = metrics.filter((m) => m.success).length;
+
+    // Accurately reflect both agent API calls and run history execution outcomes
+    const runTotal = runStats?.total ?? 0;
+    const runCompleted = runStats?.completed ?? 0;
+    const totalExecutions = calls + runTotal;
+    const totalSuccesses = metricSuccessCount + runCompleted;
+
+    let successRate = 0;
+    if (totalExecutions > 0) {
+      successRate = Math.round((totalSuccesses / totalExecutions) * 100);
+    } else if (runStats && runStats.total > 0) {
+      successRate = runStats.successRate;
+    } else if (calls > 0) {
+      successRate = Math.round((metricSuccessCount / calls) * 100);
+    } else {
+      successRate = 0;
+    }
 
     return {
-      totalTokens: totalTokens || tokenSummary?.totalTokens || 0,
+      totalTokens: totalTokens || tokenSummary?.totalTokens || (runStats?.totalTokens ?? 0),
       inputTokens,
       outputTokens,
-      totalCost: totalCost || tokenSummary?.totalCost || 0,
-      calls,
+      totalCost: totalCost || tokenSummary?.totalCost || (runStats?.totalCostUsd ?? 0),
+      calls: totalExecutions,
       avgResponseTime,
       successRate,
     };
-  }, [tokens, metrics, tokenSummary]);
+  }, [tokens, metrics, tokenSummary, runStats]);
 
   // Spending trend by time slices
   const chartData = useMemo(() => {
@@ -521,7 +544,9 @@ export function Metrics() {
             {kpis.successRate}%
           </div>
           <span className="text-[10px] text-ink-faint font-mono block truncate">
-            Zero-anomaly execution
+            {runStats && runStats.total > 0
+              ? `${runStats.completed}/${runStats.total} runs completed`
+              : 'Zero-anomaly execution'}
           </span>
         </div>
       </div>

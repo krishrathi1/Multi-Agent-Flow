@@ -102,8 +102,8 @@ async function syncLiveAlerts(organizationId: string) {
             organizationId,
             alertRuleId: offlineRule.id,
             message: { contains: agent.displayName },
-            acknowledged: false,
           },
+          orderBy: { createdAt: 'desc' },
         });
         if (!existing) {
           await prisma.alertEvent.create({
@@ -130,8 +130,8 @@ async function syncLiveAlerts(organizationId: string) {
             organizationId,
             alertRuleId: hbRule.id,
             message: { contains: agent.displayName },
-            acknowledged: false,
           },
+          orderBy: { createdAt: 'desc' },
         });
         if (!existing) {
           await prisma.alertEvent.create({

@@ -32,6 +32,7 @@ services:
       DATABASE_URL: postgresql://nexus:${POSTGRES_PASSWORD:-nexus123}@postgres:5432/nexus
       PORT: "4000"
       NODE_ENV: production
+      ALLOW_PRIVATE_URLS: ${ALLOW_PRIVATE_URLS:-true}
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://nexus.blostem.com,https://nexus.blostom.com}

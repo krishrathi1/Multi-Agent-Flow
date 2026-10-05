@@ -147,7 +147,7 @@ export function McpHub() {
   // Add Standalone Server Form
   const [serverName, setServerName] = useState('');
   const [serverUrl, setServerUrl] = useState('');
-  const [transport, setTransport] = useState<'SSE' | 'STDIO'>('SSE');
+  const [transport, setTransport] = useState<'SSE' | 'STREAMABLE_HTTP'>('SSE');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -635,19 +635,22 @@ export function McpHub() {
                   required
                   value={serverUrl}
                   onChange={(e) => setServerUrl(e.target.value)}
-                  placeholder="http://localhost:8000/sse"
+                  placeholder="http://host.docker.internal:8000/sse"
                   className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
                 />
+                <p className="text-[11px] text-ink-muted mt-1.5 leading-relaxed">
+                  💡 <strong>Local servers:</strong> Use <code className="font-mono text-brand-600 dark:text-brand-400 bg-brand-500/10 px-1 py-0.5 rounded">http://host.docker.internal:PORT/sse</code> to connect to servers running on your machine. For remote servers, use their HTTPS URL.
+                </p>
               </div>
 
               <div>
                 <CustomSelect
                   label="Transport Protocol"
                   value={transport}
-                  onChange={(val) => setTransport(val as 'SSE' | 'STDIO')}
+                  onChange={(val) => setTransport(val as 'SSE' | 'STREAMABLE_HTTP')}
                   options={[
                     { value: 'SSE', label: 'SSE (Server-Sent Events)', sublabel: 'HTTP Streaming connection' },
-                    { value: 'STDIO', label: 'STDIO (Standard I/O)', sublabel: 'Direct process pipes' },
+                    { value: 'STREAMABLE_HTTP', label: 'Streamable HTTP', sublabel: 'HTTP streaming / JSON-RPC' },
                   ]}
                 />
               </div>

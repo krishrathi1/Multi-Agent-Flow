@@ -46,7 +46,8 @@ export async function createGateway(organizationId: string, data: {
       span.setAttribute('org.id', organizationId);
 
   // SSRF protection: validate the gateway URL
-  validateExternalUrl(data.url, 'Gateway URL');
+  const allowPrivate = process.env.ALLOW_PRIVATE_URLS === 'true' || process.env.ALLOW_LOCAL_URLS === 'true';
+  validateExternalUrl(data.url, 'Gateway URL', allowPrivate);
 
   // Encrypt token before storing
   const encryptedToken = encryptField(data.token);
@@ -104,7 +105,8 @@ export async function updateGateway(id: string, organizationId: string, data: {
   workspaceRoot?: string;
 }) {
   // SSRF protection: validate the gateway URL if being updated
-  if (data.url) validateExternalUrl(data.url, 'Gateway URL');
+  const allowPrivate = process.env.ALLOW_PRIVATE_URLS === 'true' || process.env.ALLOW_LOCAL_URLS === 'true';
+  if (data.url) validateExternalUrl(data.url, 'Gateway URL', allowPrivate);
 
   const gateway = await prisma.gateway.update({
     where: { id, organizationId },

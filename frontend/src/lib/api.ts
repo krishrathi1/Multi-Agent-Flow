@@ -622,11 +622,15 @@ export const api = {
       request('/skills/marketplace/' + skillId + '/install', { method: 'POST', body: JSON.stringify({ gatewayId }) }),
     uninstall: (skillId: string, gatewayId: string) =>
       request('/skills/marketplace/' + skillId + '/uninstall', { method: 'POST', body: JSON.stringify({ gatewayId }) }),
+    deleteSkill: (skillId: string) =>
+      request<void>('/skills/marketplace/' + skillId, { method: 'DELETE' }),
     packs: () => request<SkillPack[]>('/skills/packs'),
     createPack: (data: { name: string; description?: string; sourceUrl: string; branch?: string }) =>
       request<SkillPack>('/skills/packs', { method: 'POST', body: JSON.stringify(data) }),
     syncPack: (packId: string) =>
       request('/skills/packs/' + packId + '/sync', { method: 'POST' }),
+    deletePack: (packId: string) =>
+      request<void>('/skills/packs/' + packId, { method: 'DELETE' }),
   },
   webhooks: {
     list: (boardId: string) => request<BoardWebhook[]>(`/boards/${boardId}/webhooks`),

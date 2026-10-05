@@ -110,7 +110,7 @@ function isPrivateIpOrHostname(hostname: string): boolean {
  * Validate a user-provided URL for SSRF safety.
  * Allows only http/https/ws/wss and blocks internal/private addresses.
  */
-export function validateExternalUrl(urlString: string, label = 'URL'): URL {
+export function validateExternalUrl(urlString: string, label = 'URL', allowPrivate = false): URL {
   let parsed: URL;
   try {
     parsed = new URL(urlString);
@@ -124,8 +124,8 @@ export function validateExternalUrl(urlString: string, label = 'URL'): URL {
     throw new Error(`Invalid ${label}: protocol must be http, https, ws, or wss`);
   }
 
-  // Block private/internal addresses
-  if (isPrivateIpOrHostname(parsed.hostname)) {
+  // Block private/internal addresses unless explicitly permitted (e.g. local MCP or gateway)
+  if (!allowPrivate && isPrivateIpOrHostname(parsed.hostname)) {
     throw new Error(`Invalid ${label}: cannot point to private/internal addresses`);
   }
 

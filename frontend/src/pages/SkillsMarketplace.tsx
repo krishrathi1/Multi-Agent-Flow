@@ -128,6 +128,17 @@ export function SkillsMarketplace() {
     }
   }
 
+  async function handleDeleteSkill(skillId: string, skillName: string) {
+    if (!window.confirm(`Are you sure you want to delete the skill "${skillName}"?`)) return;
+    try {
+      await api.skills.deleteSkill(skillId);
+      setSkills((prev) => prev.filter((s) => s.id !== skillId));
+    } catch (err: any) {
+      console.error('Failed to delete skill:', err);
+      alert(err?.message || 'Failed to delete skill');
+    }
+  }
+
   async function handleCreatePack() {
     if (!packForm.name.trim() || !packForm.sourceUrl.trim()) return;
     setCreatingPack(true);
@@ -139,6 +150,17 @@ export function SkillsMarketplace() {
       console.error('Failed to create pack:', err);
     } finally {
       setCreatingPack(false);
+    }
+  }
+
+  async function handleDeletePack(packId: string, packName: string) {
+    if (!window.confirm(`Are you sure you want to delete the skill pack "${packName}"?`)) return;
+    try {
+      await api.skills.deletePack(packId);
+      setPacks((prev) => prev.filter((p) => p.id !== packId));
+    } catch (err: any) {
+      console.error('Failed to delete pack:', err);
+      alert(err?.message || 'Failed to delete skill pack');
     }
   }
 
@@ -256,9 +278,19 @@ export function SkillsMarketplace() {
                         <h3 className="text-sm font-bold text-ink truncate">{skill.name}</h3>
                         <span className="text-2xs font-semibold text-ink-muted capitalize">{skill.category}</span>
                       </div>
-                      <span className={cn('px-2.5 py-0.5 text-2xs font-bold uppercase rounded-full border shrink-0', riskColors[skill.risk] || riskColors.low)}>
-                        {skill.risk} Risk
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={cn('px-2.5 py-0.5 text-2xs font-bold uppercase rounded-full border shrink-0', riskColors[skill.risk] || riskColors.low)}>
+                          {skill.risk} Risk
+                        </span>
+                        <button
+                          type="button"
+                          title="Delete skill"
+                          onClick={() => handleDeleteSkill(skill.id, skill.name)}
+                          className="p-1 rounded-lg text-ink-muted hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                     <p className="text-xs text-ink-muted leading-relaxed line-clamp-2">
                       {skill.description || 'No description provided'}
@@ -325,14 +357,25 @@ export function SkillsMarketplace() {
                   <p className="text-2xs text-ink-muted truncate font-mono mt-0.5">{pack.sourceUrl} ({pack.branch})</p>
                   {pack.lastSyncedAt && <p className="text-2xs text-ink-muted mt-1">Last synced: {new Date(pack.lastSyncedAt).toLocaleString()}</p>}
                 </div>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  icon={RefreshCw}
-                  onClick={() => api.skills.syncPack(pack.id)}
-                >
-                  Sync
-                </Button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    icon={RefreshCw}
+                    onClick={() => api.skills.syncPack(pack.id)}
+                  >
+                    Sync
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    icon={Trash2}
+                    onClick={() => handleDeletePack(pack.id, pack.name)}
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 dark:text-rose-400 dark:hover:text-rose-300"
+                  >
+                    Delete
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

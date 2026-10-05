@@ -63,8 +63,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', validate(createSchema), async (req, res) => {
   const ghToken = req.headers['x-github-token'] || req.body.githubToken;
   const vToken = req.headers['x-vercel-token'] || req.body.vercelToken;
-  if (ghToken && typeof ghToken === 'string') process.env.GITHUB_TOKEN = ghToken;
-  if (vToken && typeof vToken === 'string') process.env.VERCEL_TOKEN = vToken;
+
 
   if (ghToken || vToken) {
     try {

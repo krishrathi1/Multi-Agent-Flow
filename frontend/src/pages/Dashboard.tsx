@@ -166,7 +166,7 @@ export function Dashboard() {
 
       <StatsBar />
 
-      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] items-start">
         {/* Main Column: Production Blocks & Groups */}
         <div className="space-y-6">
           <SectionHeading

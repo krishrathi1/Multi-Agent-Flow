@@ -72,6 +72,15 @@ export async function syncPack(packId: string, organizationId: string) {
   return { synced: true, packId };
 }
 
+export async function deletePack(packId: string, organizationId: string) {
+  const pack = await prisma.skillPack.findFirst({ where: { id: packId, organizationId } });
+  if (!pack) throw new Error('Skill pack not found');
+
+  return prisma.skillPack.delete({
+    where: { id: packId },
+  });
+}
+
 export async function installSkill(skillId: string, gatewayId: string, organizationId: string) {
   // Verify skill and gateway belong to org
   const skill = await prisma.marketplaceSkill.findFirst({ where: { id: skillId, organizationId } });
@@ -94,3 +103,18 @@ export async function uninstallSkill(skillId: string, gatewayId: string, organiz
     where: { gatewayId_skillId: { gatewayId, skillId } },
   });
 }
+
+export async function deleteSkill(skillId: string, organizationId: string) {
+  const skill = await prisma.marketplaceSkill.findFirst({ where: { id: skillId, organizationId } });
+  if (!skill) throw new Error('Skill not found');
+
+  // Remove installations first
+  await prisma.gatewayInstalledSkill.deleteMany({
+    where: { skillId },
+  });
+
+  return prisma.marketplaceSkill.delete({
+    where: { id: skillId },
+  });
+}
+

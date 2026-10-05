@@ -68,16 +68,21 @@ const navSections: NavSection[] = [
     label: 'Work & Governance',
     items: [
       { path: '/tasks', label: 'Task Board', icon: KanbanSquare },
+      { path: '/boards', label: 'Boards', icon: Columns3 },
+      { path: '/automation', label: 'Automation Hub', icon: Zap },
       { path: '/approvals', label: 'Approvals & Audit', icon: ShieldCheck },
       { path: '/topology', label: 'Network Graph', icon: Network },
       { path: '/activity', label: 'Live Activity', icon: Activity },
       { path: '/runs', label: 'Run History', icon: History },
+      { path: '/custom-fields', label: 'Custom Fields', icon: Table2 },
     ],
   },
   {
     label: 'System & Tools',
     items: [
       { path: '/metrics', label: 'Metrics & Cost', icon: Gauge },
+      { path: '/code-intelligence', label: 'Code Intelligence', icon: Code2 },
+      { path: '/prompts', label: 'Prompt Lab', icon: BrainCircuit },
       { path: '/gateways', label: 'Gateways', icon: Router },
       { path: '/mcp', label: 'MCP Hub & Tools', icon: Cpu },
       { path: '/skills', label: 'Skills Library', icon: Sparkles },

@@ -151,7 +151,7 @@ export function Layout() {
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 px-3.5 sm:px-6 py-4 sm:py-6 outline-none"
+          className="flex-1 px-3.5 sm:px-6 pt-3.5 sm:pt-5 pb-2 sm:pb-3 outline-none"
         >
           {/* Caps line length on ultrawide displays instead of stretching. */}
           <div className="mx-auto w-full max-w-[1600px]">

@@ -56,9 +56,9 @@ router.get('/files', async (_req, res) => {
  * Get file content with syntax highlighting metadata.
  * The path is a catch-all to support nested paths like "backend/src/index.ts".
  */
-router.get('/file/{*filePath}', async (req, res) => {
-  const params = req.params as any;
-  const filePath = params.filePath || (Array.isArray(params) ? params.join('/') : params[0] || params['0']);
+router.get('/file/*filePath', async (req, res) => {
+  const p = (req.params as Record<string, unknown>).filePath;
+  const filePath = Array.isArray(p) ? p.join('/') : String(p ?? '');
   if (!filePath) return res.status(400).json({ error: 'File path is required' });
 
   const file = await codeIntel.getFileContent(filePath);

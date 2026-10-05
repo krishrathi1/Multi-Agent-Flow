@@ -704,11 +704,11 @@ export function Alerts() {
       </div>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
         {/* Left: Alert Events (3 columns) */}
-        <div className={cn('lg:col-span-3', activeTab !== 'events' && 'hidden lg:block')}>
-          <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs flex flex-col justify-between">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line-subtle pb-4 mb-4">
+        <div className={cn('lg:col-span-3 flex flex-col', activeTab !== 'events' && 'hidden lg:flex')}>
+          <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs flex flex-col h-full">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line-subtle pb-4 mb-4 shrink-0">
               <div className="flex items-center gap-2.5">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-ink">
                   Alert Events ({filteredEvents.length})
@@ -730,7 +730,7 @@ export function Alerts() {
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-y-auto max-h-[800px] pr-2 flex-1 scrollbar-thin scrollbar-thumb-line scrollbar-track-transparent">
               {filteredEvents.length === 0 ? (
                 <div className="rounded-2xl bg-inset/40 border border-dashed border-line p-10 text-center text-ink-muted text-xs">
                   <ShieldAlert size={32} className="mx-auto text-ink-faint mb-2 opacity-50" />
@@ -747,9 +747,9 @@ export function Alerts() {
         </div>
 
         {/* Right: Alert Rules (2 columns) */}
-        <div className={cn('lg:col-span-2', activeTab !== 'rules' && 'hidden lg:block')}>
-          <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between border-b border-line-subtle pb-4 mb-4">
+        <div className={cn('lg:col-span-2 flex flex-col', activeTab !== 'rules' && 'hidden lg:flex')}>
+          <div className="rounded-2xl border border-line-subtle bg-surface p-5 shadow-xs flex flex-col h-full">
+            <div className="flex items-center justify-between border-b border-line-subtle pb-4 mb-4 shrink-0">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Configured Rules ({rules.length})</h3>
               <button
                 type="button"
@@ -760,7 +760,7 @@ export function Alerts() {
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-y-auto max-h-[800px] pr-2 flex-1 scrollbar-thin scrollbar-thumb-line scrollbar-track-transparent">
               {rules.map((rule) => (
                 <RuleCard key={rule.id} rule={rule} onToggle={handleToggleRule} />
               ))}

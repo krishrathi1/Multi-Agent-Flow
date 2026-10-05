@@ -1532,9 +1532,12 @@ export function AgentCreate() {
                         type="text"
                         value={newMcpUrl}
                         onChange={(e) => setNewMcpUrl(e.target.value)}
-                        placeholder="http://localhost:3001/sse"
-                        className="w-full h-9 px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-brand-500 shadow-2xs"
+                        placeholder="http://host.docker.internal:3001/sse"
+                        className="w-full h-9 px-3 py-1.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-brand-500 shadow-2xs font-mono"
                       />
+                      <p className="text-[10px] text-ink-muted mt-1">
+                        For local machine servers in Docker, use <code className="text-brand-500 font-mono">http://host.docker.internal:PORT/sse</code>
+                      </p>
                     </div>
                     <div>
                       <CustomSelect
