@@ -1,6 +1,10 @@
 import { readdir, readFile, stat } from 'fs/promises';
+import { existsSync } from 'fs';
 import { join, relative, extname, basename } from 'path';
 import { logger } from '../lib/logger.js';
+import { prisma } from '../lib/prisma.js';
+import { decryptField } from '../lib/crypto.js';
+import { runClaudeCli, isClaudeCliEnabled } from '../lib/claude-cli.js';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -60,11 +64,11 @@ export interface SymbolReference {
 // ─── Configuration ──────────────────────────────────────
 
 const SUPPORTED_EXTENSIONS = new Set([
-  '.ts', '.tsx', '.js', '.jsx', '.json', '.css', '.html', '.md', '.prisma', '.yml', '.yaml',
+  '.ts', '.tsx', '.js', '.jsx', '.json', '.css', '.html', '.md', '.prisma', '.yml', '.yaml', '.sql', '.sh',
 ]);
 
-const IGNORE_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', '.next', 'coverage', '.nexus-workspaces',
+const IGNORE_DIRS_BASE = new Set([
+  'node_modules', '.git', 'build', '.next', 'coverage', '.nexus-workspaces', '.turbo',
 ]);
 
 const LANGUAGE_MAP: Record<string, string> = {
@@ -79,6 +83,8 @@ const LANGUAGE_MAP: Record<string, string> = {
   '.prisma': 'Prisma',
   '.yml': 'YAML',
   '.yaml': 'YAML',
+  '.sql': 'SQL',
+  '.sh': 'Shell',
 };
 
 // ─── Cache ──────────────────────────────────────────────
@@ -91,12 +97,25 @@ let lastIndexTime = 0;
 const CACHE_TTL_MS = 60_000; // re-index every 60s at most
 
 /**
- * Returns the project root directory (two levels up from this service file in dist/).
- * Falls back to cwd-based path for source execution via tsx.
+ * Returns the project root directory.
+ * Walks up to find the monorepo root containing package.json and backend/ or frontend/.
  */
 function getProjectRoot(): string {
-  // Walk up from backend/src/services → project root
-  return join(import.meta.dirname ?? process.cwd(), '..', '..', '..');
+  if (typeof import.meta !== 'undefined' && import.meta.dirname) {
+    const candidate = join(import.meta.dirname, '..', '..', '..');
+    if (existsSync(join(candidate, 'package.json')) && (existsSync(join(candidate, 'backend')) || existsSync(join(candidate, 'frontend')))) {
+      return candidate;
+    }
+  }
+  const cwd = process.cwd();
+  const parent = join(cwd, '..');
+  if (existsSync(join(parent, 'package.json')) && (existsSync(join(parent, 'backend')) || existsSync(join(parent, 'frontend')))) {
+    return parent;
+  }
+  if (existsSync(join(cwd, 'package.json')) && (existsSync(join(cwd, 'backend')) || existsSync(join(cwd, 'frontend')))) {
+    return cwd;
+  }
+  return cwd;
 }
 
 // ─── File Scanner ───────────────────────────────────────
@@ -105,15 +124,20 @@ function getProjectRoot(): string {
  * Recursively walks the project tree and collects all source files,
  * skipping ignored directories and unsupported file types.
  */
-async function scanDirectory(dir: string, root: string): Promise<string[]> {
+async function scanDirectory(dir: string, root: string, hasSourceTree: boolean): Promise<string[]> {
   const files: string[] = [];
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (IGNORE_DIRS.has(entry.name)) continue;
+      if (IGNORE_DIRS_BASE.has(entry.name)) continue;
+      // If source directory (backend/src or src) exists, ignore dist to avoid duplicate compiled files.
+      // If no src directory exists (e.g. running in minimal production container), allow dist so files are indexed.
+      if (entry.name === 'dist' && hasSourceTree) continue;
+      if (entry.name.endsWith('.map')) continue; // Skip .map files
+
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
-        const sub = await scanDirectory(fullPath, root);
+        const sub = await scanDirectory(fullPath, root, hasSourceTree);
         files.push(...sub);
       } else if (SUPPORTED_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
         files.push(fullPath);
@@ -282,9 +306,10 @@ export async function indexCodebase(): Promise<void> {
   if (now - lastIndexTime < CACHE_TTL_MS && fileCache.length > 0) return;
 
   const root = getProjectRoot();
-  logger.info({ root }, 'Indexing codebase for code intelligence');
+  const hasSourceTree = existsSync(join(root, 'backend', 'src')) || existsSync(join(root, 'src'));
+  logger.info({ root, hasSourceTree }, 'Indexing codebase for code intelligence');
 
-  const filePaths = await scanDirectory(root, root);
+  const filePaths = await scanDirectory(root, root, hasSourceTree);
   const files: FileInfo[] = [];
   const symbols: CodeSymbol[] = [];
   const edges: DependencyEdge[] = [];
@@ -580,7 +605,10 @@ export async function listFiles(): Promise<Omit<FileInfo, 'path'>[]> {
  * Answers a natural-language question about the codebase using
  * semantic indexing, symbol references, and grounded snippet citations.
  */
-export async function askCodebase(question: string): Promise<{
+export async function askCodebase(
+  question: string,
+  organizationId?: string,
+): Promise<{
   question: string;
   answer: string;
   citations: { file: string; line?: number; reason: string }[];
@@ -592,24 +620,37 @@ export async function askCodebase(question: string): Promise<{
   const keywords = q
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
-    .filter(k => k.length > 2 && !['how', 'what', 'where', 'when', 'which', 'does', 'the', 'and', 'for', 'are', 'with', 'from', 'this'].includes(k));
+    .filter(k => k.length > 2 && !['how', 'what', 'where', 'when', 'which', 'who', 'why', 'does', 'did', 'the', 'and', 'for', 'are', 'with', 'from', 'this', 'that', 'nexus', 'work', 'works', 'working', 'implemented', 'explain', 'tell', 'show', 'into', 'have', 'been'].includes(k));
 
   // Find relevant files
-  const scoredFiles: { file: FileInfo; score: number; matchedReasons: string[] }[] = [];
+  const scoredFiles: { file: FileInfo; score: number; matchedReasons: string[]; snippet?: string }[] = [];
   for (const f of fileCache) {
     let score = 0;
     const reasons: string[] = [];
     const lowerPath = f.relativePath.toLowerCase();
+    const base = lowerPath.split('/').pop() || '';
 
     for (const kw of keywords) {
-      if (lowerPath.includes(kw)) {
-        score += 5;
+      if (base.includes(kw)) {
+        score += 15;
+        reasons.push(`Filename matches "${kw}"`);
+      } else if (lowerPath.includes(kw)) {
+        score += 8;
         reasons.push(`Path matches "${kw}"`);
       }
       for (const sym of f.symbols) {
-        if (sym.name.toLowerCase().includes(kw)) {
-          score += 3;
+        const lowerSym = sym.name.toLowerCase();
+        if (lowerSym === kw) {
+          score += 12;
+          reasons.push(`Symbol "${sym.name}" exactly matches "${kw}"`);
+        } else if (lowerSym.includes(kw)) {
+          score += 5;
           reasons.push(`Symbol "${sym.name}" matches "${kw}"`);
+        }
+      }
+      for (const imp of f.imports) {
+        if (imp.toLowerCase().includes(kw)) {
+          score += 2;
         }
       }
     }
@@ -622,34 +663,167 @@ export async function askCodebase(question: string): Promise<{
   scoredFiles.sort((a, b) => b.score - a.score);
   const topFiles = scoredFiles.slice(0, 5);
 
+  // Extract real snippet excerpts for top files
+  for (const tf of topFiles) {
+    try {
+      const content = await readFile(tf.file.path, 'utf-8');
+      const lines = content.split('\n');
+      let targetLine = tf.file.symbols[0]?.line || 1;
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i].toLowerCase();
+        if (keywords.some(kw => l.includes(kw))) {
+          targetLine = i + 1;
+          break;
+        }
+      }
+      const start = Math.max(0, targetLine - 2);
+      const end = Math.min(lines.length, targetLine + 4);
+      tf.snippet = lines.slice(start, end).join('\n');
+    } catch {
+      // Ignore read error
+    }
+  }
+
   // Gather matching symbols
   const relatedSymbols: CodeSymbol[] = [];
   for (const item of topFiles) {
     relatedSymbols.push(...item.file.symbols.slice(0, 4));
   }
 
-  // Construct grounded synthesis
+  // Construct grounded citations
   const citations = topFiles.map(tf => ({
     file: tf.file.relativePath,
-    line: tf.file.symbols[0]?.line,
+    line: tf.file.symbols[0]?.line || 1,
     reason: tf.matchedReasons.join('; '),
   }));
 
-  let answer = '';
   if (topFiles.length === 0) {
-    answer = `I analyzed the codebase for "${question}", but couldn't locate direct matches. Try searching for specific terms like "agent", "auth", "gateway", "prisma", "board", or "metrics".`;
-  } else {
-    answer = `Based on semantic indexing of the Nexus AI repository:\n\n` +
-      `### Key Components Identified:\n` +
-      topFiles.map(tf => `- **\`${tf.file.relativePath}\`** (${tf.file.language}, ${tf.file.lineCount} lines): ${tf.matchedReasons.join(', ')}`).join('\n') +
-      `\n\n### Architectural Insight:\n` +
-      `The requested functionality interacts primarily through \`${topFiles[0]?.file.relativePath}\`. ` +
-      (topFiles[0]?.file.symbols.length ? `Key exported handlers/symbols include: \`${topFiles[0].file.symbols.slice(0, 3).map(s => s.name).join('`, `')}\`.` : '');
+    return {
+      question,
+      answer: `I analyzed the codebase for "${question}", but couldn't locate direct matches in the indexed files (${fileCache.length} files scanned). Try searching for specific terms like "agent", "auth", "gateway", "prisma", "board", "llm", or "mcp".`,
+      citations: [],
+      relatedSymbols: [],
+    };
   }
+
+  // Attempt real AI explanation via available LLMs
+  let aiAnswer: string | null = null;
+  const contextBlock = topFiles.map(tf => (
+    `File: ${tf.file.relativePath} (${tf.file.language}, ${tf.file.lineCount} lines)\n` +
+    `Symbols: ${tf.file.symbols.slice(0, 6).map(s => `${s.kind} ${s.name}`).join(', ')}\n` +
+    (tf.snippet ? `Snippet:\n${tf.snippet}\n` : '')
+  )).join('\n---\n');
+
+  const prompt = `You are the Nexus AI Code Intelligence Assistant. A developer asked the following question about this repository:\n\n` +
+    `Question: "${question}"\n\n` +
+    `Here is the indexed codebase context with relevant files and code excerpts:\n\n` +
+    `${contextBlock}\n\n` +
+    `Provide a clear, detailed, and technically accurate explanation in GitHub-flavored Markdown. ` +
+    `Explain how the architecture works, reference specific files and symbols, and provide code guidance where applicable. Keep the tone professional, helpful, and concise.`;
+
+  // 1. Try Claude CLI if enabled
+  if (isClaudeCliEnabled()) {
+    try {
+      const cliRes = await runClaudeCli(prompt, { timeoutMs: 15000 });
+      if (cliRes?.text && cliRes.text.trim().length > 20) {
+        aiAnswer = cliRes.text.trim();
+      }
+    } catch { /* fallthrough */ }
+  }
+
+  // 2. Try Google Gemini API
+  if (!aiAnswer) {
+    let geminiKey = process.env.GEMINI_API_KEY || process.env.PLATFORM_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
+    if (organizationId) {
+      try {
+        const provs = await prisma.llmProvider.findMany({
+          where: { organizationId, isActive: true },
+        });
+        const gProv = provs.find((p) => p.provider.toLowerCase() === 'google' || p.provider.toLowerCase() === 'gemini');
+        if (gProv?.apiKey) {
+          try { geminiKey = decryptField(gProv.apiKey); } catch { /* ignore */ }
+        }
+      } catch { /* ignore */ }
+    }
+
+    if (geminiKey) {
+      const candidateModels = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash'];
+      for (const m of candidateModels) {
+        try {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+              }),
+              signal: AbortSignal.timeout(10000),
+            },
+          );
+          if (res.ok) {
+            const data = (await res.json()) as any;
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text && typeof text === 'string' && text.trim().length > 0) {
+              aiAnswer = text.trim();
+              break;
+            }
+          }
+        } catch { /* try next */ }
+      }
+    }
+  }
+
+  // 3. Try Local PC Ollama
+  if (!aiAnswer) {
+    const endpoints = ['http://127.0.0.1:11434', 'http://localhost:11434', 'http://host.docker.internal:11434'];
+    for (const ep of endpoints) {
+      try {
+        const ping = await fetch(`${ep}/api/tags`, { signal: AbortSignal.timeout(1500) });
+        if (!ping.ok) continue;
+
+        const res = await fetch(`${ep}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'qwen2.5-coder:1.5b',
+            prompt,
+            stream: false,
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          if (data?.response && typeof data.response === 'string') {
+            aiAnswer = data.response.trim();
+            break;
+          }
+        }
+      } catch { /* try next */ }
+    }
+  }
+
+  // Fallback to grounded structured synthesis if no LLM responded
+  const finalAnswer = aiAnswer || (
+    `### 🔍 Grounded Repository Analysis\n\n` +
+    `**Question:** ${question}\n\n` +
+    `Found **${topFiles.length} matching files** across the codebase index:\n\n` +
+    topFiles.map(tf => (
+      `#### 📄 \`${tf.file.relativePath}\` (${tf.file.language}, ${tf.file.lineCount} lines)\n` +
+      `- **Relevance:** ${tf.matchedReasons.join('; ')}\n` +
+      (tf.file.symbols.length ? `- **Symbols:** \`${tf.file.symbols.slice(0, 6).map(s => `${s.kind} ${s.name}`).join('`, `')}\`\n` : '') +
+      (tf.snippet ? `\`\`\`${tf.file.language.toLowerCase().includes('type') ? 'typescript' : 'javascript'}\n${tf.snippet}\n\`\`\`\n` : '')
+    )).join('\n') +
+    `\n### 💡 Architectural Flow:\n` +
+    `The primary entry point for this functionality is **\`${topFiles[0]?.file.relativePath}\`**` +
+    (topFiles.length > 1 ? `, which collaborates with **\`${topFiles[1]?.file.relativePath}\`**.` : '.') +
+    ` You can inspect references or trace import relationships directly in the Code Graph and Symbol Explorer.`
+  );
 
   return {
     question,
-    answer,
+    answer: finalAnswer,
     citations,
     relatedSymbols: relatedSymbols.slice(0, 8),
   };

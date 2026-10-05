@@ -497,7 +497,10 @@ export interface DetectedLocalModel {
  */
 export async function fetchLocalModels(customEndpoint?: string): Promise<{ models: DetectedLocalModel[]; endpoint: string; reachable: boolean }> {
   const candidateEndpoints = customEndpoint
-    ? [customEndpoint, customEndpoint.replace('localhost', 'host.docker.internal')]
+    ? [
+        customEndpoint.replace('localhost', 'host.docker.internal').replace('127.0.0.1', 'host.docker.internal'),
+        customEndpoint,
+      ]
     : [
         'http://host.docker.internal:11434',
         'http://localhost:11434',
@@ -514,7 +517,7 @@ export async function fetchLocalModels(customEndpoint?: string): Promise<{ model
       const res = await fetch(`${clean}/api/tags`, { method: 'GET', signal: AbortSignal.timeout(3000) });
       if (res.ok) {
         const data = (await res.json()) as { models?: Array<{ name: string; size?: number; modified_at?: string; details?: { parameter_size?: string; family?: string } }> };
-        if (data && Array.isArray(data.models) && data.models.length > 0) {
+        if (data && Array.isArray(data.models)) {
           const models: DetectedLocalModel[] = data.models.map((m) => {
             const sizeMb = m.size ? `${(m.size / (1024 * 1024)).toFixed(0)} MB` : undefined;
             return {
@@ -525,7 +528,7 @@ export async function fetchLocalModels(customEndpoint?: string): Promise<{ model
               modifiedAt: m.modified_at,
             };
           });
-          return { models, endpoint: clean, reachable: true };
+          return { models, endpoint: customEndpoint || clean, reachable: true };
         }
       }
     } catch {
@@ -537,12 +540,12 @@ export async function fetchLocalModels(customEndpoint?: string): Promise<{ model
       const res = await fetch(`${clean}/v1/models`, { method: 'GET', signal: AbortSignal.timeout(3000) });
       if (res.ok) {
         const data = (await res.json()) as { data?: Array<{ id: string }> };
-        if (data && Array.isArray(data.data) && data.data.length > 0) {
+        if (data && Array.isArray(data.data)) {
           const models: DetectedLocalModel[] = data.data.map((m) => ({
             name: m.id,
             size: 'Local',
           }));
-          return { models, endpoint: clean, reachable: true };
+          return { models, endpoint: customEndpoint || clean, reachable: true };
         }
       }
     } catch {
@@ -550,12 +553,374 @@ export async function fetchLocalModels(customEndpoint?: string): Promise<{ model
     }
   }
 
-  // Default fallback if server not running during probe
+  // Not reachable: accurately return empty models array and reachable: false
   return {
-    models: [
-      { name: 'qwen2.5-coder:1.5b', size: '986 MB', parameterSize: '1.5B', family: 'qwen2' },
-    ],
+    models: [],
     endpoint: customEndpoint || 'http://localhost:11434',
     reachable: false,
+  };
+}
+
+export interface LiveProviderModel {
+  id: string;
+  name: string;
+  description?: string;
+  provider: string;
+  created?: string | number;
+}
+
+/**
+ * Connects directly to Cloud or Local LLM provider APIs (Claude, OpenAI Codex, Gemini, etc.)
+ * using the provided or stored API key to fetch the latest currently available live models.
+ */
+export async function fetchLiveModels(
+  providerName: string,
+  providedKey?: string,
+  organizationId?: string,
+): Promise<{
+  ok: boolean;
+  provider: string;
+  models: LiveProviderModel[];
+  message?: string;
+}> {
+  const prov = providerName.toLowerCase();
+
+  // If local / ollama
+  if (prov === 'local' || prov === 'ollama' || prov === 'lmstudio') {
+    const localRes = await fetchLocalModels(providedKey);
+    const models: LiveProviderModel[] = localRes.models.map((m) => ({
+      id: m.name,
+      name: m.name,
+      description: `${m.parameterSize || 'Local'} • ${m.size || 'On-Device'}`,
+      provider: 'local',
+      created: m.modifiedAt,
+    }));
+    return {
+      ok: localRes.reachable,
+      provider: 'local',
+      models,
+      message: localRes.reachable
+        ? (models.length > 0 ? `Detected ${models.length} live local model(s)` : 'Connected to host, but 0 models installed.')
+        : 'Could not connect to local host. Ensure Ollama or LM Studio is running.',
+    };
+  }
+
+  // Resolve API key
+  let apiKey = providedKey;
+  if (!apiKey && organizationId) {
+    try {
+      const dbProvider = await prisma.llmProvider.findFirst({
+        where: { organizationId, provider: prov },
+      });
+      if (dbProvider?.apiKey) {
+        apiKey = decryptField(dbProvider.apiKey);
+      } else if (dbProvider?.mode === 'PLATFORM') {
+        const envVar = PLATFORM_KEY_ENV[prov];
+        apiKey = envVar ? process.env[envVar] : undefined;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Fallback to platform env vars if still no key
+  if (!apiKey) {
+    if (prov === 'google' || prov === 'gemini') {
+      apiKey = process.env.GEMINI_API_KEY || process.env.PLATFORM_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
+    } else if (prov === 'anthropic' || prov === 'claude') {
+      apiKey = process.env.PLATFORM_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+    } else if (prov === 'openai' || prov === 'codex') {
+      apiKey = process.env.PLATFORM_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    } else {
+      const envVar = PLATFORM_KEY_ENV[prov];
+      apiKey = envVar ? process.env[envVar] : undefined;
+    }
+  }
+
+  if (!apiKey) {
+    return {
+      ok: false,
+      provider: prov,
+      models: [],
+      message: 'No API key provided or configured for this provider.',
+    };
+  }
+
+  // 1. Google Gemini
+  if (prov === 'google' || prov === 'gemini') {
+    try {
+      const res = await safeFetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+        { method: 'GET', timeoutMs: 10_000 },
+      );
+      if (!res.ok) {
+        return {
+          ok: false,
+          provider: 'google',
+          models: [],
+          message: res.status === 400 || res.status === 403
+            ? 'Invalid Google Gemini API key.'
+            : `Gemini API returned status ${res.status}`,
+        };
+      }
+      const data = (await res.json()) as {
+        models?: Array<{
+          name: string;
+          displayName?: string;
+          description?: string;
+          supportedGenerationMethods?: string[];
+        }>;
+      };
+      const rawList = Array.isArray(data.models) ? data.models : [];
+      const filtered = rawList.filter((m) =>
+        m.supportedGenerationMethods?.includes('generateContent') || m.name.includes('gemini'),
+      );
+      const models: LiveProviderModel[] = filtered.map((m) => {
+        const cleanId = m.name.replace(/^models\//, '');
+        return {
+          id: cleanId,
+          name: m.displayName || cleanId,
+          description: m.description,
+          provider: 'google',
+        };
+      });
+
+      models.sort((a, b) => {
+        const score = (id: string) => {
+          if (id.includes('2.5-flash')) return 100;
+          if (id.includes('2.5-pro')) return 95;
+          if (id.includes('2.0-flash')) return 90;
+          if (id.includes('1.5-pro')) return 85;
+          if (id.includes('1.5-flash')) return 80;
+          return 10;
+        };
+        return score(b.id) - score(a.id);
+      });
+
+      return {
+        ok: true,
+        provider: 'google',
+        models,
+        message: `Fetched ${models.length} live models from Gemini API`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        provider: 'google',
+        models: [],
+        message: `Failed to connect to Gemini API: ${(err as Error).message}`,
+      };
+    }
+  }
+
+  // 2. Anthropic Claude
+  if (prov === 'anthropic' || prov === 'claude') {
+    try {
+      const res = await safeFetch('https://api.anthropic.com/v1/models?limit=50', {
+        method: 'GET',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        timeoutMs: 10_000,
+      });
+      if (!res.ok) {
+        return {
+          ok: false,
+          provider: 'anthropic',
+          models: [],
+          message: res.status === 401
+            ? 'Invalid Anthropic Claude API key.'
+            : `Anthropic API returned status ${res.status}`,
+        };
+      }
+      const data = (await res.json()) as {
+        data?: Array<{
+          id: string;
+          display_name?: string;
+          created_at?: string;
+        }>;
+      };
+      const rawList = Array.isArray(data.data) ? data.data : [];
+      const models: LiveProviderModel[] = rawList.map((m) => ({
+        id: m.id,
+        name: m.display_name || m.id,
+        description: 'Anthropic Claude Model',
+        provider: 'anthropic',
+        created: m.created_at,
+      }));
+
+      models.sort((a, b) => {
+        const score = (id: string) => {
+          if (id.includes('3-7-sonnet')) return 100;
+          if (id.includes('3-5-sonnet')) return 95;
+          if (id.includes('3-5-haiku')) return 90;
+          if (id.includes('3-opus')) return 85;
+          return 10;
+        };
+        return score(b.id) - score(a.id);
+      });
+
+      return {
+        ok: true,
+        provider: 'anthropic',
+        models,
+        message: `Fetched ${models.length} live models from Anthropic API`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        provider: 'anthropic',
+        models: [],
+        message: `Failed to connect to Anthropic API: ${(err as Error).message}`,
+      };
+    }
+  }
+
+  // 3. OpenAI / Codex
+  if (prov === 'openai' || prov === 'codex') {
+    try {
+      const res = await safeFetch('https://api.openai.com/v1/models', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        timeoutMs: 10_000,
+      });
+      if (!res.ok) {
+        return {
+          ok: false,
+          provider: 'openai',
+          models: [],
+          message: res.status === 401
+            ? 'Invalid OpenAI / Codex API key.'
+            : `OpenAI API returned status ${res.status}`,
+        };
+      }
+      const data = (await res.json()) as {
+        data?: Array<{
+          id: string;
+          created?: number;
+        }>;
+      };
+      const rawList = Array.isArray(data.data) ? data.data : [];
+      const filtered = rawList.filter((m) => {
+        const id = m.id.toLowerCase();
+        return (
+          id.startsWith('gpt-4') ||
+          id.startsWith('gpt-3.5') ||
+          id.startsWith('o1') ||
+          id.startsWith('o3') ||
+          id.startsWith('chatgpt') ||
+          id.includes('codex') ||
+          id.includes('code-')
+        ) && !id.includes('realtime') && !id.includes('audio');
+      });
+
+      const models: LiveProviderModel[] = filtered.map((m) => ({
+        id: m.id,
+        name: m.id,
+        description: m.id.startsWith('o1') || m.id.startsWith('o3')
+          ? 'Reasoning Model'
+          : m.id.includes('code')
+          ? 'Code / Codex Model'
+          : 'Multimodal Chat Model',
+        provider: 'openai',
+        created: m.created,
+      }));
+
+      models.sort((a, b) => {
+        const score = (id: string) => {
+          if (id === 'gpt-4o') return 100;
+          if (id === 'gpt-4o-mini') return 95;
+          if (id.startsWith('o3-mini')) return 90;
+          if (id.startsWith('o1')) return 85;
+          if (id.includes('gpt-4-turbo')) return 80;
+          return 10;
+        };
+        return score(b.id) - score(a.id);
+      });
+
+      return {
+        ok: true,
+        provider: 'openai',
+        models,
+        message: `Fetched ${models.length} live models from OpenAI API`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        provider: 'openai',
+        models: [],
+        message: `Failed to connect to OpenAI API: ${(err as Error).message}`,
+      };
+    }
+  }
+
+  // 4. Generic OpenAI-compatible providers (Groq, Mistral, OpenRouter, xAI Grok)
+  const genericEndpoints: Record<string, { url: string; headers: Record<string, string> }> = {
+    groq: {
+      url: 'https://api.groq.com/openai/v1/models',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    },
+    mistral: {
+      url: 'https://api.mistral.ai/v1/models',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    },
+    openrouter: {
+      url: 'https://openrouter.ai/api/v1/models',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    },
+    grok: {
+      url: 'https://api.x.ai/v1/models',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    },
+    xai: {
+      url: 'https://api.x.ai/v1/models',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    },
+  };
+
+  const genericTarget = genericEndpoints[prov];
+  if (genericTarget) {
+    try {
+      const res = await safeFetch(genericTarget.url, {
+        method: 'GET',
+        headers: genericTarget.headers,
+        timeoutMs: 10_000,
+      });
+      if (!res.ok) {
+        return {
+          ok: false,
+          provider: prov,
+          models: [],
+          message: `${prov.toUpperCase()} returned status ${res.status}`,
+        };
+      }
+      const data = (await res.json()) as { data?: Array<{ id: string; name?: string }> };
+      const rawList = Array.isArray(data.data) ? data.data : [];
+      const models: LiveProviderModel[] = rawList.map((m) => ({
+        id: m.id,
+        name: m.name || m.id,
+        description: `${prov.toUpperCase()} Model`,
+        provider: prov,
+      }));
+      return {
+        ok: true,
+        provider: prov,
+        models,
+        message: `Fetched ${models.length} live models from ${prov.toUpperCase()} API`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        provider: prov,
+        models: [],
+        message: `Failed to connect to ${prov}: ${(err as Error).message}`,
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    provider: prov,
+    models: [],
+    message: `Unsupported provider "${providerName}"`,
   };
 }

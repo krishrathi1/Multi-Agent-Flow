@@ -15,6 +15,21 @@ router.get('/local-models', async (req, res) => {
   res.json(result);
 });
 
+router.post('/live-models', async (req, res) => {
+  const { provider, apiKey } = req.body;
+  if (!provider) {
+    return res.status(400).json({ error: 'provider is required' });
+  }
+  const result = await llmService.fetchLiveModels(provider, apiKey, req.organizationId);
+  res.json(result);
+});
+
+router.get('/live-models/:provider', async (req, res) => {
+  const { provider } = req.params;
+  const result = await llmService.fetchLiveModels(provider, undefined, req.organizationId);
+  res.json(result);
+});
+
 router.post('/', async (req, res) => {
   const { provider, mode, apiKey } = req.body;
   if (!provider || !mode) {

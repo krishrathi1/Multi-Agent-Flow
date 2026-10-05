@@ -111,7 +111,7 @@ router.post('/ask', async (req, res) => {
     return res.status(400).json({ error: 'Question is required' });
   }
 
-  const result = await codeIntel.askCodebase(question);
+  const result = await codeIntel.askCodebase(question, req.organizationId);
   res.json(result);
 });
 

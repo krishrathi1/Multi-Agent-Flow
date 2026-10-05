@@ -24,6 +24,10 @@ import {
   RefreshCw,
   Sliders,
   Terminal,
+  Eye,
+  EyeOff,
+  ChevronRight,
+  Search,
 } from 'lucide-react';
 import { PageHeader, SectionHeading } from '../components/ui/PageHeader';
 import { Card } from '../components/ui/Card';
@@ -89,7 +93,7 @@ export function Settings() {
         {activeTab === 'members' && (
           <MembersTab currentUserId={user?.id ?? ''} isAdmin={isAdmin} isOwner={isOwner} />
         )}
-        {activeTab === 'api-keys' && <ApiKeysTab isAdmin={isAdmin} />}
+        {activeTab === 'api-keys' && <ApiKeysTab isAdmin={isAdmin} onNavigateToLlm={() => setActiveTab('llm-providers')} />}
         {activeTab === 'llm-providers' && <LlmProvidersTab isAdmin={isAdmin} />}
         {activeTab === 'integrations' && <IntegrationsTab isAdmin={isAdmin} />}
       </div>
@@ -575,7 +579,7 @@ function MembersTab({
 // 3. API Keys Tab
 // ---------------------------------------------------------------------------
 
-function ApiKeysTab({ isAdmin }: { isAdmin: boolean }) {
+function ApiKeysTab({ isAdmin, onNavigateToLlm }: { isAdmin: boolean; onNavigateToLlm?: () => void }) {
   const [keys, setKeys] = useState<OrgApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -637,6 +641,26 @@ function ApiKeysTab({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div className="space-y-6">
+      {/* ── Banner connecting to AI Model providers ── */}
+      <Card padding="md" className="border border-brand-500/30 bg-brand-500/5 shadow-2xs flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400">
+            <Sparkles size={20} />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-ink">Looking to connect Claude, OpenAI / Codex, or Gemini?</h4>
+            <p className="text-2xs text-ink-muted">
+              These keys below are Nexus API keys for external access. To connect your AI provider keys and fetch live models, use the AI Models & LLM tab.
+            </p>
+          </div>
+        </div>
+        {onNavigateToLlm && (
+          <Button variant="primary" size="sm" onClick={onNavigateToLlm} icon={ChevronRight}>
+            Connect AI Models & Keys
+          </Button>
+        )}
+      </Card>
+
       <SectionHeading
         title={`API Access Keys (${keys.length})`}
         description="Keys used by remote agents, CLI pipelines, and external integrations to access Nexus AI API."
@@ -780,211 +804,1088 @@ function ApiKeysTab({ isAdmin }: { isAdmin: boolean }) {
 // 4. LLM Providers & AI Models Tab
 // ---------------------------------------------------------------------------
 
-interface LocalModelInfo {
+interface LiveModelItem {
+  id: string;
   name: string;
-  size?: string;
-  parameterSize?: string;
-  family?: string;
-  modifiedAt?: string;
+  description?: string;
+  provider: string;
+  created?: string | number;
 }
 
 function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
-  const [localEndpoint, setLocalEndpoint] = useState(() => localStorage.getItem('nexus:local_llm_endpoint') || 'http://localhost:11434');
-  const [detectedModels, setDetectedModels] = useState<LocalModelInfo[]>(() => {
-    const saved = localStorage.getItem('nexus:detected_local_models');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch { /* ignore */ }
-    }
-    return [
-      { name: 'qwen2.5-coder:1.5b', size: '986 MB', parameterSize: '1.5B', family: 'qwen2' },
-    ];
-  });
-  const [activeModel, setActiveModel] = useState(() => localStorage.getItem('nexus:active_local_model') || 'qwen2.5-coder:1.5b');
-  const [isFetching, setIsFetching] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const fetchModels = useCallback(async (ep: string) => {
-    setIsFetching(true);
-    setMessage(null);
+  // Provider API Keys input state
+  const [geminiKey, setGeminiKey] = useState('');
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [geminiModels, setGeminiModels] = useState<LiveModelItem[]>(() => {
     try {
-      const data = await api.llmProviders.localModels(ep);
-      if (data && data.models && data.models.length > 0) {
-        setDetectedModels(data.models);
-        localStorage.setItem('nexus:detected_local_models', JSON.stringify(data.models));
-        if (!data.models.some(m => m.name === activeModel)) {
-          setActiveModel(data.models[0].name);
-          localStorage.setItem('nexus:active_local_model', data.models[0].name);
+      const saved = localStorage.getItem('nexus:live_models_google');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [geminiLoading, setGeminiLoading] = useState(false);
+  const [geminiError, setGeminiError] = useState<string | null>(null);
+
+  const [claudeKey, setClaudeKey] = useState('');
+  const [showClaudeKey, setShowClaudeKey] = useState(false);
+  const [claudeModels, setClaudeModels] = useState<LiveModelItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus:live_models_anthropic');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [claudeLoading, setClaudeLoading] = useState(false);
+  const [claudeError, setClaudeError] = useState<string | null>(null);
+
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+  const [openaiModels, setOpenaiModels] = useState<LiveModelItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus:live_models_openai');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [openaiLoading, setOpenaiLoading] = useState(false);
+  const [openaiError, setOpenaiError] = useState<string | null>(null);
+
+  // Local PC State
+  const [localEndpoint, setLocalEndpoint] = useState(() => localStorage.getItem('nexus:local_llm_endpoint') || 'http://localhost:11434');
+  const [localModels, setLocalModels] = useState<LiveModelItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus:live_models_local');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [localLoading, setLocalLoading] = useState(false);
+  const [localConnected, setLocalConnected] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  // Active / Configured providers in database
+  const [configuredProviders, setConfiguredProviders] = useState<LlmProvider[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+
+  // Active globally chosen model
+  const [activeModel, setActiveModel] = useState(() => localStorage.getItem('nexus:active_llm_model') || localStorage.getItem('nexus:active_local_model') || '');
+  const [activeProvider, setActiveProvider] = useState(() => localStorage.getItem('nexus:active_llm_provider') || 'local');
+
+  // Filter & Search
+  const [activeFilter, setActiveFilter] = useState<'all' | 'google' | 'anthropic' | 'openai' | 'local'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  // Helper to check if provider is saved in DB
+  const isProviderConfigured = (pName: string) => {
+    return configuredProviders.some((p) => p.provider.toLowerCase() === pName.toLowerCase() && p.isActive);
+  };
+
+  // Select active default model
+  const handleSelectModel = (modelId: string, provName: string) => {
+    setActiveModel(modelId);
+    setActiveProvider(provName);
+    localStorage.setItem('nexus:active_llm_model', modelId);
+    localStorage.setItem('nexus:active_llm_provider', provName);
+    if (provName === 'local') {
+      localStorage.setItem('nexus:active_local_model', modelId);
+    }
+    setToastMessage({
+      type: 'success',
+      text: `Default AI Model set to "${modelId}" (${provName.toUpperCase()}). All agents will prioritize this model.`,
+    });
+  };
+
+  // Fetch local models
+  const scanLocalPc = useCallback(async (ep: string) => {
+    setLocalLoading(true);
+    setLocalError(null);
+    try {
+      const res = await api.llmProviders.localModels(ep);
+      setLocalConnected(res.reachable);
+      if (res.reachable) {
+        const mapped: LiveModelItem[] = (res.models || []).map((m) => ({
+          id: m.name,
+          name: m.name,
+          description: `${m.parameterSize || 'Local Model'} • ${m.size || 'On-Device'}`,
+          provider: 'local',
+          created: m.modifiedAt,
+        }));
+        setLocalModels(mapped);
+        localStorage.setItem('nexus:live_models_local', JSON.stringify(mapped));
+        if (mapped.length > 0 && !activeModel) {
+          handleSelectModel(mapped[0].id, 'local');
         }
-        setIsConnected(data.reachable);
-        setMessage({
-          type: 'success',
-          text: `Successfully detected ${data.models.length} installed model${data.models.length > 1 ? 's' : ''} on your PC!`,
-        });
+      } else {
+        setLocalModels([]);
+        setLocalError(`Could not reach ${ep}. Ensure Ollama or LM Studio is running on your machine.`);
       }
-    } catch {
-      // Fallback
-      setMessage({ type: 'success', text: `Local engine configured (${ep}).` });
+    } catch (err: any) {
+      setLocalConnected(false);
+      setLocalError(err.message || `Failed to connect to ${ep}`);
     } finally {
-      setIsFetching(false);
+      setLocalLoading(false);
     }
   }, [activeModel]);
 
+  // Initial load: Fetch saved providers and their live models
   useEffect(() => {
-    fetchModels(localEndpoint);
+    let mounted = true;
+    async function loadData() {
+      try {
+        const provs = await api.llmProviders.list();
+        if (!mounted) return;
+        setConfiguredProviders(provs);
+
+        // Auto-fetch live models for configured providers
+        for (const p of provs) {
+          const pName = p.provider.toLowerCase();
+          if (pName === 'google' || pName === 'gemini') {
+            fetchLiveProviderModels('google');
+          } else if (pName === 'anthropic' || pName === 'claude') {
+            fetchLiveProviderModels('anthropic');
+          } else if (pName === 'openai' || pName === 'codex') {
+            fetchLiveProviderModels('openai');
+          }
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        if (mounted) setInitialLoading(false);
+      }
+    }
+
+    loadData();
+    scanLocalPc(localEndpoint);
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const handleFetchLocalModels = () => {
-    fetchModels(localEndpoint);
+  // Fetch live models for cloud provider
+  const fetchLiveProviderModels = async (provName: string, explicitKey?: string) => {
+    if (provName === 'google') setGeminiLoading(true);
+    if (provName === 'anthropic') setClaudeLoading(true);
+    if (provName === 'openai') setOpenaiLoading(true);
+
+    try {
+      const res = await api.llmProviders.liveModels(provName, explicitKey);
+      if (res.ok) {
+        if (provName === 'google') {
+          setGeminiModels(res.models);
+          setGeminiError(null);
+          localStorage.setItem('nexus:live_models_google', JSON.stringify(res.models));
+        } else if (provName === 'anthropic') {
+          setClaudeModels(res.models);
+          setClaudeError(null);
+          localStorage.setItem('nexus:live_models_anthropic', JSON.stringify(res.models));
+        } else if (provName === 'openai') {
+          setOpenaiModels(res.models);
+          setOpenaiError(null);
+          localStorage.setItem('nexus:live_models_openai', JSON.stringify(res.models));
+        }
+        return res;
+      } else {
+        const errMsg = res.message || `Failed to fetch live models from ${provName}`;
+        if (provName === 'google') setGeminiError(errMsg);
+        if (provName === 'anthropic') setClaudeError(errMsg);
+        if (provName === 'openai') setOpenaiError(errMsg);
+        return res;
+      }
+    } catch (err: any) {
+      const msg = err.message || `Connection to ${provName} failed`;
+      if (provName === 'google') setGeminiError(msg);
+      if (provName === 'anthropic') setClaudeError(msg);
+      if (provName === 'openai') setOpenaiError(msg);
+      return { ok: false, models: [], message: msg };
+    } finally {
+      if (provName === 'google') setGeminiLoading(false);
+      if (provName === 'anthropic') setClaudeLoading(false);
+      if (provName === 'openai') setOpenaiLoading(false);
+    }
   };
 
-  const handleSaveEndpoint = (e: React.FormEvent) => {
-    e.preventDefault();
-    localStorage.setItem('nexus:local_llm_endpoint', localEndpoint.trim());
-    localStorage.setItem('nexus:active_local_model', activeModel);
-    fetchModels(localEndpoint.trim());
+  // Connect and save key
+  const handleConnectProvider = async (provName: string, apiKey: string) => {
+    const trimmed = apiKey.trim();
+    if (!trimmed) return;
+
+    if (provName === 'google') { setGeminiLoading(true); setGeminiError(null); }
+    if (provName === 'anthropic') { setClaudeLoading(true); setClaudeError(null); }
+    if (provName === 'openai') { setOpenaiLoading(true); setOpenaiError(null); }
+
+    try {
+      // 1. Fetch live models to test the key and get latest available models
+      const liveRes = await api.llmProviders.liveModels(provName, trimmed);
+      if (!liveRes.ok) {
+        throw new Error(liveRes.message || `The ${provName} API key is invalid.`);
+      }
+
+      // 2. Persist encrypted key in database
+      await api.llmProviders.upsert({ provider: provName, mode: 'byok', apiKey: trimmed });
+
+      // 3. Store models in state
+      if (provName === 'google') {
+        setGeminiModels(liveRes.models);
+        setGeminiKey('');
+        localStorage.setItem('nexus:live_models_google', JSON.stringify(liveRes.models));
+      } else if (provName === 'anthropic') {
+        setClaudeModels(liveRes.models);
+        setClaudeKey('');
+        localStorage.setItem('nexus:live_models_anthropic', JSON.stringify(liveRes.models));
+      } else if (provName === 'openai') {
+        setOpenaiModels(liveRes.models);
+        setOpenaiKey('');
+        localStorage.setItem('nexus:live_models_openai', JSON.stringify(liveRes.models));
+      }
+
+      // 4. Refresh configured providers
+      const updated = await api.llmProviders.list();
+      setConfiguredProviders(updated);
+
+      setToastMessage({
+        type: 'success',
+        text: `Connected ${provName.toUpperCase()}! Fetched ${liveRes.models.length} live models directly from provider API.`,
+      });
+
+      // If no active model, auto-select flagship
+      if (!activeModel && liveRes.models.length > 0) {
+        handleSelectModel(liveRes.models[0].id, provName);
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Verification failed. Please check your API key.';
+      if (provName === 'google') setGeminiError(msg);
+      if (provName === 'anthropic') setClaudeError(msg);
+      if (provName === 'openai') setOpenaiError(msg);
+      setToastMessage({ type: 'error', text: msg });
+    } finally {
+      if (provName === 'google') setGeminiLoading(false);
+      if (provName === 'anthropic') setClaudeLoading(false);
+      if (provName === 'openai') setOpenaiLoading(false);
+    }
+  };
+
+  // Disconnect provider
+  const handleDisconnectProvider = async (provName: string) => {
+    const existing = configuredProviders.find((p) => p.provider.toLowerCase() === provName.toLowerCase());
+    if (existing) {
+      try {
+        await api.llmProviders.delete(existing.id);
+        const updated = await api.llmProviders.list();
+        setConfiguredProviders(updated);
+      } catch { /* ignore */ }
+    }
+
+    if (provName === 'google') {
+      setGeminiModels([]);
+      setGeminiError(null);
+      localStorage.removeItem('nexus:live_models_google');
+    } else if (provName === 'anthropic') {
+      setClaudeModels([]);
+      setClaudeError(null);
+      localStorage.removeItem('nexus:live_models_anthropic');
+    } else if (provName === 'openai') {
+      setOpenaiModels([]);
+      setOpenaiError(null);
+      localStorage.removeItem('nexus:live_models_openai');
+    }
+
+    if (activeProvider === provName) {
+      setActiveModel('');
+      setActiveProvider('');
+      localStorage.removeItem('nexus:active_llm_model');
+      localStorage.removeItem('nexus:active_llm_provider');
+    }
+
+    setToastMessage({
+      type: 'info',
+      text: `Disconnected ${provName.toUpperCase()}.`,
+    });
+  };
+
+  // Filter helper for models
+  const filterList = (list: LiveModelItem[]) => {
+    if (!searchQuery.trim()) return list;
+    const q = searchQuery.toLowerCase();
+    return list.filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || (m.description && m.description.toLowerCase().includes(q)));
   };
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <SectionHeading
-        title="Local PC Model Engine"
-        description="Connect your local hardware (Ollama, LM Studio, vLLM) to run AI agents completely private with 0 API token costs."
+        title="AI Models & LLM Providers"
+        description="Connect your API keys (Google Gemini, Anthropic Claude, OpenAI & Codex) or your Local PC to dynamically fetch live models with zero hardcoded defaults."
       />
 
-      {message && (
+      {/* Toast Alert */}
+      {toastMessage && (
         <div
           className={cn(
-            'flex items-center gap-2.5 rounded-xl border p-3.5 text-xs font-semibold shadow-2xs',
-            message.type === 'success'
+            'flex items-center justify-between gap-2.5 rounded-xl border p-3.5 text-xs font-semibold shadow-2xs transition-all',
+            toastMessage.type === 'success'
               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              : toastMessage.type === 'info'
+              ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400'
               : 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400',
           )}
         >
-          {message.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          <span>{message.text}</span>
+          <div className="flex items-center gap-2">
+            {toastMessage.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            <span>{toastMessage.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-2xs opacity-70 hover:opacity-100"
+          >
+            ✕
+          </button>
         </div>
       )}
 
-      {/* Main Local PC Engine Card */}
-      <Card padding="md" className="border border-purple-500/30 bg-surface shadow-xs space-y-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      {/* Active Default Engine Banner */}
+      <Card padding="md" className="border border-brand-500/30 bg-brand-500/5 shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-purple-600 text-white shadow-xs">
-              <Server size={20} />
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-600 text-white shadow-xs">
+              <Zap size={20} />
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <h4 className="font-bold text-base text-ink">Local LLM Host (Ollama / LM Studio)</h4>
-                <Badge tone={isConnected ? 'success' : 'neutral'} dot>
-                  {isConnected ? 'PC Hardware Connected' : 'Local PC Active'}
-                </Badge>
+                <span className="text-2xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">
+                  Active Default Engine
+                </span>
+                {activeModel && (
+                  <Badge tone="brand" dot>
+                    Live Active
+                  </Badge>
+                )}
               </div>
-              <p className="text-2xs text-ink-muted">Private local inference running directly on your computer</p>
+              <h3 className="font-mono text-sm font-bold text-ink">
+                {activeModel ? activeModel : 'No default model selected — click any live model card below'}
+              </h3>
             </div>
           </div>
 
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={RefreshCw}
-            loading={isFetching}
-            onClick={handleFetchLocalModels}
-          >
-            Fetch Installed Models from PC
-          </Button>
-        </div>
-
-        <form onSubmit={handleSaveEndpoint} className="space-y-4 pt-2">
-          <div>
-            <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">
-              Local Server Endpoint URL
-            </label>
+          {activeModel && (
             <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={localEndpoint}
-                onChange={(e) => setLocalEndpoint(e.target.value)}
-                placeholder="http://localhost:11434"
-                required
-                className="flex-1 rounded-xl border border-line bg-canvas px-3.5 py-2.5 font-mono text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-brand-500 focus:outline-none"
-              />
-              <Button type="submit" variant="primary" size="sm" loading={isFetching}>
-                Save & Scan
+              <span className="rounded-lg border border-line bg-canvas px-3 py-1 font-mono text-2xs font-semibold text-ink-muted">
+                Provider: <span className="text-ink font-bold uppercase">{activeProvider}</span>
+              </span>
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => {
+                  setActiveModel('');
+                  setActiveProvider('');
+                  localStorage.removeItem('nexus:active_llm_model');
+                  localStorage.removeItem('nexus:active_llm_provider');
+                }}
+              >
+                Clear
               </Button>
             </div>
-            <p className="mt-1 text-2xs text-ink-muted">
-              Default for Ollama is <code className="font-mono text-ink">http://localhost:11434</code>, and for LM Studio is <code className="font-mono text-ink">http://localhost:1234/v1</code>.
-            </p>
+          )}
+        </div>
+      </Card>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {(
+            [
+              { id: 'all', label: 'All Providers' },
+              { id: 'google', label: 'Google Gemini' },
+              { id: 'anthropic', label: 'Anthropic Claude' },
+              { id: 'openai', label: 'OpenAI & Codex' },
+              { id: 'local', label: 'Local PC Hardware' },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveFilter(tab.id)}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-xs font-semibold transition-all shrink-0',
+                activeFilter === tab.id
+                  ? 'bg-brand-600 text-white shadow-xs'
+                  : 'bg-surface border border-line text-ink-muted hover:border-line-strong hover:text-ink',
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative min-w-[220px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Filter models by name or id..."
+            className="w-full rounded-xl border border-line bg-canvas pl-8 pr-3 py-1.5 text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-brand-500 focus:outline-none"
+          />
+        </div>
+      </div>
+
+      {/* PROVIDER 1: Google Gemini */}
+      {(activeFilter === 'all' || activeFilter === 'google') && (
+        <Card padding="md" className="border border-blue-500/20 bg-surface shadow-xs space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line-subtle pb-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-600 text-white shadow-xs">
+                <Sparkles size={20} />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-base text-ink">Google Gemini</h4>
+                  <Badge tone={isProviderConfigured('google') || geminiModels.length > 0 ? 'success' : 'neutral'} dot>
+                    {isProviderConfigured('google') || geminiModels.length > 0
+                      ? `Connected (${geminiModels.length} Live Models)`
+                      : 'Not Configured'}
+                  </Badge>
+                </div>
+                <p className="text-2xs text-ink-muted">
+                  Gemini 2.5 Pro, 2.5 Flash, 2.0 Flash • Ultra-fast multi-modal reasoning and large context windows
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-2xs font-bold text-blue-600 hover:text-blue-700"
+              >
+                <span>Get API Key</span>
+                <ExternalLink size={11} />
+              </a>
+              {(isProviderConfigured('google') || geminiModels.length > 0) && (
+                <>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    icon={RefreshCw}
+                    loading={geminiLoading}
+                    onClick={() => fetchLiveProviderModels('google')}
+                  >
+                    Refresh
+                  </Button>
+                  {isAdmin && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                      onClick={() => handleDisconnectProvider('google')}
+                    >
+                      Disconnect
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
-          {/* Installed Models List */}
+          {geminiError && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-400">
+              <AlertCircle size={15} />
+              <span>{geminiError}</span>
+            </div>
+          )}
+
+          {/* Connect API Key Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleConnectProvider('google', geminiKey);
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">
+                {isProviderConfigured('google') ? 'Update Gemini API Key' : 'Connect Gemini API Key'}
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showGeminiKey ? 'text' : 'password'}
+                    value={geminiKey}
+                    onChange={(e) => setGeminiKey(e.target.value)}
+                    placeholder={isProviderConfigured('google') ? '••••••••••••••••••••••••••••••••••••' : 'AIzaSy...'}
+                    className="w-full rounded-xl border border-line bg-canvas px-3.5 py-2.5 font-mono text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-blue-500 focus:outline-none pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGeminiKey(!showGeminiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                  >
+                    {showGeminiKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  loading={geminiLoading}
+                  disabled={!geminiKey.trim()}
+                >
+                  Connect & Fetch Live Models
+                </Button>
+              </div>
+            </div>
+          </form>
+
+          {/* Live Models Display */}
           <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between">
               <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
-                Models Installed on Your PC ({detectedModels.length})
+                Live Gemini Models ({geminiModels.length})
               </label>
-              <span className="text-2xs font-semibold text-purple-600 dark:text-purple-400">
-                Click a model to set as default engine
-              </span>
+              {geminiModels.length > 0 && (
+                <span className="text-2xs font-semibold text-blue-600 dark:text-blue-400">
+                  Click any model card to set as Active Default
+                </span>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-              {detectedModels.map((m) => {
-                const isSelected = activeModel === m.name;
-                return (
-                  <button
-                    key={m.name}
-                    type="button"
-                    onClick={() => {
-                      setActiveModel(m.name);
-                      localStorage.setItem('nexus:active_local_model', m.name);
-                    }}
-                    className={cn(
-                      'flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-all shadow-2xs',
-                      isSelected
-                        ? 'border-purple-500 bg-purple-500/15 text-purple-700 dark:text-purple-300 ring-1 ring-purple-500/50'
-                        : 'border-line bg-canvas text-ink-muted hover:border-line-strong hover:text-ink',
-                    )}
-                  >
-                    <div className="flex items-center justify-between w-full gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Cpu size={14} className={isSelected ? 'text-purple-600 dark:text-purple-400 shrink-0' : 'text-ink-faint shrink-0'} />
-                        <span className="font-mono text-xs font-bold text-ink truncate">{m.name}</span>
+            {geminiModels.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-line bg-canvas p-5 text-center text-xs text-ink-muted">
+                {geminiLoading ? 'Fetching live models from Google Gemini API...' : 'No Gemini models loaded. Connect your API key above to load live models.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {filterList(geminiModels).map((m) => {
+                  const isSelected = activeModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleSelectModel(m.id, 'google')}
+                      className={cn(
+                        'flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-all shadow-2xs',
+                        isSelected
+                          ? 'border-blue-500 bg-blue-500/15 text-blue-700 dark:text-blue-300 ring-1 ring-blue-500/50'
+                          : 'border-line bg-canvas text-ink-muted hover:border-line-strong hover:text-ink',
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Sparkles size={14} className={isSelected ? 'text-blue-600 shrink-0' : 'text-ink-faint shrink-0'} />
+                          <span className="font-mono text-xs font-bold text-ink truncate">{m.id}</span>
+                        </div>
+                        {isSelected && (
+                          <span className="rounded bg-blue-500/20 px-1.5 py-0.2 text-[9px] uppercase font-bold text-blue-600 shrink-0">
+                            Active Default
+                          </span>
+                        )}
                       </div>
-                      {isSelected && (
-                        <span className="rounded bg-purple-500/20 px-1.5 py-0.2 text-[9px] uppercase font-bold text-purple-600 dark:text-purple-300 shrink-0">
-                          Active Default
-                        </span>
+                      <div className="text-[11px] font-medium text-ink-muted line-clamp-1">{m.name}</div>
+                      {m.description && (
+                        <p className="text-[10px] text-ink-faint line-clamp-2 leading-relaxed">{m.description}</p>
                       )}
-                    </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
 
-                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                      {m.parameterSize && (
-                        <span className="rounded-md bg-inset px-1.5 py-0.2 text-[10px] font-mono font-semibold text-ink-muted border border-line-subtle">
-                          {m.parameterSize}
-                        </span>
-                      )}
-                      {m.size && (
-                        <span className="rounded-md bg-inset px-1.5 py-0.2 text-[10px] font-mono font-semibold text-ink-muted border border-line-subtle">
-                          {m.size}
-                        </span>
-                      )}
-                      {m.family && (
-                        <span className="rounded-md bg-inset px-1.5 py-0.2 text-[10px] font-mono uppercase text-ink-faint border border-line-subtle">
-                          {m.family}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
+      {/* PROVIDER 2: Anthropic Claude */}
+      {(activeFilter === 'all' || activeFilter === 'anthropic') && (
+        <Card padding="md" className="border border-amber-500/20 bg-surface shadow-xs space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line-subtle pb-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-600 text-white shadow-xs">
+                <Cpu size={20} />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-base text-ink">Anthropic Claude</h4>
+                  <Badge tone={isProviderConfigured('anthropic') || claudeModels.length > 0 ? 'success' : 'neutral'} dot>
+                    {isProviderConfigured('anthropic') || claudeModels.length > 0
+                      ? `Connected (${claudeModels.length} Live Models)`
+                      : 'Not Configured'}
+                  </Badge>
+                </div>
+                <p className="text-2xs text-ink-muted">
+                  Claude 3.7 Sonnet (Hybrid Reasoning), 3.5 Sonnet & Haiku • Premier coding and autonomous agent workflow model
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <a
+                href="https://console.anthropic.com/settings/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-2xs font-bold text-amber-600 hover:text-amber-700"
+              >
+                <span>Get API Key</span>
+                <ExternalLink size={11} />
+              </a>
+              {(isProviderConfigured('anthropic') || claudeModels.length > 0) && (
+                <>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    icon={RefreshCw}
+                    loading={claudeLoading}
+                    onClick={() => fetchLiveProviderModels('anthropic')}
+                  >
+                    Refresh
+                  </Button>
+                  {isAdmin && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                      onClick={() => handleDisconnectProvider('anthropic')}
+                    >
+                      Disconnect
+                    </Button>
+                  )}
+                </>
+              )}
             </div>
           </div>
-        </form>
-      </Card>
+
+          {claudeError && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-400">
+              <AlertCircle size={15} />
+              <span>{claudeError}</span>
+            </div>
+          )}
+
+          {/* Connect API Key Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleConnectProvider('anthropic', claudeKey);
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">
+                {isProviderConfigured('anthropic') ? 'Update Anthropic Claude API Key' : 'Connect Claude API Key'}
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showClaudeKey ? 'text' : 'password'}
+                    value={claudeKey}
+                    onChange={(e) => setClaudeKey(e.target.value)}
+                    placeholder={isProviderConfigured('anthropic') ? '••••••••••••••••••••••••••••••••••••' : 'sk-ant-api03-...'}
+                    className="w-full rounded-xl border border-line bg-canvas px-3.5 py-2.5 font-mono text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-amber-500 focus:outline-none pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowClaudeKey(!showClaudeKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                  >
+                    {showClaudeKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  loading={claudeLoading}
+                  disabled={!claudeKey.trim()}
+                >
+                  Connect & Fetch Live Models
+                </Button>
+              </div>
+            </div>
+          </form>
+
+          {/* Live Models Display */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
+                Live Anthropic Models ({claudeModels.length})
+              </label>
+              {claudeModels.length > 0 && (
+                <span className="text-2xs font-semibold text-amber-600 dark:text-amber-400">
+                  Click any model card to set as Active Default
+                </span>
+              )}
+            </div>
+
+            {claudeModels.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-line bg-canvas p-5 text-center text-xs text-ink-muted">
+                {claudeLoading ? 'Fetching live models from Anthropic API...' : 'No Claude models loaded. Connect your API key above to load live models.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {filterList(claudeModels).map((m) => {
+                  const isSelected = activeModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleSelectModel(m.id, 'anthropic')}
+                      className={cn(
+                        'flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-all shadow-2xs',
+                        isSelected
+                          ? 'border-amber-500 bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/50'
+                          : 'border-line bg-canvas text-ink-muted hover:border-line-strong hover:text-ink',
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Cpu size={14} className={isSelected ? 'text-amber-600 shrink-0' : 'text-ink-faint shrink-0'} />
+                          <span className="font-mono text-xs font-bold text-ink truncate">{m.id}</span>
+                        </div>
+                        {isSelected && (
+                          <span className="rounded bg-amber-500/20 px-1.5 py-0.2 text-[9px] uppercase font-bold text-amber-600 shrink-0">
+                            Active Default
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-medium text-ink-muted line-clamp-1">{m.name}</div>
+                      {m.description && (
+                        <p className="text-[10px] text-ink-faint line-clamp-2 leading-relaxed">{m.description}</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* PROVIDER 3: OpenAI & Codex */}
+      {(activeFilter === 'all' || activeFilter === 'openai') && (
+        <Card padding="md" className="border border-emerald-500/20 bg-surface shadow-xs space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line-subtle pb-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-white shadow-xs">
+                <Bot size={20} />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-base text-ink">OpenAI & Codex</h4>
+                  <Badge tone={isProviderConfigured('openai') || openaiModels.length > 0 ? 'success' : 'neutral'} dot>
+                    {isProviderConfigured('openai') || openaiModels.length > 0
+                      ? `Connected (${openaiModels.length} Live Models)`
+                      : 'Not Configured'}
+                  </Badge>
+                </div>
+                <p className="text-2xs text-ink-muted">
+                  GPT-4o, o1, o3-mini, and Codex models • Industry-standard reasoning, vision, and programming engines
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <a
+                href="https://platform.openai.com/api-keys"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-2xs font-bold text-emerald-600 hover:text-emerald-700"
+              >
+                <span>Get API Key</span>
+                <ExternalLink size={11} />
+              </a>
+              {(isProviderConfigured('openai') || openaiModels.length > 0) && (
+                <>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    icon={RefreshCw}
+                    loading={openaiLoading}
+                    onClick={() => fetchLiveProviderModels('openai')}
+                  >
+                    Refresh
+                  </Button>
+                  {isAdmin && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                      onClick={() => handleDisconnectProvider('openai')}
+                    >
+                      Disconnect
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {openaiError && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-400">
+              <AlertCircle size={15} />
+              <span>{openaiError}</span>
+            </div>
+          )}
+
+          {/* Connect API Key Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleConnectProvider('openai', openaiKey);
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">
+                {isProviderConfigured('openai') ? 'Update OpenAI API Key' : 'Connect OpenAI API Key'}
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showOpenaiKey ? 'text' : 'password'}
+                    value={openaiKey}
+                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    placeholder={isProviderConfigured('openai') ? '••••••••••••••••••••••••••••••••••••' : 'sk-proj-...'}
+                    className="w-full rounded-xl border border-line bg-canvas px-3.5 py-2.5 font-mono text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-emerald-500 focus:outline-none pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                  >
+                    {showOpenaiKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  loading={openaiLoading}
+                  disabled={!openaiKey.trim()}
+                >
+                  Connect & Fetch Live Models
+                </Button>
+              </div>
+            </div>
+          </form>
+
+          {/* Live Models Display */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
+                Live OpenAI Models ({openaiModels.length})
+              </label>
+              {openaiModels.length > 0 && (
+                <span className="text-2xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  Click any model card to set as Active Default
+                </span>
+              )}
+            </div>
+
+            {openaiModels.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-line bg-canvas p-5 text-center text-xs text-ink-muted">
+                {openaiLoading ? 'Fetching live models from OpenAI API...' : 'No OpenAI models loaded. Connect your API key above to load live models.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {filterList(openaiModels).map((m) => {
+                  const isSelected = activeModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleSelectModel(m.id, 'openai')}
+                      className={cn(
+                        'flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-all shadow-2xs',
+                        isSelected
+                          ? 'border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/50'
+                          : 'border-line bg-canvas text-ink-muted hover:border-line-strong hover:text-ink',
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Bot size={14} className={isSelected ? 'text-emerald-600 shrink-0' : 'text-ink-faint shrink-0'} />
+                          <span className="font-mono text-xs font-bold text-ink truncate">{m.id}</span>
+                        </div>
+                        {isSelected && (
+                          <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] uppercase font-bold text-emerald-600 shrink-0">
+                            Active Default
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-medium text-ink-muted line-clamp-1">{m.name}</div>
+                      {m.description && (
+                        <p className="text-[10px] text-ink-faint line-clamp-2 leading-relaxed">{m.description}</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* PROVIDER 4: Local PC Hardware */}
+      {(activeFilter === 'all' || activeFilter === 'local') && (
+        <Card padding="md" className="border border-purple-500/20 bg-surface shadow-xs space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line-subtle pb-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-purple-600 text-white shadow-xs">
+                <Server size={20} />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-base text-ink">Local PC Hardware (Ollama / LM Studio)</h4>
+                  <Badge tone={localConnected ? (localModels.length > 0 ? 'success' : 'neutral') : 'neutral'} dot>
+                    {localConnected
+                      ? localModels.length > 0
+                        ? `PC Connected (${localModels.length} Models)`
+                        : 'Connected (0 Models)'
+                      : 'Local Host Offline'}
+                  </Badge>
+                </div>
+                <p className="text-2xs text-ink-muted">
+                  Run private AI workflows on your own GPU/CPU with 0 API token fees
+                </p>
+              </div>
+            </div>
+
+            <Button
+              size="xs"
+              variant="secondary"
+              icon={RefreshCw}
+              loading={localLoading}
+              onClick={() => scanLocalPc(localEndpoint)}
+            >
+              Scan PC
+            </Button>
+          </div>
+
+          {localError && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-400">
+              <AlertCircle size={15} />
+              <span>{localError}</span>
+            </div>
+          )}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              localStorage.setItem('nexus:local_llm_endpoint', localEndpoint.trim());
+              scanLocalPc(localEndpoint.trim());
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">
+                Local Host Endpoint URL
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={localEndpoint}
+                  onChange={(e) => setLocalEndpoint(e.target.value)}
+                  placeholder="http://localhost:11434"
+                  required
+                  className="flex-1 rounded-xl border border-line bg-canvas px-3.5 py-2.5 font-mono text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-purple-500 focus:outline-none"
+                />
+                <Button type="submit" variant="primary" size="sm" loading={localLoading}>
+                  Save & Scan
+                </Button>
+              </div>
+              <p className="mt-1 text-2xs text-ink-muted">
+                Ollama: <code className="font-mono text-ink">http://localhost:11434</code> • LM Studio: <code className="font-mono text-ink">http://localhost:1234/v1</code>
+              </p>
+            </div>
+          </form>
+
+          {/* Installed Models Grid */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
+                Models Installed on Your PC ({localModels.length})
+              </label>
+              {localModels.length > 0 && (
+                <span className="text-2xs font-semibold text-purple-600 dark:text-purple-400">
+                  Click any model to set as Active Default
+                </span>
+              )}
+            </div>
+
+            {localModels.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-line bg-canvas p-6 text-center space-y-3">
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-purple-500/10 text-purple-600 mx-auto">
+                  <Bot size={20} />
+                </div>
+                <div>
+                  <h5 className="font-bold text-xs text-ink">
+                    {localConnected ? 'No Models Installed on Local PC' : 'Local PC Host Offline'}
+                  </h5>
+                  <p className="text-2xs text-ink-muted mt-1 max-w-md mx-auto">
+                    {localConnected
+                      ? `Connected to ${localEndpoint}, but 0 models were found. Pull a model via your terminal.`
+                      : `Nexus could not reach ${localEndpoint}. Start Ollama or LM Studio, then click "Scan PC".`}
+                  </p>
+                </div>
+
+                {localConnected && (
+                  <div className="bg-inset rounded-lg p-3 max-w-md mx-auto text-left space-y-2 border border-line-subtle">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+                      <Terminal size={12} />
+                      Download via Terminal:
+                    </span>
+                    <div className="flex items-center justify-between gap-2 font-mono text-2xs bg-canvas px-2.5 py-1.5 rounded border border-line">
+                      <code>ollama run qwen2.5-coder:1.5b</code>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText('ollama run qwen2.5-coder:1.5b');
+                          setToastMessage({ type: 'success', text: 'Copied command to clipboard!' });
+                        }}
+                        className="text-purple-600 hover:text-purple-700 font-sans font-semibold text-[11px]"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {filterList(localModels).map((m) => {
+                  const isSelected = activeModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleSelectModel(m.id, 'local')}
+                      className={cn(
+                        'flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-all shadow-2xs',
+                        isSelected
+                          ? 'border-purple-500 bg-purple-500/15 text-purple-700 dark:text-purple-300 ring-1 ring-purple-500/50'
+                          : 'border-line bg-canvas text-ink-muted hover:border-line-strong hover:text-ink',
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Cpu size={14} className={isSelected ? 'text-purple-600 shrink-0' : 'text-ink-faint shrink-0'} />
+                          <span className="font-mono text-xs font-bold text-ink truncate">{m.id}</span>
+                        </div>
+                        {isSelected && (
+                          <span className="rounded bg-purple-500/20 px-1.5 py-0.2 text-[9px] uppercase font-bold text-purple-600 shrink-0">
+                            Active Default
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-medium text-ink-muted line-clamp-1">{m.name}</div>
+                      {m.description && (
+                        <p className="text-[10px] text-ink-faint line-clamp-1">{m.description}</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

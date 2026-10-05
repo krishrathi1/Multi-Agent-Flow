@@ -585,6 +585,16 @@ export const api = {
         endpoint: string;
         reachable: boolean;
       }>(`/llm-providers/local-models${endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : ''}`),
+    liveModels: (provider: string, apiKey?: string) =>
+      request<{
+        ok: boolean;
+        provider: string;
+        models: Array<{ id: string; name: string; description?: string; provider: string; created?: string | number }>;
+        message?: string;
+      }>('/llm-providers/live-models', {
+        method: 'POST',
+        body: JSON.stringify({ provider, apiKey }),
+      }),
     addCredit: (amountCents: number) =>
       request<UsageCredit>('/llm-providers/credits', { method: 'POST', body: JSON.stringify({ amountCents }) }),
   },

@@ -35,6 +35,9 @@ RUN npm install -w backend --omit=dev && npx -w backend prisma generate
 
 # Copy built output
 COPY --from=builder /app/backend/dist ./backend/dist/
+# Copy source directories for code intelligence and introspection
+COPY backend/src ./backend/src/
+COPY frontend/src ./frontend/src/
 
 WORKDIR /app/backend
 

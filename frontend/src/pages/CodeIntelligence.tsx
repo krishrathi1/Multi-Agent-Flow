@@ -867,6 +867,7 @@ function FileViewer({ path, highlightLine, onClose }: { path: string; highlightL
 function AskTab() {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fileViewer, setFileViewer] = useState<{ path: string; highlightLine?: number } | null>(null);
   const [result, setResult] = useState<{
     question: string;
     answer: string;
@@ -981,20 +982,36 @@ function AskTab() {
           {result.citations.length > 0 && (
             <div className="border-t border-line-subtle pt-4">
               <h3 className="text-2xs font-bold uppercase tracking-wider text-ink-muted mb-3">
-                Source Citations ({result.citations.length})
+                Source Citations ({result.citations.length}) — Click to view file
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {result.citations.map((c, idx) => (
-                  <div key={idx} className="bg-inset rounded-lg p-3 border border-line-subtle">
+                  <button
+                    key={idx}
+                    onClick={() => setFileViewer({ path: c.file, highlightLine: c.line })}
+                    className="bg-inset hover:bg-hover rounded-lg p-3 border border-line-subtle hover:border-brand-500/50 transition-all text-left group shadow-2xs"
+                  >
                     <div className="flex items-center gap-2 mb-1">
                       <FileCode2 className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400 shrink-0" />
-                      <span className="text-xs font-mono text-brand-700 dark:text-brand-300 truncate font-bold">{c.file}</span>
+                      <span className="text-xs font-mono text-brand-700 dark:text-brand-300 group-hover:underline truncate font-bold">{c.file}</span>
                       {c.line && <span className="text-[10px] text-ink-faint">L{c.line}</span>}
+                      <ExternalLink className="w-3 h-3 text-ink-muted ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
-                    <p className="text-[11px] text-ink-muted">{c.reason}</p>
-                  </div>
+                    <p className="text-[11px] text-ink-muted line-clamp-2">{c.reason}</p>
+                  </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Interactive File Viewer for Citations */}
+          {fileViewer && (
+            <div className="border-t border-line-subtle pt-4">
+              <FileViewer
+                path={fileViewer.path}
+                highlightLine={fileViewer.highlightLine}
+                onClose={() => setFileViewer(null)}
+              />
             </div>
           )}
 
