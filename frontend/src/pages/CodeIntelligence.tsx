@@ -9,20 +9,38 @@ import {
   FileText,
   ArrowRight,
   Filter,
-  ChevronRight,
+  ChevronDown,
+  Check,
   X,
   Box,
   ExternalLink,
   Bot,
   Sparkles,
   Send,
+  FolderGit2,
+  Layers,
+  Clock,
+  ArrowUpRight,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { EmptyState, Spinner } from '../components/ui/States';
 
 /* ──────────────────────── Types ──────────────────────── */
+
+export interface WorkspaceRepo {
+  id: string;
+  name: string;
+  rawName: string;
+  description: string;
+  source: 'myceliumops';
+  fileCount: number;
+  lastModified: string;
+  framework?: string;
+  processStatus?: string;
+}
 
 interface SearchResult {
   file: string;
@@ -78,27 +96,58 @@ type TabId = 'search' | 'graph' | 'symbols' | 'overview' | 'ask';
 /* ──────────────────────── API helpers ──────────────────────── */
 
 const codeIntelApi = {
-  search: (q: string, opts?: { file?: string; language?: string; regex?: boolean }) =>
-    api._request<{ query: string; count: number; results: SearchResult[] }>(
-      `/code-intelligence/search?q=${encodeURIComponent(q)}${opts?.file ? `&file=${encodeURIComponent(opts.file)}` : ''}${opts?.language ? `&language=${encodeURIComponent(opts.language)}` : ''}${opts?.regex ? '&regex=true' : ''}`
+  workspaces: () =>
+    api._request<{ workspaces: WorkspaceRepo[]; activeWorkspaceId: string | null }>(
+      '/code-intelligence/workspaces'
     ),
-  symbols: (opts?: { kind?: string; q?: string; file?: string }) =>
-    api._request<{ count: number; symbols: CodeSymbol[] }>(
-      `/code-intelligence/symbols?${opts?.kind ? `kind=${opts.kind}&` : ''}${opts?.q ? `q=${encodeURIComponent(opts.q)}&` : ''}${opts?.file ? `file=${encodeURIComponent(opts.file)}` : ''}`
-    ),
-  graph: () => api._request<{ nodes: GraphNode[]; edges: GraphEdge[] }>('/code-intelligence/graph'),
-  stats: () => api._request<CodebaseStats>('/code-intelligence/stats'),
-  file: (path: string) => api._request<FileContent>(`/code-intelligence/file/${path}`),
-  references: (symbol: string) =>
-    api._request<{ symbol: string; count: number; imports: any[]; usages: any[] }>(
-      `/code-intelligence/references/${encodeURIComponent(symbol)}`
-    ),
-  ask: (question: string, model?: string) =>
+  search: (q: string, opts?: { file?: string; language?: string; regex?: boolean; workspaceId?: string }) => {
+    const p = new URLSearchParams({ q });
+    if (opts?.file) p.set('file', opts.file);
+    if (opts?.language) p.set('language', opts.language);
+    if (opts?.regex) p.set('regex', 'true');
+    if (opts?.workspaceId) p.set('workspaceId', opts.workspaceId);
+    return api._request<{ query: string; count: number; results: SearchResult[] }>(
+      `/code-intelligence/search?${p.toString()}`
+    );
+  },
+  symbols: (opts?: { kind?: string; q?: string; file?: string; workspaceId?: string }) => {
+    const p = new URLSearchParams();
+    if (opts?.kind) p.set('kind', opts.kind);
+    if (opts?.q) p.set('q', opts.q);
+    if (opts?.file) p.set('file', opts.file);
+    if (opts?.workspaceId) p.set('workspaceId', opts.workspaceId);
+    return api._request<{ count: number; symbols: CodeSymbol[] }>(
+      `/code-intelligence/symbols?${p.toString()}`
+    );
+  },
+  graph: (workspaceId?: string) => {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    return api._request<{ nodes: GraphNode[]; edges: GraphEdge[] }>(`/code-intelligence/graph${qs}`);
+  },
+  stats: (workspaceId?: string) => {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    return api._request<CodebaseStats>(`/code-intelligence/stats${qs}`);
+  },
+  file: (path: string, workspaceId?: string) => {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    return api._request<FileContent>(`/code-intelligence/file/${path}${qs}`);
+  },
+  references: (symbol: string, workspaceId?: string) => {
+    const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    return api._request<{ symbol: string; count: number; imports: any[]; usages: any[] }>(
+      `/code-intelligence/references/${encodeURIComponent(symbol)}${qs}`
+    );
+  },
+  ask: (question: string, model?: string, workspaceId?: string) =>
     api._request<{ question: string; answer: string; citations: { file: string; line?: number; reason: string }[]; relatedSymbols: CodeSymbol[] }>(
       '/code-intelligence/ask',
-      { method: 'POST', body: JSON.stringify({ question, model }) }
+      { method: 'POST', body: JSON.stringify({ question, model, workspaceId }) }
     ),
-  reindex: () => api._request<{ message: string; stats: CodebaseStats }>('/code-intelligence/reindex', { method: 'POST' }),
+  reindex: (workspaceId?: string) =>
+    api._request<{ message: string; stats: CodebaseStats }>(
+      '/code-intelligence/reindex',
+      { method: 'POST', body: JSON.stringify({ workspaceId }) }
+    ),
 };
 
 /* ──────────────────────── Tabs ──────────────────────── */
@@ -124,13 +173,16 @@ const kindColors: Record<string, string> = {
   export: 'text-teal-600 dark:text-teal-400 bg-teal-500/10 border-teal-500/20',
 };
 
-const groupColors: Record<string, string> = {
-  backend: '#5367FF',
-  frontend: '#00D09C',
-  prisma: '#06B6D4',
-  e2e: '#F59E0B',
-  dashboards: '#EF4444',
-};
+const groupPalette = ['#5367FF', '#00D09C', '#06B6D4', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#10B981'];
+
+function getGroupColor(group: string): string {
+  let hash = 0;
+  for (let i = 0; i < group.length; i++) {
+    hash = (hash << 5) - hash + group.charCodeAt(i);
+    hash |= 0;
+  }
+  return groupPalette[Math.abs(hash) % groupPalette.length];
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -148,70 +200,277 @@ function highlightMatch(text: string, start: number, end: number): React.ReactEl
   );
 }
 
+function formatTimeAgo(isoString: string): string {
+  try {
+    const diff = (Date.now() - new Date(isoString).getTime()) / 1000;
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  } catch {
+    return 'Recently';
+  }
+}
+
 /* ──────────────────────── Main Component ──────────────────────── */
 
 export function CodeIntelligence() {
   const [activeTab, setActiveTab] = useState<TabId>('search');
   const [reindexing, setReindexing] = useState(false);
+  const [workspaces, setWorkspaces] = useState<WorkspaceRepo[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
+  const [loadingWorkspaces, setLoadingWorkspaces] = useState(true);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch workspaces on mount
+  const fetchWorkspaces = useCallback(async () => {
+    setLoadingWorkspaces(true);
+    try {
+      const res = await codeIntelApi.workspaces();
+      setWorkspaces(res.workspaces);
+      if (res.workspaces.length > 0) {
+        const saved = localStorage.getItem('nexus:active_code_intel_repo');
+        const matched = saved && res.workspaces.some(w => w.id === saved);
+        setSelectedWorkspaceId(matched ? saved : res.workspaces[0].id);
+      } else {
+        setSelectedWorkspaceId('');
+      }
+    } catch {
+      setWorkspaces([]);
+      setSelectedWorkspaceId('');
+    }
+    setLoadingWorkspaces(false);
+  }, []);
+
+  useEffect(() => {
+    fetchWorkspaces();
+  }, [fetchWorkspaces]);
+
+  const handleSelectWorkspace = (id: string) => {
+    setSelectedWorkspaceId(id);
+    localStorage.setItem('nexus:active_code_intel_repo', id);
+    setDropdownOpen(false);
+  };
 
   const handleReindex = async () => {
+    if (!selectedWorkspaceId) return;
     setReindexing(true);
     try {
-      await codeIntelApi.reindex();
+      await codeIntelApi.reindex(selectedWorkspaceId);
+      await fetchWorkspaces();
     } catch { /* ignore */ }
     setReindexing(false);
   };
+
+  const currentWorkspace = useMemo(
+    () => workspaces.find(w => w.id === selectedWorkspaceId) || workspaces[0],
+    [workspaces, selectedWorkspaceId]
+  );
 
   return (
     <div className="nexus-page space-y-6">
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-brand-500/10 border border-brand-500/20 text-brand-700 dark:text-brand-300">
+              <Sparkles className="w-3 h-3 text-brand-500" />
+              MyceliumOps Codebases Only
+            </span>
+          </div>
           <h1 className="text-2xl font-bold text-ink flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-xs">
               <Code2 className="w-5 h-5 text-white" />
             </div>
             Code Intelligence
           </h1>
-          <p className="text-ink-muted mt-1 text-sm">Semantic code search, dependency graph, and symbol navigation</p>
+          <p className="text-ink-muted mt-1 text-sm">
+            Semantic code search, dependency graph, and symbol navigation for repositories created by MyceliumOps
+          </p>
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleReindex}
-          disabled={reindexing}
-          className="gap-2"
-        >
-          <RefreshCw className={cn('w-4 h-4', reindexing && 'animate-spin')} />
-          {reindexing ? 'Indexing…' : 'Re-index Codebase'}
-        </Button>
-      </div>
 
-      {/* ── Tab bar ── */}
-      <div className="flex gap-1.5 p-1.5 bg-inset/50 rounded-xl border border-line overflow-x-auto shadow-2xs">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex-1 justify-center whitespace-nowrap',
-              activeTab === t.id
-                ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-2xs border border-line-subtle'
-                : 'text-ink-muted hover:text-ink hover:bg-hover',
+        {/* ── Actions: Repo Selector & Reindex ── */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Workspace Switcher Dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen(prev => !prev)}
+              disabled={loadingWorkspaces || workspaces.length === 0}
+              className={cn(
+                'flex items-center gap-2.5 px-3.5 py-2 rounded-xl border text-xs font-semibold shadow-2xs transition-all max-w-sm',
+                workspaces.length === 0
+                  ? 'bg-surface/50 border-line text-ink-muted cursor-not-allowed opacity-75'
+                  : 'bg-surface border-line hover:border-brand-500/50 hover:bg-hover text-ink'
+              )}
+            >
+              <div className="w-6 h-6 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0">
+                <FolderGit2 className="w-3.5 h-3.5" />
+              </div>
+              <div className="text-left truncate">
+                <div className="text-[10px] text-ink-faint font-bold uppercase tracking-wider leading-none">
+                  Repository
+                </div>
+                <div className="font-bold text-ink truncate mt-0.5 max-w-[200px]">
+                  {loadingWorkspaces ? 'Loading…' : currentWorkspace ? currentWorkspace.name : 'No MyceliumOps Repos'}
+                </div>
+              </div>
+              <ChevronDown className={cn('w-4 h-4 text-ink-muted transition-transform ml-1', dropdownOpen && 'rotate-180')} />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute right-0 mt-2 w-80 md:w-96 rounded-2xl bg-surface border border-line shadow-xl z-50 p-2 space-y-1 backdrop-blur-md animate-in fade-in duration-150">
+                <div className="px-3 py-2 border-b border-line-subtle mb-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">
+                      MyceliumOps Repositories ({workspaces.length})
+                    </span>
+                    <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 bg-brand-500/10 px-2 py-0.5 rounded-full">
+                      Agent Generated
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-ink-faint mt-1">
+                    Exclusively indexing repositories engineered by MyceliumOps agents
+                  </p>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto space-y-1">
+                  {workspaces.map(ws => {
+                    const isSelected = ws.id === selectedWorkspaceId;
+                    return (
+                      <button
+                        key={ws.id}
+                        onClick={() => handleSelectWorkspace(ws.id)}
+                        className={cn(
+                          'w-full flex items-start gap-3 p-2.5 rounded-xl text-left transition-colors text-xs group',
+                          isSelected
+                            ? 'bg-brand-500/10 border border-brand-500/30 text-ink'
+                            : 'hover:bg-hover border border-transparent text-ink-muted hover:text-ink'
+                        )}
+                      >
+                        <div className={cn(
+                          'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 font-bold',
+                          isSelected ? 'bg-brand-500 text-white' : 'bg-inset border border-line text-ink-muted group-hover:text-ink'
+                        )}>
+                          <FolderGit2 className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 justify-between">
+                            <span className="font-bold text-ink truncate text-xs">{ws.name}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-brand-500 shrink-0" />}
+                          </div>
+                          {ws.description && (
+                            <p className="text-[11px] text-ink-muted line-clamp-1 mt-0.5">{ws.description}</p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1.5 text-[10px] text-ink-faint">
+                            {ws.framework && (
+                              <span className="px-1.5 py-0.2 rounded bg-inset border border-line font-medium text-ink-muted">
+                                {ws.framework}
+                              </span>
+                            )}
+                            <span>{ws.fileCount} files</span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-2.5 h-2.5" />
+                              {formatTimeAgo(ws.lastModified)}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             )}
+          </div>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleReindex}
+            disabled={reindexing || !selectedWorkspaceId}
+            className="gap-2"
           >
-            <t.icon className="w-4 h-4" />
-            {t.label}
-          </button>
-        ))}
+            <RefreshCw className={cn('w-4 h-4', reindexing && 'animate-spin')} />
+            {reindexing ? 'Indexing…' : 'Re-index'}
+          </Button>
+        </div>
       </div>
 
-      {/* ── Tab content ── */}
-      {activeTab === 'search' && <SearchTab />}
-      {activeTab === 'graph' && <GraphTab />}
-      {activeTab === 'symbols' && <SymbolsTab />}
-      {activeTab === 'overview' && <OverviewTab />}
-      {activeTab === 'ask' && <AskTab />}
+      {/* ── Empty State if no workspaces exist ── */}
+      {workspaces.length === 0 && !loadingWorkspaces && (
+        <div className="bg-surface rounded-2xl border border-line p-12 text-center max-w-2xl mx-auto shadow-sm space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-brand-500/10 border border-brand-500/20 flex items-center justify-center mx-auto text-brand-600 dark:text-brand-400">
+            <Box className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-ink">No MyceliumOps Repositories Found</h2>
+            <p className="text-sm text-ink-muted leading-relaxed max-w-lg mx-auto">
+              Code Intelligence is configured to strictly index and inspect repositories engineered by MyceliumOps multi-agent chains.
+            </p>
+          </div>
+          <div className="p-4 rounded-xl bg-inset border border-line-subtle text-xs text-ink-muted text-left space-y-1.5 max-w-md mx-auto">
+            <div className="font-bold text-ink flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-brand-500" /> How to generate code with MyceliumOps:
+            </div>
+            <p>1. Go to Mission Control or Mother Chat.</p>
+            <p>2. Launch a goal or production workflow (e.g. "Build full-stack dashboard").</p>
+            <p>3. Autonomous agents will engineer code in a dedicated workspace, which automatically appears here.</p>
+          </div>
+          <div className="pt-2">
+            <Link to="/">
+              <Button variant="primary" className="gap-2">
+                Launch Mission Control
+                <ArrowUpRight className="w-4 h-4" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ── Content when workspace exists ── */}
+      {workspaces.length > 0 && (
+        <>
+          {/* ── Tab bar ── */}
+          <div className="flex gap-1.5 p-1.5 bg-inset/50 rounded-xl border border-line overflow-x-auto shadow-2xs">
+            {tabs.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all flex-1 justify-center whitespace-nowrap',
+                  activeTab === t.id
+                    ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-2xs border border-line-subtle'
+                    : 'text-ink-muted hover:text-ink hover:bg-hover',
+                )}
+              >
+                <t.icon className="w-4 h-4" />
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Tab content ── */}
+          {activeTab === 'search' && <SearchTab workspaceId={selectedWorkspaceId} />}
+          {activeTab === 'graph' && <GraphTab workspaceId={selectedWorkspaceId} />}
+          {activeTab === 'symbols' && <SymbolsTab workspaceId={selectedWorkspaceId} />}
+          {activeTab === 'overview' && <OverviewTab workspaceId={selectedWorkspaceId} />}
+          {activeTab === 'ask' && (
+            <AskTab workspaceId={selectedWorkspaceId} workspaceName={currentWorkspace?.name} />
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -220,7 +479,7 @@ export function CodeIntelligence() {
    TAB 1: Semantic Search
    ═══════════════════════════════════════════════════════════ */
 
-function SearchTab() {
+function SearchTab({ workspaceId }: { workspaceId: string }) {
   const [query, setQuery] = useState('');
   const [fileFilter, setFileFilter] = useState('');
   const [isRegex, setIsRegex] = useState(false);
@@ -235,13 +494,24 @@ function SearchTab() {
     setLoading(true);
     setSearched(true);
     try {
-      const data = await codeIntelApi.search(query, { file: fileFilter || undefined, regex: isRegex });
+      const data = await codeIntelApi.search(query, {
+        file: fileFilter || undefined,
+        regex: isRegex,
+        workspaceId,
+      });
       setResults(data.results);
     } catch {
       setResults([]);
     }
     setLoading(false);
-  }, [query, fileFilter, isRegex]);
+  }, [query, fileFilter, isRegex, workspaceId]);
+
+  // Re-search when workspace changes if query present
+  useEffect(() => {
+    if (searched && query.trim()) {
+      doSearch();
+    }
+  }, [workspaceId]);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -268,7 +538,7 @@ function SearchTab() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && doSearch()}
-              placeholder="Search across codebase — try: createAgent, WebSocket, prisma.agent"
+              placeholder="Search across MyceliumOps code — e.g., Dashboard, FlowTask, handleExecute, useState"
               className="w-full pl-10 pr-4 py-2.5 bg-canvas border border-line rounded-xl text-sm text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs transition-colors"
             />
           </div>
@@ -302,7 +572,7 @@ function SearchTab() {
           )}
 
           {!loading && searched && results.length === 0 && (
-            <EmptyState icon={Search} title="No results" description={`No matches found for "${query}"`} />
+            <EmptyState icon={Search} title="No results" description={`No matches found for "${query}" in this repository`} />
           )}
 
           {!loading && grouped.map(([file, fileResults]) => (
@@ -341,6 +611,7 @@ function SearchTab() {
           <div className="lg:col-span-2">
             <FileViewer
               path={fileViewer.path}
+              workspaceId={workspaceId}
               highlightLine={fileViewer.highlightLine}
               onClose={() => setFileViewer(null)}
             />
@@ -355,15 +626,19 @@ function SearchTab() {
    TAB 2: Code Graph (Dependency Visualization)
    ═══════════════════════════════════════════════════════════ */
 
-function GraphTab() {
+function GraphTab({ workspaceId }: { workspaceId: string }) {
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [filter, setFilter] = useState('');
 
   useEffect(() => {
-    codeIntelApi.graph().then(d => { setGraph(d); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
+    setLoading(true);
+    setSelectedNode(null);
+    codeIntelApi.graph(workspaceId)
+      .then(d => { setGraph(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [workspaceId]);
 
   const filteredNodes = useMemo(() => {
     if (!graph) return [];
@@ -382,7 +657,9 @@ function GraphTab() {
   }, [filteredNodes]);
 
   if (loading) return <div className="flex items-center justify-center py-16"><Spinner className="w-8 h-8" /></div>;
-  if (!graph) return <EmptyState icon={GitBranch} title="No graph data" description="Re-index the codebase to generate the dependency graph." />;
+  if (!graph || graph.nodes.length === 0) {
+    return <EmptyState icon={GitBranch} title="No dependency graph" description="No source code modules found in this MyceliumOps repository." />;
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -394,7 +671,7 @@ function GraphTab() {
               type="text"
               value={filter}
               onChange={e => setFilter(e.target.value)}
-              placeholder="Filter files…"
+              placeholder="Filter files in repository…"
               className="flex-1 px-3.5 py-2 bg-canvas border border-line rounded-xl text-xs font-mono text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
             />
             <div className="text-2xs font-semibold text-ink-muted whitespace-nowrap">
@@ -404,7 +681,7 @@ function GraphTab() {
 
           <div className="space-y-4">
             {grouped.map(([group, nodes]) => {
-              const color = groupColors[group] || '#6B7280';
+              const color = getGroupColor(group);
               return (
                 <div key={group} className="space-y-1.5">
                   <div className="flex items-center gap-2 mb-2">
@@ -415,7 +692,6 @@ function GraphTab() {
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 pl-3">
                     {nodes.sort((a, b) => b.lineCount - a.lineCount).slice(0, 24).map(n => {
                       const name = n.id.split('/').pop() || n.id;
-                      const relPath = n.id.split('/').slice(1).join('/');
                       const isSelected = selectedNode?.id === n.id;
                       const maxLines = Math.max(...nodes.map(x => x.lineCount), 1);
                       const pct = Math.max(8, (n.lineCount / maxLines) * 100);
@@ -435,7 +711,7 @@ function GraphTab() {
                             style={{ width: `${pct}%`, backgroundColor: color }}
                           />
                           <FileText className="w-3 h-3 shrink-0" style={{ color }} />
-                          <span className="truncate font-mono text-[11px]" title={relPath}>{name}</span>
+                          <span className="truncate font-mono text-[11px]" title={n.id}>{name}</span>
                           <span className="ml-auto text-[10px] text-ink-faint font-semibold">{n.lineCount}L</span>
                         </button>
                       );
@@ -489,17 +765,17 @@ function GraphTab() {
         ) : (
           <div className="bg-surface rounded-xl border border-line p-6 text-center shadow-2xs">
             <Box className="w-8 h-8 text-ink-faint mx-auto mb-2" />
-            <p className="text-xs text-ink-muted">Click a file node to view its details and dependencies</p>
+            <p className="text-xs text-ink-muted">Click a file node to view its details and import dependencies</p>
           </div>
         )}
 
-        {/* Legend */}
+        {/* Modules breakdown */}
         <div className="bg-surface rounded-xl border border-line p-4 shadow-2xs">
-          <h3 className="text-2xs text-ink-faint font-bold uppercase tracking-wider mb-3">Module Legend</h3>
+          <h3 className="text-2xs text-ink-faint font-bold uppercase tracking-wider mb-3">Module Directory</h3>
           <div className="space-y-2">
-            {Object.entries(groupColors).map(([name, color]) => (
+            {grouped.map(([name]) => (
               <div key={name} className="flex items-center gap-2 text-xs text-ink-muted">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getGroupColor(name) }} />
                 <span className="font-mono">{name}/</span>
               </div>
             ))}
@@ -514,7 +790,7 @@ function GraphTab() {
    TAB 3: Symbol Explorer
    ═══════════════════════════════════════════════════════════ */
 
-function SymbolsTab() {
+function SymbolsTab({ workspaceId }: { workspaceId: string }) {
   const [symbols, setSymbols] = useState<CodeSymbol[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -526,16 +802,21 @@ function SymbolsTab() {
 
   useEffect(() => {
     setLoading(true);
-    codeIntelApi.symbols({ kind: kindFilter || undefined, q: query || undefined, file: fileFilter || undefined })
+    codeIntelApi.symbols({
+      kind: kindFilter || undefined,
+      q: query || undefined,
+      file: fileFilter || undefined,
+      workspaceId,
+    })
       .then(d => { setSymbols(d.symbols); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [query, kindFilter, fileFilter]);
+  }, [query, kindFilter, fileFilter, workspaceId]);
 
   const handleFindRefs = async (sym: CodeSymbol) => {
     setSelectedSymbol(sym);
     setLoadingRefs(true);
     try {
-      const data = await codeIntelApi.references(sym.name);
+      const data = await codeIntelApi.references(sym.name, workspaceId);
       setReferences(data);
     } catch {
       setReferences(null);
@@ -557,7 +838,7 @@ function SymbolsTab() {
                 type="text"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Search symbols…"
+                placeholder="Search symbols in this repository…"
                 className="w-full pl-10 pr-4 py-2 bg-canvas border border-line rounded-xl text-xs font-mono text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
               />
             </div>
@@ -630,7 +911,7 @@ function SymbolsTab() {
               </table>
             </div>
             {symbols.length === 0 && (
-              <div className="py-8 text-center text-ink-muted text-xs">No symbols found</div>
+              <div className="py-8 text-center text-ink-muted text-xs">No symbols found in this repository</div>
             )}
           </div>
         )}
@@ -698,16 +979,21 @@ function SymbolsTab() {
    TAB 4: Codebase Overview
    ═══════════════════════════════════════════════════════════ */
 
-function OverviewTab() {
+function OverviewTab({ workspaceId }: { workspaceId: string }) {
   const [stats, setStats] = useState<CodebaseStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    codeIntelApi.stats().then(d => { setStats(d); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
+    setLoading(true);
+    codeIntelApi.stats(workspaceId)
+      .then(d => { setStats(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [workspaceId]);
 
   if (loading) return <div className="flex items-center justify-center py-16"><Spinner className="w-8 h-8" /></div>;
-  if (!stats) return <EmptyState icon={BarChart3} title="No data" description="Re-index the codebase first." />;
+  if (!stats || stats.totalFiles === 0) {
+    return <EmptyState icon={BarChart3} title="No codebase stats" description="No files found in this MyceliumOps repository." />;
+  }
 
   const langEntries = Object.entries(stats.languages).sort((a, b) => b[1] - a[1]);
   const dirEntries = Object.entries(stats.directories).sort((a, b) => b[1] - a[1]);
@@ -804,15 +1090,27 @@ function OverviewTab() {
    File Viewer Component
    ═══════════════════════════════════════════════════════════ */
 
-function FileViewer({ path, highlightLine, onClose }: { path: string; highlightLine?: number; onClose: () => void }) {
+function FileViewer({
+  path,
+  highlightLine,
+  onClose,
+  workspaceId,
+}: {
+  path: string;
+  highlightLine?: number;
+  onClose: () => void;
+  workspaceId?: string;
+}) {
   const [file, setFile] = useState<FileContent | null>(null);
   const [loading, setLoading] = useState(true);
   const highlightRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLoading(true);
-    codeIntelApi.file(path).then(d => { setFile(d); setLoading(false); }).catch(() => setLoading(false));
-  }, [path]);
+    codeIntelApi.file(path, workspaceId)
+      .then(d => { setFile(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [path, workspaceId]);
 
   useEffect(() => {
     if (highlightRef.current) {
@@ -864,7 +1162,7 @@ function FileViewer({ path, highlightLine, onClose }: { path: string; highlightL
    TAB 5: Repo Q&A (Code Assistant)
    ═══════════════════════════════════════════════════════════ */
 
-function AskTab() {
+function AskTab({ workspaceId, workspaceName }: { workspaceId: string; workspaceName?: string }) {
   const [question, setQuestion] = useState('');
   const [chatModel, setChatModel] = useState(() => localStorage.getItem('nexus:code_intel_model') || '');
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; provider: string }>>([]);
@@ -879,10 +1177,10 @@ function AskTab() {
   } | null>(null);
 
   const sampleQuestions = [
-    'How does authentication and JWT work in Nexus?',
-    'Where is the OpenClaw Gateway RPC client implemented?',
-    'How are agent approvals and board workflows structured?',
-    'What metrics and token usage tracking are implemented in Prisma?',
+    'How is the frontend UI and Dashboard component structured?',
+    'What types and interfaces are defined in this repository?',
+    'Explain the API contracts and architectural specifications.',
+    'Where are the main state handlers and task actions implemented?',
   ];
 
   const handleAsk = async (qText?: string) => {
@@ -890,7 +1188,7 @@ function AskTab() {
     if (!q.trim()) return;
     setLoading(true);
     try {
-      const data = await codeIntelApi.ask(q, chatModel || undefined);
+      const data = await codeIntelApi.ask(q, chatModel || undefined, workspaceId);
       setResult(data);
       if (qText) setQuestion(qText);
     } catch {
@@ -912,8 +1210,10 @@ function AskTab() {
             <Bot className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-ink">Ask the Nexus AI Repository</h2>
-            <p className="text-xs text-ink-muted">Grounded code understanding with file citations and symbol tracing</p>
+            <h2 className="text-base font-bold text-ink">Ask MyceliumOps AI Repository Assistant</h2>
+            <p className="text-xs text-ink-muted">
+              Grounded understanding of {workspaceName ? `"${workspaceName}"` : 'this codebase'} with file citations and symbol tracing
+            </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <label className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">Model</label>
               <select value={chatModel} onChange={(e) => { setChatModel(e.target.value); localStorage.setItem('nexus:code_intel_model', e.target.value); }} className="h-8 rounded-md border border-line bg-inset px-2 text-xs text-ink">
@@ -934,7 +1234,7 @@ function AskTab() {
                 handleAsk();
               }
             }}
-            placeholder="Ask anything about the codebase (e.g., 'How does the OpenClaw Gateway connect?')..."
+            placeholder={`Ask anything about this MyceliumOps codebase (e.g., 'How does Dashboard render tasks?')...`}
             rows={3}
             className="w-full px-4 py-3 bg-canvas border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none resize-none shadow-2xs"
           />
@@ -1019,6 +1319,7 @@ function AskTab() {
             <div className="border-t border-line-subtle pt-4">
               <FileViewer
                 path={fileViewer.path}
+                workspaceId={workspaceId}
                 highlightLine={fileViewer.highlightLine}
                 onClose={() => setFileViewer(null)}
               />

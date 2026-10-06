@@ -2,7 +2,7 @@ import { config } from '../config.js';
 import { run as runOpenCode } from './opencode.service.js';
 import { readdir, readFile, stat } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join, relative, extname, basename } from 'path';
+import { join, relative, extname, basename, resolve } from 'path';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { decryptField } from '../lib/crypto.js';
@@ -63,6 +63,18 @@ export interface SymbolReference {
   kind: 'import' | 'usage';
 }
 
+export interface WorkspaceRepo {
+  id: string;
+  name: string;
+  rawName: string;
+  description: string;
+  source: 'myceliumops';
+  fileCount: number;
+  lastModified: string;
+  framework?: string;
+  processStatus?: string;
+}
+
 // ─── Configuration ──────────────────────────────────────
 
 const SUPPORTED_EXTENSIONS = new Set([
@@ -70,7 +82,7 @@ const SUPPORTED_EXTENSIONS = new Set([
 ]);
 
 const IGNORE_DIRS_BASE = new Set([
-  'node_modules', '.git', 'build', '.next', 'coverage', '.nexus-workspaces', '.turbo',
+  'node_modules', '.git', 'build', '.next', 'coverage', '.turbo',
 ]);
 
 const LANGUAGE_MAP: Record<string, string> = {
@@ -89,41 +101,187 @@ const LANGUAGE_MAP: Record<string, string> = {
   '.sh': 'Shell',
 };
 
-// ─── Cache ──────────────────────────────────────────────
-
-let fileCache: FileInfo[] = [];
-let symbolCache: CodeSymbol[] = [];
-let edgeCache: DependencyEdge[] = [];
-let statsCache: CodebaseStats | null = null;
-let lastIndexTime = 0;
-const CACHE_TTL_MS = 60_000; // re-index every 60s at most
+// ─── Workspace Resolution ───────────────────────────────
 
 /**
- * Returns the project root directory.
- * Walks up to find the monorepo root containing package.json and backend/ or frontend/.
+ * Returns the root directory where MyceliumOps workspaces live.
  */
-function getProjectRoot(): string {
-  if (typeof import.meta !== 'undefined' && import.meta.dirname) {
-    const candidate = join(import.meta.dirname, '..', '..', '..');
-    if (existsSync(join(candidate, 'package.json')) && (existsSync(join(candidate, 'backend')) || existsSync(join(candidate, 'frontend')))) {
-      return candidate;
-    }
+export function getNexusWorkspacesRoot(): string {
+  if (process.env.AGENT_WORKSPACE_ROOT) {
+    return resolve(process.env.AGENT_WORKSPACE_ROOT);
   }
   const cwd = process.cwd();
-  const parent = join(cwd, '..');
-  if (existsSync(join(parent, 'package.json')) && (existsSync(join(parent, 'backend')) || existsSync(join(parent, 'frontend')))) {
-    return parent;
+  const cand1 = join(cwd, '.nexus-workspaces');
+  if (existsSync(cand1)) return cand1;
+  const cand2 = join(cwd, '..', '.nexus-workspaces');
+  if (existsSync(cand2)) return cand2;
+  if (typeof import.meta !== 'undefined' && import.meta.dirname) {
+    const cand3 = join(import.meta.dirname, '..', '..', '..', '.nexus-workspaces');
+    if (existsSync(cand3)) return cand3;
   }
-  if (existsSync(join(cwd, 'package.json')) && (existsSync(join(cwd, 'backend')) || existsSync(join(cwd, 'frontend')))) {
-    return cwd;
-  }
-  return cwd;
+  return cand1;
 }
+
+function formatTitleCase(str: string): string {
+  return str
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim();
+}
+
+/**
+ * Discovers and lists all repositories created by MyceliumOps.
+ * Combines filesystem discovery in .nexus-workspaces with Prisma process data.
+ */
+export async function listWorkspaces(organizationId?: string): Promise<WorkspaceRepo[]> {
+  const root = getNexusWorkspacesRoot();
+  if (!existsSync(root)) return [];
+
+  const repos: WorkspaceRepo[] = [];
+  try {
+    const entries = await readdir(root, { withFileTypes: true });
+
+    // Optionally lookup processes from Prisma to enrich repository data
+    let dbProcesses: Map<string, { name: string; summary: string | null; status: string }> = new Map();
+    try {
+      const procs = await prisma.process.findMany({
+        where: organizationId ? { organizationId } : undefined,
+        select: { id: true, name: true, summary: true, status: true },
+      });
+      for (const p of procs) {
+        dbProcesses.set(p.id, { name: p.name, summary: p.summary, status: p.status });
+      }
+    } catch {
+      // Prisma query fallback if table or DB not accessible
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+
+      const wsDir = join(root, entry.name);
+      let rawName = entry.name;
+      let displayName = formatTitleCase(entry.name);
+      let description = '';
+      let framework = 'TypeScript / Web';
+
+      // Check package.json
+      const pkgPath = join(wsDir, 'package.json');
+      if (existsSync(pkgPath)) {
+        try {
+          const pkg = JSON.parse(await readFile(pkgPath, 'utf-8'));
+          if (pkg.name) {
+            rawName = pkg.name;
+            displayName = formatTitleCase(pkg.name);
+          }
+          if (pkg.description) {
+            description = pkg.description;
+          }
+
+          // Framework heuristics
+          const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+          if (deps['react'] && deps['vite']) framework = 'React + Vite';
+          else if (deps['next']) framework = 'Next.js';
+          else if (deps['react']) framework = 'React';
+          else if (deps['vue']) framework = 'Vue.js';
+          else if (deps['express']) framework = 'Node.js + Express';
+        } catch { /* skip */ }
+      }
+
+      // Check README.md for title or description if needed
+      const readmePath = join(wsDir, 'README.md');
+      if (existsSync(readmePath) && !description) {
+        try {
+          const readme = await readFile(readmePath, 'utf-8');
+          const lines = readme.split('\n').map(l => l.trim()).filter(Boolean);
+          for (const l of lines) {
+            if (l.startsWith('# ') && !displayName) {
+              displayName = l.replace(/^#\s+/, '').trim();
+            } else if (!l.startsWith('#') && !l.startsWith('>') && l.length > 15) {
+              description = l.slice(0, 160);
+              break;
+            }
+          }
+        } catch { /* skip */ }
+      }
+
+      // Enrich with Prisma process info if available
+      const dbProc = dbProcesses.get(entry.name);
+      if (dbProc) {
+        if (dbProc.name) displayName = dbProc.name;
+        if (dbProc.summary && !description) description = dbProc.summary;
+      }
+
+      // Quick count of source files in workspace
+      let fileCount = 0;
+      let mtime = new Date(0);
+      try {
+        const s = await stat(wsDir);
+        mtime = s.mtime;
+        const wsFiles = await scanDirectory(wsDir, wsDir, true);
+        fileCount = wsFiles.length;
+      } catch { /* skip */ }
+
+      repos.push({
+        id: entry.name,
+        name: displayName,
+        rawName,
+        description: description || 'Repository autonomously generated by MyceliumOps agents.',
+        source: 'myceliumops',
+        fileCount,
+        lastModified: mtime.toISOString(),
+        framework,
+        processStatus: dbProc?.status,
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Failed to list MyceliumOps workspaces');
+  }
+
+  // Sort by lastModified descending (newest first)
+  return repos.sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime());
+}
+
+/**
+ * Resolves the target workspace root directory.
+ * Guaranteed to only return directories inside .nexus-workspaces.
+ */
+export async function resolveWorkspace(workspaceId?: string): Promise<{ id: string; root: string; name: string } | null> {
+  const workspacesRoot = getNexusWorkspacesRoot();
+  if (!existsSync(workspacesRoot)) return null;
+
+  const all = await listWorkspaces();
+  if (all.length === 0) return null;
+
+  if (workspaceId) {
+    const safeId = workspaceId.replace(/[^a-zA-Z0-9-_]/g, '');
+    const found = all.find(w => w.id === safeId);
+    if (found) {
+      return { id: found.id, root: join(workspacesRoot, found.id), name: found.name };
+    }
+  }
+
+  // Default to first / latest workspace
+  const first = all[0];
+  return { id: first.id, root: join(workspacesRoot, first.id), name: first.name };
+}
+
+// ─── Cache ──────────────────────────────────────────────
+
+interface WorkspaceCache {
+  files: FileInfo[];
+  symbols: CodeSymbol[];
+  edges: DependencyEdge[];
+  stats: CodebaseStats;
+  lastIndexTime: number;
+}
+
+const workspaceCaches = new Map<string, WorkspaceCache>();
+const CACHE_TTL_MS = 60_000; // re-index every 60s at most
 
 // ─── File Scanner ───────────────────────────────────────
 
 /**
- * Recursively walks the project tree and collects all source files,
+ * Recursively walks a workspace directory and collects all source files,
  * skipping ignored directories and unsupported file types.
  */
 async function scanDirectory(dir: string, root: string, hasSourceTree: boolean): Promise<string[]> {
@@ -132,10 +290,8 @@ async function scanDirectory(dir: string, root: string, hasSourceTree: boolean):
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
       if (IGNORE_DIRS_BASE.has(entry.name)) continue;
-      // If source directory (backend/src or src) exists, ignore dist to avoid duplicate compiled files.
-      // If no src directory exists (e.g. running in minimal production container), allow dist so files are indexed.
       if (entry.name === 'dist' && hasSourceTree) continue;
-      if (entry.name.endsWith('.map')) continue; // Skip .map files
+      if (entry.name.endsWith('.map')) continue;
 
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -155,9 +311,7 @@ async function scanDirectory(dir: string, root: string, hasSourceTree: boolean):
 
 /**
  * Extracts code symbols (functions, classes, interfaces, types, etc.)
- * from TypeScript/JavaScript source text using regex-based heuristics.
- *
- * This is intentionally lightweight — no AST parser dependency needed.
+ * from TypeScript/JavaScript source text.
  */
 function extractSymbols(content: string, filePath: string): CodeSymbol[] {
   const symbols: CodeSymbol[] = [];
@@ -182,8 +336,9 @@ function extractSymbols(content: string, filePath: string): CodeSymbol[] {
       continue;
     }
 
-    // arrow function const
-    const arrowMatch = line.match(/(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\(/);
+    // arrow function const (including typed React components, e.g. const Dashboard: React.FC = ...)
+    const arrowMatch = line.match(/(?:export\s+)?(?:const|let|var)\s+(\w+)(?:\s*:[^=]+)?\s*=\s*(?:async\s*)?(?:\([^)]*\)|[a-zA-Z0-9_]+)\s*=>/)
+      || line.match(/(?:export\s+)?(?:const|let|var)\s+(\w+)(?:\s*:[^=]+)?\s*=\s*(?:async\s*)?\(/);
     if (arrowMatch) {
       symbols.push({
         name: arrowMatch[1],
@@ -270,8 +425,7 @@ function extractSymbols(content: string, filePath: string): CodeSymbol[] {
 }
 
 /**
- * Extracts import statements from source code and resolves them to
- * relative paths within the project.
+ * Extracts import statements from source code.
  */
 function extractImports(content: string): string[] {
   const imports: string[] = [];
@@ -299,17 +453,21 @@ function extractExports(content: string): string[] {
 // ─── Indexing ───────────────────────────────────────────
 
 /**
- * Indexes the entire project codebase: scans files, extracts symbols,
- * builds import/export edges, and caches everything. Thread-safe via
- * a simple TTL guard.
+ * Indexes a specific MyceliumOps workspace. Thread-safe via TTL guard per workspace.
  */
-export async function indexCodebase(): Promise<void> {
-  const now = Date.now();
-  if (now - lastIndexTime < CACHE_TTL_MS && fileCache.length > 0) return;
+export async function indexCodebase(workspaceId?: string): Promise<{ ws: { id: string; root: string; name: string }; cache: WorkspaceCache } | null> {
+  const ws = await resolveWorkspace(workspaceId);
+  if (!ws) return null;
 
-  const root = getProjectRoot();
-  const hasSourceTree = existsSync(join(root, 'backend', 'src')) || existsSync(join(root, 'src'));
-  logger.info({ root, hasSourceTree }, 'Indexing codebase for code intelligence');
+  const now = Date.now();
+  const existing = workspaceCaches.get(ws.id);
+  if (existing && now - existing.lastIndexTime < CACHE_TTL_MS && existing.files.length > 0) {
+    return { ws, cache: existing };
+  }
+
+  const root = ws.root;
+  const hasSourceTree = existsSync(join(root, 'src'));
+  logger.info({ workspaceId: ws.id, root, repoName: ws.name }, 'Indexing MyceliumOps workspace for code intelligence');
 
   const filePaths = await scanDirectory(root, root, hasSourceTree);
   const files: FileInfo[] = [];
@@ -323,15 +481,10 @@ export async function indexCodebase(): Promise<void> {
       const ext = extname(fp).toLowerCase();
       const lines = content.split('\n');
 
-      const fileImports = (ext === '.ts' || ext === '.tsx' || ext === '.js' || ext === '.jsx')
-        ? extractImports(content)
-        : [];
-      const fileExports = (ext === '.ts' || ext === '.tsx' || ext === '.js' || ext === '.jsx')
-        ? extractExports(content)
-        : [];
-      const fileSymbols = (ext === '.ts' || ext === '.tsx' || ext === '.js' || ext === '.jsx')
-        ? extractSymbols(content, relPath)
-        : [];
+      const isJsTs = ext === '.ts' || ext === '.tsx' || ext === '.js' || ext === '.jsx';
+      const fileImports = isJsTs ? extractImports(content) : [];
+      const fileExports = isJsTs ? extractExports(content) : [];
+      const fileSymbols = isJsTs ? extractSymbols(content, relPath) : [];
 
       const s = await stat(fp);
 
@@ -353,18 +506,13 @@ export async function indexCodebase(): Promise<void> {
         edges.push({
           source: relPath,
           target: imp,
-          importNames: [], // could parse named imports later
+          importNames: [],
         });
       }
     } catch {
       // File read error — skip.
     }
   }
-
-  fileCache = files;
-  symbolCache = symbols;
-  edgeCache = edges;
-  lastIndexTime = now;
 
   // Build stats
   const languages: Record<string, number> = {};
@@ -376,12 +524,13 @@ export async function indexCodebase(): Promise<void> {
     totalLines += f.lineCount;
     totalBytes += f.sizeBytes;
     languages[f.language] = (languages[f.language] || 0) + 1;
-    const dir = f.relativePath.split('/').slice(0, 2).join('/');
+    const parts = f.relativePath.split('/');
+    const dir = parts.length > 2 && parts[0] === 'src' ? `src/${parts[1]}` : (parts[0] || 'root');
     directories[dir] = (directories[dir] || 0) + 1;
   }
 
   const sortedBySize = [...files].sort((a, b) => b.lineCount - a.lineCount);
-  statsCache = {
+  const stats: CodebaseStats = {
     totalFiles: files.length,
     totalLines,
     totalBytes,
@@ -395,24 +544,37 @@ export async function indexCodebase(): Promise<void> {
     })),
   };
 
+  const newCache: WorkspaceCache = {
+    files,
+    symbols,
+    edges,
+    stats,
+    lastIndexTime: now,
+  };
+
+  workspaceCaches.set(ws.id, newCache);
+
   logger.info(
-    { files: files.length, symbols: symbols.length, edges: edges.length },
-    'Codebase indexing complete',
+    { workspaceId: ws.id, files: files.length, symbols: symbols.length, edges: edges.length },
+    'MyceliumOps workspace indexing complete',
   );
+
+  return { ws, cache: newCache };
 }
 
 // ─── Public API ─────────────────────────────────────────
 
 /**
- * Performs a semantic search across all indexed source files.
- * Supports plain text and basic regex patterns.
+ * Performs a semantic search across the selected MyceliumOps repository files.
  */
 export async function searchCode(
   query: string,
-  options: { fileFilter?: string; language?: string; maxResults?: number; isRegex?: boolean } = {},
+  options: { fileFilter?: string; language?: string; maxResults?: number; isRegex?: boolean; workspaceId?: string } = {},
 ): Promise<SearchResult[]> {
-  await indexCodebase();
+  const indexed = await indexCodebase(options.workspaceId);
+  if (!indexed) return [];
 
+  const { files } = indexed.cache;
   const { fileFilter, language, maxResults = 50, isRegex = false } = options;
   const results: SearchResult[] = [];
 
@@ -423,7 +585,7 @@ export async function searchCode(
     return [];
   }
 
-  for (const file of fileCache) {
+  for (const file of files) {
     if (language && file.language !== language) continue;
     if (fileFilter && !file.relativePath.includes(fileFilter)) continue;
 
@@ -448,8 +610,8 @@ export async function searchCode(
               after: lines.slice(i + 1, Math.min(lines.length, i + 3)).map(l => l.trimEnd()),
             },
           });
+
           if (results.length >= maxResults) return results;
-          // Avoid infinite loop on zero-length matches
           if (match[0].length === 0) break;
         }
       }
@@ -462,14 +624,15 @@ export async function searchCode(
 }
 
 /**
- * Lists all extracted symbols, optionally filtered by kind and search query.
+ * Lists all extracted symbols for the selected MyceliumOps repository.
  */
 export async function getSymbols(
-  options: { kind?: string; query?: string; fileFilter?: string; limit?: number } = {},
+  options: { kind?: string; query?: string; fileFilter?: string; limit?: number; workspaceId?: string } = {},
 ): Promise<CodeSymbol[]> {
-  await indexCodebase();
+  const indexed = await indexCodebase(options.workspaceId);
+  if (!indexed) return [];
 
-  let result = [...symbolCache];
+  let result = [...indexed.cache.symbols];
 
   if (options.kind) {
     result = result.filter(s => s.kind === options.kind);
@@ -486,14 +649,16 @@ export async function getSymbols(
 }
 
 /**
- * Reads a file's content and returns it with metadata for the file viewer.
+ * Reads a file's content from the selected MyceliumOps repository.
  */
 export async function getFileContent(
   filePath: string,
+  workspaceId?: string,
 ): Promise<{ relativePath: string; language: string; content: string; lineCount: number; symbols: CodeSymbol[] } | null> {
-  await indexCodebase();
+  const indexed = await indexCodebase(workspaceId);
+  if (!indexed) return null;
 
-  const file = fileCache.find(f => f.relativePath === filePath);
+  const file = indexed.cache.files.find(f => f.relativePath === filePath);
   if (!file) return null;
 
   try {
@@ -511,14 +676,15 @@ export async function getFileContent(
 }
 
 /**
- * Finds all references to a given symbol name across the codebase.
+ * Finds all references to a symbol in the selected MyceliumOps repository.
  */
-export async function findReferences(symbolName: string): Promise<SymbolReference[]> {
-  await indexCodebase();
+export async function findReferences(symbolName: string, workspaceId?: string): Promise<SymbolReference[]> {
+  const indexed = await indexCodebase(workspaceId);
+  if (!indexed) return [];
 
   const refs: SymbolReference[] = [];
 
-  for (const file of fileCache) {
+  for (const file of indexed.cache.files) {
     if (!['.ts', '.tsx', '.js', '.jsx'].includes(extname(file.path).toLowerCase())) continue;
 
     try {
@@ -528,7 +694,6 @@ export async function findReferences(symbolName: string): Promise<SymbolReferenc
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
 
-        // Check imports
         if (line.includes('import') && line.includes(symbolName)) {
           refs.push({
             file: file.relativePath,
@@ -539,7 +704,6 @@ export async function findReferences(symbolName: string): Promise<SymbolReferenc
           continue;
         }
 
-        // Check usage (word boundary match)
         const regex = new RegExp(`\\b${escapeRegex(symbolName)}\\b`);
         if (regex.test(line) && !line.trimStart().startsWith('//') && !line.trimStart().startsWith('*')) {
           refs.push({
@@ -559,75 +723,98 @@ export async function findReferences(symbolName: string): Promise<SymbolReferenc
 }
 
 /**
- * Returns the dependency graph: file nodes + import edges.
- * Used by the Code Graph visualization on the frontend.
+ * Returns the dependency graph for the selected MyceliumOps repository.
  */
-export async function getDependencyGraph(): Promise<{
+export async function getDependencyGraph(workspaceId?: string): Promise<{
   nodes: { id: string; group: string; lineCount: number; symbolCount: number }[];
   edges: DependencyEdge[];
 }> {
-  await indexCodebase();
+  const indexed = await indexCodebase(workspaceId);
+  if (!indexed) return { nodes: [], edges: [] };
 
-  const nodes = fileCache
+  const { files, edges } = indexed.cache;
+
+  const nodes = files
     .filter(f => ['.ts', '.tsx', '.js', '.jsx'].includes(extname(f.path).toLowerCase()))
-    .map(f => ({
-      id: f.relativePath,
-      group: f.relativePath.split('/')[0] || 'root',
-      lineCount: f.lineCount,
-      symbolCount: f.symbols.length,
-    }));
+    .map(f => {
+      const parts = f.relativePath.split('/');
+      const group = parts.length > 2 && parts[0] === 'src' ? `src/${parts[1]}` : (parts[0] || 'root');
+      return {
+        id: f.relativePath,
+        group,
+        lineCount: f.lineCount,
+        symbolCount: f.symbols.length,
+      };
+    });
 
-  // Only include edges where both source and target are known files
   const nodeIds = new Set(nodes.map(n => n.id));
-  const resolvedEdges = edgeCache.filter(e => {
-    // Try to resolve the import target to a known file
-    return nodeIds.has(e.source);
-  });
+  const resolvedEdges = edges.filter(e => nodeIds.has(e.source));
 
   return { nodes, edges: resolvedEdges };
 }
 
 /**
- * Returns aggregate statistics about the codebase.
+ * Returns aggregate statistics for the selected MyceliumOps repository.
  */
-export async function getStats(): Promise<CodebaseStats> {
-  await indexCodebase();
-  return statsCache!;
+export async function getStats(workspaceId?: string): Promise<CodebaseStats> {
+  const indexed = await indexCodebase(workspaceId);
+  if (!indexed) {
+    return {
+      totalFiles: 0,
+      totalLines: 0,
+      totalBytes: 0,
+      languages: {},
+      directories: {},
+      avgFileSize: 0,
+      largestFiles: [],
+    };
+  }
+  return indexed.cache.stats;
 }
 
 /**
- * Lists all indexed files with metadata (no content).
+ * Lists all files in the selected MyceliumOps repository with metadata.
  */
-export async function listFiles(): Promise<Omit<FileInfo, 'path'>[]> {
-  await indexCodebase();
-  return fileCache.map(({ path: _p, ...rest }) => rest);
+export async function listFiles(workspaceId?: string): Promise<Omit<FileInfo, 'path'>[]> {
+  const indexed = await indexCodebase(workspaceId);
+  if (!indexed) return [];
+  return indexed.cache.files.map(({ path: _p, ...rest }) => rest);
 }
 
 /**
- * Answers a natural-language question about the codebase using
- * semantic indexing, symbol references, and grounded snippet citations.
+ * Answers questions grounded in the selected MyceliumOps repository.
  */
 export async function askCodebase(
   question: string,
   organizationId?: string,
   preferredModel?: string,
+  workspaceId?: string,
 ): Promise<{
   question: string;
   answer: string;
   citations: { file: string; line?: number; reason: string }[];
   relatedSymbols: CodeSymbol[];
 }> {
-  await indexCodebase();
+  const indexed = await indexCodebase(workspaceId);
+  if (!indexed) {
+    return {
+      question,
+      answer: 'No MyceliumOps repository found to analyze. Please run a production chain in Mission Control to generate code.',
+      citations: [],
+      relatedSymbols: [],
+    };
+  }
 
+  const { files } = indexed.cache;
+  const repoName = indexed.ws.name;
   const q = question.toLowerCase();
   const keywords = q
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
     .filter(k => k.length > 2 && !['how', 'what', 'where', 'when', 'which', 'who', 'why', 'does', 'did', 'the', 'and', 'for', 'are', 'with', 'from', 'this', 'that', 'nexus', 'work', 'works', 'working', 'implemented', 'explain', 'tell', 'show', 'into', 'have', 'been'].includes(k));
 
-  // Find relevant files
   const scoredFiles: { file: FileInfo; score: number; matchedReasons: string[]; snippet?: string }[] = [];
-  for (const f of fileCache) {
+  for (const f of files) {
     let score = 0;
     const reasons: string[] = [];
     const lowerPath = f.relativePath.toLowerCase();
@@ -666,7 +853,7 @@ export async function askCodebase(
   scoredFiles.sort((a, b) => b.score - a.score);
   const topFiles = scoredFiles.slice(0, 5);
 
-  // Extract real snippet excerpts for top files
+  // Extract snippet excerpts for top files
   for (const tf of topFiles) {
     try {
       const content = await readFile(tf.file.path, 'utf-8');
@@ -687,13 +874,11 @@ export async function askCodebase(
     }
   }
 
-  // Gather matching symbols
   const relatedSymbols: CodeSymbol[] = [];
   for (const item of topFiles) {
     relatedSymbols.push(...item.file.symbols.slice(0, 4));
   }
 
-  // Construct grounded citations
   const citations = topFiles.map(tf => ({
     file: tf.file.relativePath,
     line: tf.file.symbols[0]?.line || 1,
@@ -703,13 +888,12 @@ export async function askCodebase(
   if (topFiles.length === 0) {
     return {
       question,
-      answer: `I analyzed the codebase for "${question}", but couldn't locate direct matches in the indexed files (${fileCache.length} files scanned). Try searching for specific terms like "agent", "auth", "gateway", "prisma", "board", "llm", or "mcp".`,
+      answer: `I analyzed the MyceliumOps repository "${repoName}" for "${question}", but couldn't locate direct matches in the indexed files (${files.length} files scanned). Try searching for components, exports, or functions present in this codebase.`,
       citations: [],
       relatedSymbols: [],
     };
   }
 
-  // Attempt real AI explanation via available LLMs
   let aiAnswer: string | null = null;
   const contextBlock = topFiles.map(tf => (
     `File: ${tf.file.relativePath} (${tf.file.language}, ${tf.file.lineCount} lines)\n` +
@@ -717,20 +901,19 @@ export async function askCodebase(
     (tf.snippet ? `Snippet:\n${tf.snippet}\n` : '')
   )).join('\n---\n');
 
-  const prompt = `You are the Nexus AI Code Intelligence Assistant. A developer asked the following question about this repository:\n\n` +
+  const prompt = `You are the MyceliumOps AI Code Intelligence Assistant. A developer asked the following question about the MyceliumOps-engineered repository "${repoName}":\n\n` +
     `Question: "${question}"\n\n` +
-    `Here is the indexed codebase context with relevant files and code excerpts:\n\n` +
+    `Here is the indexed repository context with relevant files and code excerpts:\n\n` +
     `${contextBlock}\n\n` +
     `Provide a clear, detailed, and technically accurate explanation in GitHub-flavored Markdown. ` +
     `Explain how the architecture works, reference specific files and symbols, and provide code guidance where applicable. Keep the tone professional, helpful, and concise.`;
 
-  // 1. Explicit provider/model selection through OpenCode. This keeps
-  // Code Intelligence on the same model picker as Mother Chat.
+  // 1. Explicit OpenCode model selection
   if (preferredModel?.includes('/') && !preferredModel.startsWith('local/')) {
     try {
       const op = await runOpenCode(prompt, preferredModel);
       if (op.result && op.result.trim().length > 20) aiAnswer = op.result.trim();
-    } catch { /* continue with configured providers */ }
+    } catch { /* continue */ }
   }
 
   // 2. Try Claude CLI if enabled
@@ -743,7 +926,7 @@ export async function askCodebase(
     } catch { /* fallthrough */ }
   }
 
-  // 2. Try Google Gemini API
+  // 3. Try Gemini API
   if (!aiAnswer) {
     let geminiKey = process.env.GEMINI_API_KEY || process.env.PLATFORM_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
     if (organizationId) {
@@ -787,7 +970,7 @@ export async function askCodebase(
     }
   }
 
-  // 3. Try Local PC Ollama
+  // 4. Try Local PC Ollama
   if (!aiAnswer) {
     const endpoints = config.localLlmEndpoints;
     for (const ep of endpoints) {
@@ -816,11 +999,11 @@ export async function askCodebase(
     }
   }
 
-  // Fallback to grounded structured synthesis if no LLM responded
+  // Grounded structured synthesis fallback
   const finalAnswer = aiAnswer || (
     `### 🔍 Grounded Repository Analysis\n\n` +
     `**Question:** ${question}\n\n` +
-    `Found **${topFiles.length} matching files** across the codebase index:\n\n` +
+    `Analyzed MyceliumOps repository **${repoName}** and found **${topFiles.length} matching files**:\n\n` +
     topFiles.map(tf => (
       `#### 📄 \`${tf.file.relativePath}\` (${tf.file.language}, ${tf.file.lineCount} lines)\n` +
       `- **Relevance:** ${tf.matchedReasons.join('; ')}\n` +
@@ -842,10 +1025,14 @@ export async function askCodebase(
 }
 
 /**
- * Forces a re-index of the codebase on the next request.
+ * Forces a re-index of a workspace on the next request.
  */
-export function invalidateCache(): void {
-  lastIndexTime = 0;
+export function invalidateCache(workspaceId?: string): void {
+  if (workspaceId) {
+    workspaceCaches.delete(workspaceId);
+  } else {
+    workspaceCaches.clear();
+  }
 }
 
 // ─── Helpers ────────────────────────────────────────────
