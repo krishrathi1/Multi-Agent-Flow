@@ -238,6 +238,7 @@ export function McpHub() {
     executedAt?: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -261,8 +262,16 @@ export function McpHub() {
       setServers((prev) =>
         prev.map((s) => (s.id === server.id ? { ...s, tools, lastConnected: new Date().toISOString() } : s))
       );
-    } catch (err) {
+      setToastMessage({
+        type: 'success',
+        text: `Connected to "${server.name}"! Discovered ${tools.length} callable tools.`,
+      });
+    } catch (err: any) {
       console.error('Failed to refresh MCP tools:', err);
+      setToastMessage({
+        type: 'error',
+        text: `Could not reach "${server.name}" at ${server.url}: ${err?.message || 'Server returned 404 or connection refused'}. Verify the MCP host is running.`,
+      });
     } finally {
       setRefreshingId(null);
     }
@@ -284,6 +293,10 @@ export function McpHub() {
     try {
       await api.mcp.orgRemove(server.id);
       setServers((prev) => prev.filter((s) => s.id !== server.id));
+      setToastMessage({
+        type: 'info',
+        text: `Removed MCP server "${server.name}".`,
+      });
     } catch (err) {
       console.error('Failed to delete MCP server:', err);
     }
@@ -296,16 +309,31 @@ export function McpHub() {
     setSubmitting(true);
     setFormError(null);
     try {
-      await api.mcp.orgAdd({
+      const newServer = (await api.mcp.orgAdd({
         name: serverName.trim(),
         url: serverUrl.trim(),
         transport,
-      });
+      })) as McpServerWithDetails;
 
-      await loadData();
       setShowAddModal(false);
       setServerName('');
       setServerUrl('');
+
+      // Immediately test and discover tools
+      try {
+        const tools = (await api.mcp.refreshTools(newServer.agentId, newServer.id)) as McpTool[];
+        setToastMessage({
+          type: 'success',
+          text: `Added and verified "${newServer.name}"! Discovered ${tools.length} callable tools.`,
+        });
+      } catch (refreshErr: any) {
+        setToastMessage({
+          type: 'error',
+          text: `Added "${newServer.name}", but connection test failed: ${refreshErr?.message || 'Endpoint returned 404 Not Found'}. Ensure the MCP server is actively running.`,
+        });
+      }
+
+      await loadData();
     } catch (err: any) {
       console.error('Failed to add MCP server:', err);
       setFormError(err?.message || 'Failed to connect MCP server. Please check URL and transport.');
@@ -364,7 +392,7 @@ export function McpHub() {
     }
   };
 
-  const connectedCount = servers.filter((s) => s.enabled).length;
+  const connectedCount = servers.filter((s) => s.enabled && s.lastConnected && (s.tools?.length || 0) > 0).length;
   const totalToolsCount = servers.reduce((acc, s) => acc + (s.tools?.length || 0), 0);
 
   const filteredServers = servers.filter((s) => {
@@ -404,6 +432,38 @@ export function McpHub() {
           </div>
         }
       />
+
+      {/* Toast Alert */}
+      {toastMessage && (
+        <div
+          className={cn(
+            'flex items-center justify-between gap-2.5 rounded-xl border p-3.5 text-xs font-semibold shadow-2xs transition-all',
+            toastMessage.type === 'success'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              : toastMessage.type === 'info'
+              ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+              : 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400',
+          )}
+        >
+          <div className="flex items-center gap-2">
+            {toastMessage.type === 'success' ? (
+              <CheckCircle2 size={16} />
+            ) : toastMessage.type === 'info' ? (
+              <Zap size={16} />
+            ) : (
+              <XCircle size={16} />
+            )}
+            <span>{toastMessage.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-2xs opacity-70 hover:opacity-100 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ── 4 Compact Core Stat Cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
@@ -505,7 +565,10 @@ export function McpHub() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
           {MCP_PRESETS.filter((p) => activeCategory === 'ALL' || p.category === activeCategory).map((preset) => {
-            const isAlreadyAdded = servers.some((s) => s.name.toLowerCase().includes(preset.id) || s.url === preset.url);
+            const existingServer = servers.find((s) => s.name.toLowerCase().includes(preset.id) || s.url === preset.url);
+            const isVerified = existingServer && existingServer.lastConnected && (existingServer.tools?.length || 0) > 0;
+            const isUnverified = existingServer && !isVerified;
+            const isRefreshing = existingServer ? refreshingId === existingServer.id : false;
             return (
               <div
                 key={preset.id}
@@ -558,20 +621,43 @@ export function McpHub() {
                   <span className="text-[10px] font-mono text-ink-muted">
                     Transport: <strong className="text-ink">{preset.transport}</strong>
                   </span>
-                  <Button
-                    variant={isAlreadyAdded ? 'secondary' : 'primary'}
-                    size="xs"
-                    icon={isAlreadyAdded ? Check : Plus}
-                    disabled={isAlreadyAdded}
-                    onClick={() => {
-                      setServerName(preset.name);
-                      setServerUrl(preset.url);
-                      setTransport(preset.transport);
-                      setShowAddModal(true);
-                    }}
-                  >
-                    {isAlreadyAdded ? 'Connected' : 'Quick Connect'}
-                  </Button>
+                  {isVerified ? (
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      icon={Check}
+                      disabled
+                      className="border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 font-bold"
+                    >
+                      Active ({existingServer!.tools!.length} Tools)
+                    </Button>
+                  ) : isUnverified ? (
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      icon={RefreshCw}
+                      loading={isRefreshing}
+                      className="border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/10 font-semibold"
+                      onClick={() => handleRefreshTools(existingServer!)}
+                      title="Server registered but tools not yet discovered. Click to test connection."
+                    >
+                      Verify / Discover
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      size="xs"
+                      icon={Plus}
+                      onClick={() => {
+                        setServerName(preset.name);
+                        setServerUrl(preset.url);
+                        setTransport(preset.transport);
+                        setShowAddModal(true);
+                      }}
+                    >
+                      Quick Connect
+                    </Button>
+                  )}
                 </div>
               </div>
             );
@@ -662,20 +748,27 @@ export function McpHub() {
                       <span
                         className={cn(
                           'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-2xs font-semibold border shadow-2xs',
-                          server.enabled
+                          !server.enabled
+                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
+                            : (server.tools?.length || 0) > 0 && server.lastConnected
                             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
-                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25'
                         )}
                       >
-                        {server.enabled ? (
-                          <>
-                            <LiveRadarBeacon size={6} tone="emerald" />
-                            <span>Callable</span>
-                          </>
-                        ) : (
+                        {!server.enabled ? (
                           <>
                             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                             <span>Disabled</span>
+                          </>
+                        ) : (server.tools?.length || 0) > 0 && server.lastConnected ? (
+                          <>
+                            <LiveRadarBeacon size={6} tone="emerald" />
+                            <span>Callable ({server.tools?.length || 0} Tools)</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                            <span>Unverified (0 Tools)</span>
                           </>
                         )}
                       </span>
