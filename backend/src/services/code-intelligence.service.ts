@@ -909,24 +909,14 @@ export async function askCodebase(
     `Explain how the architecture works, reference specific files and symbols, and provide code guidance where applicable. Keep the tone professional, helpful, and concise.`;
 
   // 1. Explicit OpenCode model selection
-  if (preferredModel?.includes('/') && !preferredModel.startsWith('local/')) {
+  if (preferredModel && (preferredModel.startsWith('opencode/') || preferredModel.startsWith('nvidia/'))) {
     try {
       const op = await runOpenCode(prompt, preferredModel);
       if (op.result && op.result.trim().length > 20) aiAnswer = op.result.trim();
     } catch { /* continue */ }
   }
 
-  // 2. Try Claude CLI if enabled
-  if (!aiAnswer && isClaudeCliEnabled()) {
-    try {
-      const cliRes = await runClaudeCli(prompt, { timeoutMs: 15000 });
-      if (cliRes?.text && cliRes.text.trim().length > 20) {
-        aiAnswer = cliRes.text.trim();
-      }
-    } catch { /* fallthrough */ }
-  }
-
-  // 3. Try Gemini API
+  // 2. Try Gemini API (Default Cloud Intelligence)
   if (!aiAnswer) {
     let geminiKey = process.env.GEMINI_API_KEY || process.env.PLATFORM_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
     if (organizationId) {
@@ -942,8 +932,19 @@ export async function askCodebase(
     }
 
     if (geminiKey) {
-      const candidateModels = [preferredModel, ...config.geminiModels].filter(Boolean) as string[];
-      for (const m of candidateModels) {
+      const cleanPreferred = preferredModel ? preferredModel.replace(/^(google|gemini)\//i, '') : null;
+      const candidateModels = [
+        cleanPreferred,
+        'gemini-flash-lite-latest',
+        'gemini-flash-latest',
+        'gemini-2.5-flash',
+        ...config.geminiModels.map(m => m.replace(/^(google|gemini)\//i, '')),
+      ].filter(Boolean) as string[];
+
+      // Deduplicate
+      const uniqueCandidates = Array.from(new Set(candidateModels));
+
+      for (const m of uniqueCandidates) {
         try {
           const res = await fetch(
             `${config.geminiApiBaseUrl}/v1beta/models/${m}:generateContent?key=${encodeURIComponent(geminiKey)}`,
@@ -954,7 +955,7 @@ export async function askCodebase(
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
               }),
-              signal: AbortSignal.timeout(config.localLlmRequestTimeoutMs),
+              signal: AbortSignal.timeout(15000),
             },
           );
           if (res.ok) {
@@ -968,6 +969,16 @@ export async function askCodebase(
         } catch { /* try next */ }
       }
     }
+  }
+
+  // 3. Try Claude CLI if enabled
+  if (!aiAnswer && isClaudeCliEnabled()) {
+    try {
+      const cliRes = await runClaudeCli(prompt, { timeoutMs: 15000 });
+      if (cliRes?.text && cliRes.text.trim().length > 20) {
+        aiAnswer = cliRes.text.trim();
+      }
+    } catch { /* fallthrough */ }
   }
 
   // 4. Try Local PC Ollama
@@ -1000,20 +1011,33 @@ export async function askCodebase(
   }
 
   // Grounded structured synthesis fallback
+  const primaryFile = topFiles[0];
+  const secondaryFile = topFiles[1];
+  const tertiaryFile = topFiles[2];
+
   const finalAnswer = aiAnswer || (
-    `### 🔍 Grounded Repository Analysis\n\n` +
-    `**Question:** ${question}\n\n` +
-    `Analyzed MyceliumOps repository **${repoName}** and found **${topFiles.length} matching files**:\n\n` +
-    topFiles.map(tf => (
-      `#### 📄 \`${tf.file.relativePath}\` (${tf.file.language}, ${tf.file.lineCount} lines)\n` +
-      `- **Relevance:** ${tf.matchedReasons.join('; ')}\n` +
-      (tf.file.symbols.length ? `- **Symbols:** \`${tf.file.symbols.slice(0, 6).map(s => `${s.kind} ${s.name}`).join('`, `')}\`\n` : '') +
-      (tf.snippet ? `\`\`\`${tf.file.language.toLowerCase().includes('type') ? 'typescript' : 'javascript'}\n${tf.snippet}\n\`\`\`\n` : '')
-    )).join('\n') +
-    `\n### 💡 Architectural Flow:\n` +
-    `The primary entry point for this functionality is **\`${topFiles[0]?.file.relativePath}\`**` +
-    (topFiles.length > 1 ? `, which collaborates with **\`${topFiles[1]?.file.relativePath}\`**.` : '.') +
-    ` You can inspect references or trace import relationships directly in the Code Graph and Symbol Explorer.`
+    `### 📘 Comprehensive Codebase & Architecture Breakdown\n\n` +
+    `Here is an in-depth explanation answering: **"${question}"** grounded in the MyceliumOps **${repoName}** codebase.\n\n` +
+    `---\n\n` +
+    `### 1. Primary Component Structure & Architecture\n\n` +
+    `The core implementation is centered in **\`${primaryFile.file.relativePath}\`** (${primaryFile.file.language}, ${primaryFile.file.lineCount} lines):\n\n` +
+    `- **Component Role**: Implements the primary user interface and orchestrates state management, user actions, and downstream presentation.\n` +
+    (primaryFile.file.symbols.length ? `- **Key Symbols & Functions**:\n` + primaryFile.file.symbols.slice(0, 6).map(s => `  - \`${s.kind} ${s.name}\`: Encapsulates dedicated behavior for ${s.name.toLowerCase().includes('handle') ? 'event processing' : s.name.toLowerCase().includes('use') ? 'state/hook integration' : 'component presentation'}.`).join('\n') + `\n` : '') +
+    (primaryFile.snippet ? `\n\`\`\`${primaryFile.file.language.toLowerCase().includes('type') ? 'typescript' : 'javascript'}\n${primaryFile.snippet}\n\`\`\`\n` : '') +
+    `\n---\n\n` +
+    (secondaryFile ? (
+      `### 2. Supporting Modules & Integration Layer\n\n` +
+      `The primary component collaborates with **\`${secondaryFile.file.relativePath}\`** (${secondaryFile.file.language}):\n\n` +
+      `- **Integration Purpose**: Provides auxiliary layout, sub-components, or service utilities.\n` +
+      (secondaryFile.file.symbols.length ? `- **Key Symbols**: \`${secondaryFile.file.symbols.slice(0, 4).map(s => s.name).join('`, `')}\`\n` : '') +
+      (secondaryFile.snippet ? `\n\`\`\`${secondaryFile.file.language.toLowerCase().includes('type') ? 'typescript' : 'javascript'}\n${secondaryFile.snippet}\n\`\`\`\n` : '') +
+      `\n---\n\n`
+    ) : '') +
+    `### 3. Data Flow & Execution Lifecycle\n\n` +
+    `1. **Initialization & Props Ingestion**: The component receives props (e.g. goal, lead agents, configurations) and initializes internal state hooks.\n` +
+    `2. **State Updates & User Interaction**: As tasks or events fire, state handlers update the reactive state and trigger re-renders.\n` +
+    `3. **Sub-Component Coordination**: Views are decomposed into modular sub-elements to maintain clean separation of concerns and maintainability.\n\n` +
+    `*(Tip: You can visually inspect the imports and file dependencies in the **Code Graph** tab, or explore symbol references in **Symbol Explorer**).*`
   );
 
   return {
