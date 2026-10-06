@@ -6,29 +6,30 @@ import { getSocket } from '@/lib/socket';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { CustomSelect } from '@/components/ui/CustomSelect';
+import { Settings, Plus, X, Users, ArrowLeft } from 'lucide-react';
 import type { Board, Task, TaskStatus, Agent } from '@/types';
 
 const COLUMNS: TaskStatus[] = ['BACKLOG', 'ASSIGNED', 'IN_PROGRESS', 'REVIEW', 'DONE'];
 
 const columnConfig: Record<TaskStatus, { label: string; bg: string; border: string; dot: string }> = {
-  BACKLOG: { label: 'Backlog', bg: 'bg-gray-500/5', border: 'border-gray-500/20', dot: 'bg-gray-500' },
-  ASSIGNED: { label: 'Assigned', bg: 'bg-blue-500/5', border: 'border-blue-500/20', dot: 'bg-blue-500' },
-  IN_PROGRESS: { label: 'In Progress', bg: 'bg-violet-500/5', border: 'border-violet-500/20', dot: 'bg-violet-500' },
-  REVIEW: { label: 'Review', bg: 'bg-amber-500/5', border: 'border-amber-500/20', dot: 'bg-amber-500' },
-  DONE: { label: 'Done', bg: 'bg-emerald-500/5', border: 'border-emerald-500/20', dot: 'bg-emerald-500' },
+  BACKLOG: { label: 'Backlog', bg: 'bg-surface/70', border: 'border-line', dot: 'bg-slate-400' },
+  ASSIGNED: { label: 'Assigned', bg: 'bg-blue-500/[0.04]', border: 'border-blue-500/20', dot: 'bg-blue-500' },
+  IN_PROGRESS: { label: 'In Progress', bg: 'bg-violet-500/[0.04]', border: 'border-violet-500/20', dot: 'bg-violet-500' },
+  REVIEW: { label: 'Review', bg: 'bg-amber-500/[0.04]', border: 'border-amber-500/20', dot: 'bg-amber-500' },
+  DONE: { label: 'Done', bg: 'bg-emerald-500/[0.04]', border: 'border-emerald-500/20', dot: 'bg-emerald-500' },
 };
 
 const priorityBadge: Record<string, string> = {
-  LOW: 'text-gray-400 bg-gray-500/10',
-  MEDIUM: 'text-blue-400 bg-blue-500/10',
-  HIGH: 'text-amber-400 bg-amber-500/10',
-  CRITICAL: 'text-red-400 bg-red-500/10',
+  LOW: 'text-slate-600 dark:text-slate-400 bg-slate-500/10 border-slate-500/20',
+  MEDIUM: 'text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/20',
+  HIGH: 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20',
+  CRITICAL: 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20',
 };
 
 const boardTypeBadge: Record<string, { className: string; label: string }> = {
-  goal: { className: 'text-blue-400 bg-blue-500/10 border-blue-500/20', label: 'Goal' },
-  sprint: { className: 'text-violet-400 bg-violet-500/10 border-violet-500/20', label: 'Sprint' },
-  continuous: { className: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', label: 'Continuous' },
+  goal: { className: 'text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/25', label: 'Goal' },
+  sprint: { className: 'text-violet-600 dark:text-violet-400 bg-violet-500/10 border-violet-500/25', label: 'Sprint' },
+  continuous: { className: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/25', label: 'Continuous' },
 };
 
 interface BoardAgent {
@@ -219,126 +220,127 @@ export function BoardDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-500 pt-6 mb-2">
-        <Link to="/boards" className="hover:text-white transition-colors">Boards</Link>
+      <div className="flex items-center gap-2 text-xs font-semibold text-ink-muted pt-4 mb-3">
+        <Link to="/boards" className="hover:text-ink transition-colors flex items-center gap-1">
+          <ArrowLeft size={13} />
+          <span>Boards</span>
+        </Link>
         <span>/</span>
-        <span className="text-white">{board.name}</span>
+        <span className="text-ink font-bold">{board.name}</span>
       </div>
 
       {/* Board header card */}
-      <div className="rounded-xl border border-white/5 bg-surface-850 p-5 mb-6">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-xl font-bold text-white">{board.name}</h2>
+      <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 mb-6 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 flex-wrap mb-1.5">
+              <h1 className="text-xl sm:text-2xl font-bold text-ink tracking-tight">{board.name}</h1>
               <span
                 className={cn(
-                  'text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-wider border',
+                  'text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border shadow-2xs',
                   btStyle.className
                 )}
               >
                 {btStyle.label}
               </span>
             </div>
-            {board.objective && (
-              <p className="text-sm text-nexus-400 mt-1">{board.objective}</p>
-            )}
             {board.description && (
-              <p className="text-xs text-gray-500 mt-1">{board.description}</p>
+              <p className="text-xs text-ink-muted leading-relaxed max-w-3xl">{board.description}</p>
+            )}
+            {board.objective && (
+              <p className="text-xs font-semibold text-brand-600 dark:text-brand-400 mt-1 flex items-center gap-1.5">
+                <span>🎯 Objective:</span>
+                <span>{board.objective}</span>
+              </p>
             )}
           </div>
 
           <button
+            type="button"
             onClick={() => setShowSettings(!showSettings)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 transition-colors"
+            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-surface border border-line text-ink hover:bg-hover hover:border-line-strong transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 self-start shrink-0"
           >
-            {showSettings ? 'Close Settings' : 'Settings'}
+            <Settings size={14} className="text-ink-muted" />
+            <span>{showSettings ? 'Close Settings' : 'Settings'}</span>
           </button>
         </div>
 
         {/* Progress + stats row */}
-        <div className="flex items-center gap-6">
+        <div className="flex flex-col md:flex-row md:items-center gap-6 pt-2 border-t border-line-subtle">
           {/* Progress bar */}
           <div className="flex-1">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-500">Progress</span>
-              <span className="text-xs text-white font-medium">{progressPct}%</span>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-ink-muted">Execution Progress</span>
+              <span className="text-xs font-bold text-ink font-mono">{progressPct}%</span>
             </div>
-            <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+            <div className="h-2 rounded-full bg-inset overflow-hidden border border-line-subtle">
               <div
-                className="h-full rounded-full bg-nexus-500 transition-all duration-500"
+                className="h-full rounded-full bg-gradient-to-r from-brand-600 to-indigo-500 transition-all duration-500"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
           </div>
 
           {/* Stats */}
-          <div className="flex items-center gap-4">
-            <div className="text-center px-3">
-              <div className="text-lg font-bold text-white">{totalTasks}</div>
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider">Tasks</div>
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0 overflow-x-auto pb-1 sm:pb-0">
+            <div className="text-center px-3.5 py-2 rounded-xl bg-inset border border-line-subtle min-w-[72px]">
+              <div className="text-base font-bold font-mono text-ink">{totalTasks}</div>
+              <div className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Tasks</div>
             </div>
-            <div className="text-center px-3">
-              <div className="text-lg font-bold text-emerald-400">{doneTasks}</div>
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider">Done</div>
+            <div className="text-center px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 min-w-[72px]">
+              <div className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">{doneTasks}</div>
+              <div className="text-[10px] font-bold text-emerald-600/80 dark:text-emerald-400/80 uppercase tracking-wider">Done</div>
             </div>
-            <div className="text-center px-3">
-              <div className="text-lg font-bold text-white">{agents.length}</div>
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider">Agents</div>
+            <div className="text-center px-3.5 py-2 rounded-xl bg-inset border border-line-subtle min-w-[72px]">
+              <div className="text-base font-bold font-mono text-ink">{agents.length}</div>
+              <div className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Agents</div>
             </div>
             {board.targetDate && (
-              <div className="text-center px-3">
-                <div className="text-sm font-medium text-white">
+              <div className="text-center px-3.5 py-2 rounded-xl bg-inset border border-line-subtle min-w-[80px]">
+                <div className="text-xs font-bold font-mono text-ink">
                   {new Date(board.targetDate).toLocaleDateString()}
                 </div>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider">Target</div>
+                <div className="text-[10px] font-bold text-ink-muted uppercase tracking-wider">Target</div>
               </div>
             )}
           </div>
         </div>
 
         {/* Agent avatars bar */}
-        {agents.length > 0 && (
-          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/5">
-            <span className="text-xs text-gray-500 mr-1">Agents:</span>
-            {agents.map(agent => (
+        <div className="flex items-center gap-2.5 pt-3 border-t border-line-subtle flex-wrap">
+          <span className="text-xs font-semibold text-ink-muted mr-1 flex items-center gap-1.5">
+            <Users size={14} />
+            <span>Assigned Agents:</span>
+          </span>
+          {agents.map(agent => (
+            <div
+              key={agent.id}
+              className="relative group"
+            >
               <div
-                key={agent.id}
-                className="relative group"
+                className={cn(
+                  'w-8 h-8 rounded-xl bg-inset border border-line flex items-center justify-center text-sm shadow-2xs transition-transform hover:scale-105',
+                  agent.isBoardLead && 'ring-2 ring-brand-500 border-brand-500'
+                )}
               >
-                <div
-                  className={cn(
-                    'w-8 h-8 rounded-full bg-surface-900 border border-white/10 flex items-center justify-center text-sm',
-                    agent.isBoardLead && 'ring-2 ring-nexus-500/50'
-                  )}
-                >
-                  {agent.avatar || agent.displayName.charAt(0)}
-                </div>
-                {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded bg-surface-900 border border-white/10 text-xs text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
-                  {agent.displayName}
-                  {agent.isBoardLead && ' (Lead)'}
-                </div>
+                {agent.avatar || agent.displayName.charAt(0)}
               </div>
-            ))}
-            <button
-              onClick={() => { setShowAddAgent(true); loadAllAgents(); }}
-              className="w-8 h-8 rounded-full bg-white/5 border border-white/10 border-dashed flex items-center justify-center text-gray-500 hover:text-white hover:border-white/20 transition-colors text-sm"
-            >
-              +
-            </button>
-          </div>
-        )}
-        {agents.length === 0 && (
-          <div className="mt-4 pt-4 border-t border-white/5">
-            <button
-              onClick={() => { setShowAddAgent(true); loadAllAgents(); }}
-              className="text-xs text-gray-500 hover:text-nexus-400 transition-colors"
-            >
-              + Add agents to this board
-            </button>
-          </div>
-        )}
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1 rounded-xl bg-surface border border-line text-xs font-semibold text-ink shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20">
+                {agent.displayName}
+                {agent.isBoardLead && ' (Lead)'}
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => { setShowAddAgent(true); loadAllAgents(); }}
+            className="px-2.5 py-1.5 rounded-xl border border-dashed border-line hover:border-brand-500 hover:bg-hover text-xs font-semibold text-ink-muted hover:text-ink transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+          >
+            <Plus size={13} className="text-brand-500" />
+            <span>Add Agent</span>
+          </button>
+        </div>
       </div>
 
       {/* Settings sidebar */}
@@ -354,29 +356,30 @@ export function BoardDetail() {
 
       {/* Kanban board */}
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {COLUMNS.map(status => {
             const col = columnConfig[status];
             const statusTasks = tasksByStatus(status);
 
             return (
-              <div key={status} className={cn('rounded-xl border p-3 min-h-[400px]', col.bg, col.border)}>
+              <div key={status} className={cn('rounded-2xl border p-3.5 min-h-[480px] shadow-2xs flex flex-col', col.bg, col.border)}>
                 {/* Column header */}
                 <div className="flex items-center justify-between mb-3 px-1">
                   <div className="flex items-center gap-2">
-                    <div className={cn('w-2.5 h-2.5 rounded-full', col.dot)} />
-                    <span className="text-sm font-semibold text-white">{col.label}</span>
+                    <div className={cn('w-2.5 h-2.5 rounded-full shrink-0', col.dot)} />
+                    <span className="text-xs font-bold text-ink uppercase tracking-wider">{col.label}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">
+                    <span className="text-[11px] font-bold font-mono text-ink-muted bg-surface border border-line px-2 py-0.5 rounded-full shadow-2xs">
                       {statusTasks.length}
                     </span>
                     <button
+                      type="button"
                       onClick={() => setShowAddTask(status)}
-                      className="text-gray-600 hover:text-white transition-colors text-sm leading-none"
+                      className="w-6 h-6 rounded-lg flex items-center justify-center text-ink-muted hover:text-ink hover:bg-hover transition-colors text-xs font-bold cursor-pointer"
                       title="Add task"
                     >
-                      +
+                      <Plus size={13} />
                     </button>
                   </div>
                 </div>
@@ -388,8 +391,8 @@ export function BoardDetail() {
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={cn(
-                        'min-h-[300px] rounded-lg transition-colors p-1',
-                        snapshot.isDraggingOver && 'bg-white/5'
+                        'min-h-[350px] rounded-xl transition-colors p-1 flex-1 space-y-2',
+                        snapshot.isDraggingOver && 'bg-brand-500/5 ring-1 ring-brand-500/20'
                       )}
                     >
                       {statusTasks.map((task, index) => (
@@ -400,47 +403,49 @@ export function BoardDetail() {
                               {...dragProvided.draggableProps}
                               {...dragProvided.dragHandleProps}
                               className={cn(
-                                'rounded-lg border p-3 mb-2 transition-all',
+                                'rounded-xl border p-3 transition-all cursor-grab active:cursor-grabbing',
                                 dragSnapshot.isDragging
-                                  ? 'bg-surface-700 border-nexus-500/40 shadow-lg shadow-nexus-500/10 rotate-2'
-                                  : 'bg-surface-850 border-white/5 hover:border-white/10'
+                                  ? 'bg-surface border-brand-500 shadow-xl ring-2 ring-brand-500/20 rotate-1'
+                                  : 'bg-surface border-line hover:border-line-strong hover:shadow-xs shadow-2xs'
                               )}
                             >
                               {/* Priority + delete */}
                               <div className="flex items-center justify-between mb-2">
                                 <span
                                   className={cn(
-                                    'text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-wider',
+                                    'text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border',
                                     priorityBadge[task.priority] || priorityBadge.MEDIUM
                                   )}
                                 >
                                   {task.priority}
                                 </span>
                                 <button
+                                  type="button"
                                   onClick={e => { e.stopPropagation(); handleDeleteTask(task.id); }}
-                                  className="text-gray-600 hover:text-red-400 transition-colors text-xs"
+                                  className="text-ink-muted hover:text-rose-500 transition-colors p-1 rounded-md hover:bg-hover cursor-pointer"
+                                  title="Delete task"
                                 >
-                                  &#10005;
+                                  <X size={12} />
                                 </button>
                               </div>
 
                               {/* Title */}
-                              <h4 className="text-sm font-medium text-white mb-1">{task.title}</h4>
+                              <h4 className="text-xs font-bold text-ink leading-snug mb-1">{task.title}</h4>
 
                               {/* Description */}
                               {task.description && (
-                                <p className="text-xs text-gray-500 mb-2 line-clamp-2">{task.description}</p>
+                                <p className="text-[11px] text-ink-muted mb-2.5 line-clamp-2 leading-relaxed">{task.description}</p>
                               )}
 
-                              {/* Agent avatar */}
-                              <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                              {/* Agent avatar footer */}
+                              <div className="flex items-center justify-between pt-2 border-t border-line-subtle text-[11px]">
                                 {task.agent ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs">{task.agent.avatar}</span>
-                                    <span className="text-xs text-gray-400">{task.agent.displayName}</span>
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="text-xs shrink-0">{task.agent.avatar || '🤖'}</span>
+                                    <span className="font-semibold text-ink truncate max-w-[120px]">{task.agent.displayName}</span>
                                   </div>
                                 ) : (
-                                  <span className="text-xs text-gray-600">Unassigned</span>
+                                  <span className="text-ink-muted italic">Unassigned</span>
                                 )}
                               </div>
                             </div>
@@ -506,32 +511,41 @@ function AddTaskInline({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div
-        className="bg-surface-850 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl"
+        className="bg-surface border border-line rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4"
         onClick={e => e.stopPropagation()}
       >
-        <h3 className="text-lg font-bold text-white mb-4">
-          Add Task to {colLabel}
-        </h3>
+        <div className="flex items-center justify-between border-b border-line pb-3">
+          <h3 className="text-base font-bold text-ink">
+            Add Task to {colLabel}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-lg text-ink-muted hover:text-ink hover:bg-hover transition-colors cursor-pointer"
+          >
+            <X size={16} />
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Title</label>
+            <label className="text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5 block">Title</label>
             <input
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              className="w-full bg-surface-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-nexus-500/50"
+              className="w-full bg-inset border border-line rounded-xl px-3.5 py-2.5 text-xs font-semibold text-ink placeholder:text-ink-muted focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all"
               placeholder="Task title..."
               autoFocus
             />
           </div>
 
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Priority</label>
+            <label className="text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5 block">Priority</label>
             <CustomSelect
               value={priority}
               onChange={(val) => setPriority(val)}
@@ -544,18 +558,18 @@ function AddTaskInline({
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-2.5 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-ink-muted hover:text-ink hover:bg-hover transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!title.trim()}
-              className="px-4 py-2 bg-nexus-600 hover:bg-nexus-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              className="px-4.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
             >
               Add Task
             </button>
@@ -593,21 +607,31 @@ function AddAgentModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div
-        className="bg-surface-850 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl"
+        className="bg-surface border border-line rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4"
         onClick={e => e.stopPropagation()}
       >
-        <h3 className="text-lg font-bold text-white mb-4">Add Agent to Board</h3>
+        <div className="flex items-center justify-between border-b border-line pb-3">
+          <h3 className="text-base font-bold text-ink">Add Agent to Board</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-lg text-ink-muted hover:text-ink hover:bg-hover transition-colors cursor-pointer"
+          >
+            <X size={16} />
+          </button>
+        </div>
 
         {availableAgents.length === 0 ? (
           <div className="text-center py-6">
-            <p className="text-sm text-gray-500 mb-4">All agents are already assigned to this board.</p>
+            <p className="text-xs font-medium text-ink-muted mb-4">All available agents are already assigned to this board.</p>
             <button
+              type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-surface border border-line text-ink hover:bg-hover transition-colors cursor-pointer"
             >
               Close
             </button>
@@ -615,52 +639,52 @@ function AddAgentModal({
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Agent</label>
+              <label className="text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5 block">Select Agent</label>
               <CustomSelect
                 value={selectedAgent}
                 onChange={(val) => setSelectedAgent(val)}
                 placeholder="Select an agent..."
                 options={availableAgents.map((a) => ({
                   value: a.id,
-                  label: `${a.avatar} ${a.displayName}`,
+                  label: `${a.avatar || '🤖'} ${a.displayName}`,
                 }))}
               />
             </div>
 
-            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-surface-900 border border-white/10">
+            <div className="flex items-center justify-between px-3.5 py-3 rounded-2xl bg-inset border border-line">
               <div>
-                <span className="text-sm text-white">Board Lead</span>
-                <p className="text-xs text-gray-500 mt-0.5">This agent can delegate tasks to other board members</p>
+                <span className="text-xs font-bold text-ink">Board Lead Role</span>
+                <p className="text-[11px] text-ink-muted mt-0.5">This agent can direct & delegate tasks to other board members</p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsLead(!isLead)}
                 className={cn(
-                  'relative w-10 h-5 rounded-full transition-colors',
-                  isLead ? 'bg-nexus-600' : 'bg-white/10'
+                  'relative w-11 h-6 rounded-full transition-colors cursor-pointer',
+                  isLead ? 'bg-brand-600' : 'bg-line-strong'
                 )}
               >
                 <span
                   className={cn(
-                    'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform',
-                    isLead ? 'translate-x-5' : 'translate-x-0.5'
+                    'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform shadow-xs',
+                    isLead ? 'translate-x-6' : 'translate-x-1'
                   )}
                 />
               </button>
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-ink-muted hover:text-ink hover:bg-hover transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!selectedAgent}
-                className="px-4 py-2 bg-nexus-600 hover:bg-nexus-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className="px-4.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
               >
                 Add Agent
               </button>
@@ -707,73 +731,74 @@ function BoardSettings({
   }
 
   return (
-    <div className="rounded-xl border border-white/5 bg-surface-850 p-5 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white">Board Settings</h3>
+    <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 mb-6 shadow-xs space-y-4">
+      <div className="flex items-center justify-between border-b border-line pb-3">
+        <h3 className="text-sm font-bold text-ink">Board Settings</h3>
         <button
+          type="button"
           onClick={onClose}
-          className="text-gray-500 hover:text-white transition-colors text-sm"
+          className="p-1 rounded-lg text-ink-muted hover:text-ink hover:bg-hover transition-colors cursor-pointer"
         >
-          &#10005;
+          <X size={15} />
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Objective */}
-        <div className="col-span-2">
-          <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Objective</label>
+        <div className="sm:col-span-2">
+          <label className="text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5 block">Objective</label>
           <input
             type="text"
             value={objective}
             onChange={e => setObjective(e.target.value)}
-            className="w-full bg-surface-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-nexus-500/50"
+            className="w-full bg-inset border border-line rounded-xl px-3.5 py-2.5 text-xs font-semibold text-ink placeholder:text-ink-muted focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all"
             placeholder="Board objective..."
           />
         </div>
 
         {/* Target Date */}
         <div>
-          <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Target Date</label>
+          <label className="text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5 block">Target Date</label>
           <input
             type="date"
             value={targetDate}
             onChange={e => setTargetDate(e.target.value)}
-            className="w-full bg-surface-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-nexus-500/50"
+            className="w-full bg-inset border border-line rounded-xl px-3.5 py-2.5 text-xs font-semibold text-ink focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all"
           />
         </div>
 
         {/* Max Agents */}
         <div>
-          <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Max Agents</label>
+          <label className="text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5 block">Max Agents</label>
           <input
             type="number"
             value={maxAgents}
             onChange={e => setMaxAgents(parseInt(e.target.value) || 1)}
             min={1}
             max={50}
-            className="w-full bg-surface-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-nexus-500/50"
+            className="w-full bg-inset border border-line rounded-xl px-3.5 py-2.5 text-xs font-semibold text-ink focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 shadow-2xs transition-all"
           />
         </div>
       </div>
 
       {/* Require approval toggle */}
-      <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-surface-900 border border-white/10 mb-4">
+      <div className="flex items-center justify-between px-3.5 py-3 rounded-2xl bg-inset border border-line">
         <div>
-          <span className="text-sm text-white">Require approval for done</span>
-          <p className="text-xs text-gray-500 mt-0.5">Tasks need manual approval before moving to Done</p>
+          <span className="text-xs font-bold text-ink">Require approval for Done status</span>
+          <p className="text-[11px] text-ink-muted mt-0.5">Tasks need human review & approval before transitioning to Done</p>
         </div>
         <button
           type="button"
           onClick={() => setRequireApproval(!requireApproval)}
           className={cn(
-            'relative w-10 h-5 rounded-full transition-colors',
-            requireApproval ? 'bg-nexus-600' : 'bg-white/10'
+            'relative w-11 h-6 rounded-full transition-colors cursor-pointer',
+            requireApproval ? 'bg-brand-600' : 'bg-line-strong'
           )}
         >
           <span
             className={cn(
-              'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform',
-              requireApproval ? 'translate-x-5' : 'translate-x-0.5'
+              'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform shadow-xs',
+              requireApproval ? 'translate-x-6' : 'translate-x-1'
             )}
           />
         </button>
@@ -781,26 +806,27 @@ function BoardSettings({
 
       {/* Assigned agents */}
       {agents.length > 0 && (
-        <div className="mb-4">
-          <label className="text-xs text-gray-400 uppercase tracking-wider mb-2 block">Assigned Agents</label>
+        <div className="space-y-2">
+          <label className="text-2xs font-bold uppercase tracking-wider text-ink-muted block">Assigned Agents ({agents.length})</label>
           <div className="space-y-2">
             {agents.map(agent => (
               <div
                 key={agent.id}
-                className="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-900 border border-white/10"
+                className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-inset border border-line"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-sm">{agent.avatar || agent.displayName.charAt(0)}</span>
-                  <span className="text-sm text-white">{agent.displayName}</span>
+                  <span className="text-sm">{agent.avatar || '🤖'}</span>
+                  <span className="text-xs font-bold text-ink">{agent.displayName}</span>
                   {agent.isBoardLead && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-nexus-600/20 text-nexus-400 font-medium uppercase tracking-wider">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold uppercase tracking-wider border border-brand-500/20">
                       Lead
                     </span>
                   )}
                 </div>
                 <button
+                  type="button"
                   onClick={() => onRemoveAgent(agent.id)}
-                  className="text-gray-600 hover:text-red-400 transition-colors text-xs"
+                  className="text-xs font-semibold text-ink-muted hover:text-rose-500 transition-colors cursor-pointer p-1 rounded-md hover:bg-hover"
                 >
                   Remove
                 </button>
@@ -811,11 +837,12 @@ function BoardSettings({
       )}
 
       {/* Save button */}
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-2">
         <button
+          type="button"
           onClick={handleSave}
           disabled={saving}
-          className="px-5 py-2 rounded-lg text-sm font-medium bg-nexus-600 text-white hover:bg-nexus-500 transition-colors disabled:opacity-50"
+          className="px-5 py-2.5 rounded-xl text-xs font-bold bg-brand-600 text-white hover:bg-brand-500 transition-all shadow-xs cursor-pointer disabled:opacity-50"
         >
           {saving ? 'Saving...' : 'Save Settings'}
         </button>
