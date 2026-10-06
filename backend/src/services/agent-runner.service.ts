@@ -11,6 +11,7 @@ import { safeFetch } from '../lib/url-validator.js';
 import { fireWebhooks } from './process-extras.service.js';
 import { notify } from './insights.service.js';
 import { pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
+import { run as runOpenCode } from './opencode.service.js';
 
 import { config } from '../config.js';
 /**
@@ -26,9 +27,38 @@ async function executeAgentWork(params: {
   workspace: string;
   timeoutMs: number;
   onSpawn?: (abort: () => void) => void;
+  preferredModel?: string;
 }): Promise<{ text: string; model: string; costUsd: number; inputTokens: number; outputTokens: number } | null> {
-  // 1. Try Claude CLI if enabled
-  if (isClaudeCliEnabled()) {
+  // Ensure workspace directory exists
+  try {
+    await fs.mkdir(params.workspace, { recursive: true });
+  } catch { /* ignore */ }
+
+  // 1. If an OpenCode CLI model is selected (e.g. "anthropic/claude-3-7-sonnet", "openai/gpt-4o", etc.)
+  if (params.preferredModel && params.preferredModel.includes('/') && !params.preferredModel.startsWith('local/')) {
+    try {
+      const promptText = `${params.systemPrompt}\n\nTask Goal: ${params.goal}\nRole: ${params.agent.processRole || params.agent.description}\n\n${params.userPrompt}\n\nPlease generate complete production-ready code files for this task. Format code blocks with filepath as: \`\`\`typescript:src/filename.ts\n...code...\n\`\`\``;
+      const opencodeRes = await runOpenCode(promptText, params.preferredModel, params.workspace);
+      if (opencodeRes && opencodeRes.result) {
+        await writeCodeBlocksToWorkspace(params.workspace, opencodeRes.result, params.agent);
+        const inputTokens = Math.max(380, Math.ceil(promptText.length / 4));
+        const outputTokens = Math.max(650, Math.ceil(opencodeRes.result.length / 4));
+        const costUsd = Number(((inputTokens * 0.00000015) + (outputTokens * 0.00000060) + 0.0012).toFixed(5));
+        return {
+          text: opencodeRes.result,
+          model: params.preferredModel,
+          costUsd,
+          inputTokens,
+          outputTokens,
+        };
+      }
+    } catch (err) {
+      logger.warn({ err, model: params.preferredModel }, 'OpenCode model execution failed, falling back to other engines');
+    }
+  }
+
+  // 2. Try Claude CLI if enabled or if preferredModel specifies Claude CLI
+  if (isClaudeCliEnabled() || (params.preferredModel && params.preferredModel.toLowerCase().includes('claude-cli'))) {
     try {
       const cliRes = await runClaudeCli(params.userPrompt, {
         systemPrompt: params.systemPrompt,
@@ -44,12 +74,7 @@ async function executeAgentWork(params: {
     }
   }
 
-  // Ensure workspace directory exists
-  try {
-    await fs.mkdir(params.workspace, { recursive: true });
-  } catch { /* ignore */ }
-
-  // 2. Check for configured LLM Providers (Gemini, Local Ollama, OpenAI)
+  // 3. Check for configured LLM Providers (Gemini, Local Ollama, OpenAI)
   const providers = await prisma.llmProvider.findMany({
     where: { organizationId: params.organizationId, isActive: true },
   });
@@ -67,7 +92,9 @@ async function executeAgentWork(params: {
   if (!geminiKey && process.env.GOOGLE_API_KEY) geminiKey = process.env.GOOGLE_API_KEY;
 
   if (geminiKey) {
-    const candidateModels = config.geminiModels;
+    const candidateModels = params.preferredModel && (params.preferredModel.toLowerCase().includes('gemini') || params.preferredModel.toLowerCase().startsWith('google/'))
+      ? [params.preferredModel.replace(/^google\//i, ''), ...config.geminiModels]
+      : config.geminiModels;
     for (const model of candidateModels) {
       try {
         const promptText = `${params.systemPrompt}\n\nTask Goal: ${params.goal}\nRole: ${params.agent.processRole || params.agent.description}\n\n${params.userPrompt}\n\nPlease generate complete production-ready code files for this task. Format code blocks with filepath as: \`\`\`typescript:src/filename.ts\n...code...\n\`\`\``;
@@ -108,8 +135,11 @@ async function executeAgentWork(params: {
     }
   }
 
-  // 3. Fast probe for Local PC Model (Ollama)
+  // 4. Fast probe for Local PC Model (Ollama)
   const localCandidates = config.localLlmEndpoints;
+  const targetLocalModel = params.preferredModel && (params.preferredModel.startsWith('local/') || !params.preferredModel.includes('/'))
+    ? params.preferredModel.replace(/^(local|ollama)\//i, '')
+    : config.localLlmModel;
 
   for (const ep of localCandidates) {
     try {
@@ -118,7 +148,7 @@ async function executeAgentWork(params: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: config.localLlmModel,
+          model: targetLocalModel,
           prompt: promptCombined,
           stream: false,
         }),
@@ -135,7 +165,7 @@ async function executeAgentWork(params: {
           const costUsd = Number(((inputTokens * 0.00000012) + (outputTokens * 0.00000045) + 0.0009).toFixed(5));
           return {
             text: generatedText,
-            model: `${config.localLlmModel} (Local PC)`,
+            model: `${targetLocalModel} (Local PC)`,
             costUsd,
             inputTokens,
             outputTokens,
@@ -1343,6 +1373,7 @@ async function runStep(
   handoffs: Array<{ agent: string; summary: string }>,
   emit: Emit,
   runId?: string,
+  preferredModel?: string,
 ): Promise<RunStepResult> {
   const workspace = workspaceFor(processId);
   await fs.mkdir(workspace, { recursive: true });
@@ -1458,6 +1489,7 @@ async function runStep(
       userPrompt: taskPrompt(goal, agent.processRole ?? agent.description, handoffs, filesBefore),
       workspace,
       timeoutMs: Number(process.env.AGENT_RUN_TIMEOUT_MS ?? 900_000),
+      preferredModel,
       onSpawn: (abort) => {
         untrack = trackChild(processId, abort);
       },
@@ -2393,6 +2425,9 @@ export async function runProcessChain(
 
     // Agents in a stage run in parallel, but in bounded batches — a wide stage
     // would otherwise spawn one CLI process per agent simultaneously.
+    const preferredModel = ((proc.plan as any)?.preferredModel as string | undefined) ||
+      (proc.plannedBy?.startsWith('llm:') ? proc.plannedBy.slice(4) : proc.plannedBy) ||
+      undefined;
     const results: RunStepResult[] = [];
     const FAN_OUT = Number(process.env.MAX_STAGE_PARALLELISM ?? 3);
     for (let i = 0; i < inStage.length; i += FAN_OUT) {
@@ -2400,7 +2435,7 @@ export async function runProcessChain(
       results.push(
         ...(await Promise.all(
           batch.map((a) =>
-            runStep(a, organizationId, processId, proc.prompt, [...handoffs], emit, runRow.id),
+            runStep(a, organizationId, processId, proc.prompt, [...handoffs], emit, runRow.id, preferredModel),
           ),
         )),
       );

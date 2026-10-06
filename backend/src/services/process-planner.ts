@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { runClaudeCli, isClaudeCliEnabled } from '../lib/claude-cli.js';
+import { run as runOpenCode } from './opencode.service.js';
 
 /**
  * Turns a plain-language goal into a staged agent roster.
@@ -494,10 +495,27 @@ Use exactly ${requested} agents.`
   return plan;
 }
 
-async function planWithLlm(prompt: string, requested?: number): Promise<ProcessPlan | null> {
+async function planWithLlm(prompt: string, requested?: number, preferredModel?: string): Promise<ProcessPlan | null> {
   const ask = requested
     ? `${prompt}\n\nUse exactly ${requested} agents.`
     : prompt;
+
+  // 1. Try explicit OpenCode provider model if selected
+  if (preferredModel && preferredModel.includes('/') && !preferredModel.startsWith('local/')) {
+    try {
+      const combined = `${PLANNER_SYSTEM}\n\nUser Production Request:\n${ask}\n\nRespond ONLY with the raw JSON plan object:`;
+      const op = await runOpenCode(combined, preferredModel);
+      if (op.result && op.result.trim().length > 20) {
+        const plan = parsePlanJson(op.result, prompt, `opencode:${preferredModel}`);
+        if (plan && plan.agents.length > 0) {
+          logger.info({ model: preferredModel, agents: plan.agents.length }, 'Planned production chain via OpenCode model');
+          return plan;
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, preferredModel }, 'OpenCode planner call failed, trying next candidate');
+    }
+  }
 
   const geminiKey =
     process.env.PLATFORM_GOOGLE_API_KEY ||
@@ -505,9 +523,13 @@ async function planWithLlm(prompt: string, requested?: number): Promise<ProcessP
     process.env.GOOGLE_API_KEY;
   const anthropicKey = process.env.PLATFORM_ANTHROPIC_API_KEY;
 
-  // 1. Try Google Gemini models
+  // 2. Try Google Gemini models
   if (geminiKey) {
-    for (const model of config.geminiModels) {
+    const candidateModels = preferredModel && preferredModel.includes('gemini')
+      ? [preferredModel.replace(/^google\//, ''), ...config.geminiModels]
+      : config.geminiModels;
+
+    for (const model of candidateModels) {
       try {
         const combined = `${PLANNER_SYSTEM}\n\nUser Production Request:\n${ask}\n\nRespond ONLY with the JSON plan.`;
         const res = await fetch(
@@ -540,8 +562,12 @@ async function planWithLlm(prompt: string, requested?: number): Promise<ProcessP
     }
   }
 
-  // 2. Try Anthropic API if key is available
+  // 3. Try Anthropic API if key is available
   if (anthropicKey) {
+    const claudeModel = preferredModel && preferredModel.includes('claude')
+      ? preferredModel.replace(/^anthropic\//, '')
+      : PLANNER_MODEL;
+
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -551,7 +577,7 @@ async function planWithLlm(prompt: string, requested?: number): Promise<ProcessP
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: PLANNER_MODEL,
+          model: claudeModel,
           max_tokens: 4096,
           system: PLANNER_SYSTEM,
           messages: [{ role: 'user', content: ask }],
@@ -563,7 +589,7 @@ async function planWithLlm(prompt: string, requested?: number): Promise<ProcessP
         const body = (await res.json()) as AnthropicResponse;
         const text = body.content?.find((c) => c.type === 'text')?.text?.trim();
         if (text) {
-          const plan = parsePlanJson(text, prompt, `anthropic:${body.model ?? PLANNER_MODEL}`);
+          const plan = parsePlanJson(text, prompt, `anthropic:${body.model ?? claudeModel}`);
           if (plan) return plan;
         }
       }
@@ -572,14 +598,18 @@ async function planWithLlm(prompt: string, requested?: number): Promise<ProcessP
     }
   }
 
-  // 3. Try Local PC Ollama
+  // 4. Try Local PC Ollama
+  const localTarget = preferredModel?.startsWith('local/')
+    ? preferredModel.replace('local/', '')
+    : config.localLlmModel;
+
   for (const ep of config.localLlmEndpoints) {
     try {
       const res = await fetch(`${ep}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: config.localLlmModel,
+          model: localTarget,
           prompt: `${PLANNER_SYSTEM}\n\nTask:\n${ask}\n\nRespond ONLY with JSON plan:`,
           stream: false,
         }),
@@ -589,7 +619,7 @@ async function planWithLlm(prompt: string, requested?: number): Promise<ProcessP
       if (res.ok) {
         const data = (await res.json()) as any;
         if (data?.response) {
-          const plan = parsePlanJson(data.response, prompt, `ollama:${config.localLlmModel}`);
+          const plan = parsePlanJson(data.response, prompt, `ollama:${localTarget}`);
           if (plan && plan.agents.length > 0) return plan;
         }
       }
@@ -606,8 +636,8 @@ async function planWithLlm(prompt: string, requested?: number): Promise<ProcessP
  * built-in heuristic. Each step degrades silently to the next, so planning
  * never fails outright.
  */
-export async function planProcess(prompt: string, requested?: number): Promise<ProcessPlan> {
-  const viaApi = await planWithLlm(prompt, requested);
+export async function planProcess(prompt: string, requested?: number, preferredModel?: string): Promise<ProcessPlan> {
+  const viaApi = await planWithLlm(prompt, requested, preferredModel);
   if (viaApi) return viaApi;
 
   const viaCli = await planWithCli(prompt, requested);

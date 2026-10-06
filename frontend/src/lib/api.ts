@@ -190,10 +190,10 @@ export const api = {
     stats: () => request<ProcessStats>('/processes/stats'),
     get: (id: string) => request<Process>(`/processes/${id}`),
     /** Dry run — returns the roster without creating anything. */
-    plan: (prompt: string, agentCount?: number) =>
+    plan: (prompt: string, agentCount?: number, model?: string) =>
       request<ProcessPlan>('/processes/plan', {
         method: 'POST',
-        body: JSON.stringify({ prompt, ...(agentCount ? { agentCount } : {}) }),
+        body: JSON.stringify({ prompt, ...(agentCount ? { agentCount } : {}), ...(model ? { model } : {}) }),
       }),
     create: (data: {
       prompt: string;
@@ -203,6 +203,7 @@ export const api = {
       gatewayId?: string;
       githubToken?: string;
       vercelToken?: string;
+      model?: string;
     }) => {
       const ghToken = data.githubToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('nexus:github_token') : null) || undefined;
       const vToken = data.vercelToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('nexus:vercel_token') : null) || undefined;

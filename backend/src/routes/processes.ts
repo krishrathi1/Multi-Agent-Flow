@@ -13,6 +13,7 @@ const router = Router();
 const planSchema = z.object({
   prompt: z.string().min(8, 'Describe the goal in at least a few words').max(4000),
   agentCount: z.number().int().min(2).max(8).optional(),
+  model: z.string().optional(),
 });
 
 const createSchema = planSchema.extend({
@@ -48,7 +49,7 @@ router.get('/stats', async (req, res) => {
 
 /** Dry run: returns the roster the planner would create, without saving. */
 router.post('/plan', validate(planSchema), async (req, res) => {
-  const plan = await processService.previewPlan(req.body.prompt, req.body.agentCount);
+  const plan = await processService.previewPlan(req.body.prompt, req.body.agentCount, req.body.model);
   res.json(plan);
 });
 

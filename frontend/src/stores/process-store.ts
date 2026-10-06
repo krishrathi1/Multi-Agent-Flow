@@ -21,7 +21,7 @@ interface ProcessState {
   fetchProcesses: () => Promise<void>;
   fetchStats: () => Promise<void>;
 
-  planProcess: (prompt: string, agentCount?: number) => Promise<ProcessPlan>;
+  planProcess: (prompt: string, agentCount?: number, model?: string) => Promise<ProcessPlan>;
   createProcess: (data: {
     prompt: string;
     name?: string;
@@ -29,6 +29,7 @@ interface ProcessState {
     plan?: ProcessPlan;
     githubToken?: string;
     vercelToken?: string;
+    model?: string;
   }) => Promise<Process>;
   removeProcess: (id: string, deleteAgents?: boolean) => Promise<void>;
   /** Run controls — also refresh agent state, which start/pause mutates. */
@@ -92,7 +93,7 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
     }
   },
 
-  planProcess: (prompt, agentCount) => api.processes.plan(prompt, agentCount),
+  planProcess: (prompt, agentCount, model) => api.processes.plan(prompt, agentCount, model),
 
   createProcess: async (data) => {
     const created = await api.processes.create(data);

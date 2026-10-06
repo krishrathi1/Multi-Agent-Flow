@@ -114,8 +114,8 @@ export async function getProcessById(id: string, organizationId: string) {
 }
 
 /** Preview only — plans without writing anything. */
-export async function previewPlan(prompt: string, agentCount?: number): Promise<ProcessPlan> {
-  return planProcess(prompt, agentCount);
+export async function previewPlan(prompt: string, agentCount?: number, model?: string): Promise<ProcessPlan> {
+  return planProcess(prompt, agentCount, model);
 }
 
 export interface CreateProcessInput {
@@ -127,6 +127,8 @@ export interface CreateProcessInput {
   plan?: ProcessPlan;
   /** Attach the spawned agents to an existing gateway. */
   gatewayId?: string;
+  /** Targeted inference engine model (Gemini, OpenCode, Claude, OpenAI, Local). */
+  model?: string;
 }
 
 /** True when Prisma rejected a write for violating a unique index. */
@@ -148,7 +150,7 @@ export async function createProcess(
 ) {
   // Plan once — re-planning on retry would spend a second LLM call and could
   // return an entirely different roster.
-  const plan = input.plan ?? (await planProcess(input.prompt, input.agentCount));
+  const plan = input.plan ?? (await planProcess(input.prompt, input.agentCount, input.model));
 
   const ATTEMPTS = 4;
   for (let attempt = 1; ; attempt++) {
@@ -195,8 +197,8 @@ async function createProcessOnce(
         prompt: input.prompt,
         summary: plan.summary,
         status: ProcessStatus.ACTIVE,
-        plan: plan as unknown as Prisma.InputJsonValue,
-        plannedBy: plan.plannedBy,
+        plan: (input.model ? { ...(plan as any), preferredModel: input.model } : plan) as unknown as Prisma.InputJsonValue,
+        plannedBy: input.model ? (input.model.startsWith('llm:') ? input.model : `llm:${input.model}`) : plan.plannedBy,
         agentCount: plan.agents.length,
         color,
         startedAt: new Date(),

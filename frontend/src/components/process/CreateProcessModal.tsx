@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { config } from '../../config';
 import {
   Sparkles,
@@ -168,14 +168,71 @@ export function CreateProcessModal({
   // Dynamic API Endpoints list (Add More API feature)
   const [apiEndpoints, setApiEndpoints] = useState<Array<{ id: string; name: string; url: string; apiKey: string }>>([]);
 
-  // Local PC Models ONLY
-  const [localModels] = useState(config.localLlmModels);
-  const [selectedModel, setSelectedModel] = useState(config.localLlmModel);
+  // Available models from Settings and Local hardware
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; provider: string; source?: string }>>([]);
+  const [selectedModel, setSelectedModel] = useState<string>(() => localStorage.getItem('nexus:process_model') || 'auto');
   const [agentCount, setAgentCount] = useState<string>('auto');
   const [plan, setPlan] = useState<ProcessPlan | null>(null);
   const [planning, setPlanning] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    api.llmProviders.availableModels()
+      .then((res) => {
+        if (res?.models?.length) setAvailableModels(res.models);
+      })
+      .catch(() => {});
+  }, []);
+
+  const modelOptions = useMemo(() => {
+    const options: Array<{ value: string; label: string; badge?: string }> = [
+      { value: 'auto', label: '✨ Auto (Default Configured Engine)', badge: 'Recommended' },
+    ];
+
+    const providerLabels: Record<string, string> = {
+      google: 'Google Gemini',
+      opencode: 'OpenCode',
+      anthropic: 'Anthropic Claude',
+      openai: 'OpenAI',
+      local: 'Local PC',
+      nvidia: 'NVIDIA',
+    };
+
+    for (const m of availableModels) {
+      const pKey = m.provider?.toLowerCase() || '';
+      const provName = providerLabels[pKey] || (m.source === 'opencode' ? 'OpenCode' : (m.provider?.toUpperCase() || 'Model'));
+      const badge = m.source === 'opencode' ? 'OpenCode' : (providerLabels[pKey]?.split(' ')[0] || m.provider);
+      options.push({
+        value: m.id,
+        label: `${provName} • ${m.name}`,
+        badge,
+      });
+    }
+
+    // Also include local models from config if not present
+    for (const lm of config.localLlmModels) {
+      if (!options.some((o) => o.value === lm.id || o.value === `local/${lm.id}`)) {
+        options.push({
+          value: lm.id,
+          label: `Local PC • ${lm.name}`,
+          badge: 'Local',
+        });
+      }
+    }
+
+    return options;
+  }, [availableModels]);
+
+  const engineBadge = useMemo(() => {
+    if (!selectedModel || selectedModel === 'auto') return 'Auto Routing • Settings Default';
+    if (selectedModel.includes('gemini') || selectedModel.startsWith('google')) return 'Google Gemini Engine';
+    if (selectedModel.includes('opencode') || availableModels.find((m) => m.id === selectedModel)?.source === 'opencode') return 'OpenCode CLI Engine';
+    if (selectedModel.includes('claude') || selectedModel.startsWith('anthropic')) return 'Anthropic Claude Engine';
+    if (selectedModel.includes('openai') || selectedModel.startsWith('openai')) return 'OpenAI Engine';
+    if (selectedModel.includes('local') || selectedModel.includes('qwen') || selectedModel.includes('llama')) return 'Local PC Hardware';
+    return 'Custom Model Engine';
+  }, [selectedModel, availableModels]);
 
   // Edit with AI in Step 4 Review
   const [showAiEdit, setShowAiEdit] = useState(false);
@@ -443,6 +500,7 @@ export function CreateProcessModal({
       const result = await planProcess(
         effective,
         agentCount === 'auto' ? undefined : Number(agentCount),
+        selectedModel === 'auto' ? undefined : selectedModel,
       );
       setPlan(result);
       setStep('review');
@@ -488,6 +546,7 @@ export function CreateProcessModal({
         plan,
         githubToken: ghToken,
         vercelToken: vToken,
+        model: selectedModel === 'auto' ? undefined : selectedModel,
       });
       onCreated?.(created);
       reset();
@@ -729,24 +788,26 @@ export function CreateProcessModal({
                   Inference Model Engine
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  Local Host Default • Cloud LLM Fallback
+                  {engineBadge}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-2xs font-medium text-ink-muted mb-1">Select Model (Local Host Only)</label>
+                  <label className="block text-2xs font-medium text-ink-muted mb-1">
+                    Select Inference Model (Gemini, OpenCode, Cloud, Local)
+                  </label>
                   <CustomSelect
                     value={selectedModel}
-                    onChange={(val) => setSelectedModel(val)}
+                    onChange={(val) => {
+                      setSelectedModel(val);
+                      localStorage.setItem('nexus:process_model', val);
+                    }}
                     upward
-                    options={localModels.map((m) => ({
-                      value: m.id,
-                      label: m.name,
-                    }))}
+                    options={modelOptions}
                   />
                   <p className="mt-1 text-[10px] text-ink-muted">
-                    * Automatically falls back to Cloud LLM if local token capacity is exceeded.
+                    * Available from Settings (Google Gemini, OpenCode CLI, Anthropic, OpenAI, or Local PC hardware).
                   </p>
                 </div>
 
