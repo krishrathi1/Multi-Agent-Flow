@@ -32,6 +32,7 @@ import {
   RefreshCw,
   Zap,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -155,22 +156,25 @@ export function Alerts() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [evts, rls, incidents] = await Promise.all([
+      const [evts, rls] = await Promise.all([
         api.alerts.events().catch(() => []),
         api.alerts.rules().catch(() => []),
-        api.incidents.list().catch(() => []),
       ]);
       setEvents(evts);
       setRules(rls);
-      if (incidents && incidents.length > 0 && !activeInvestigation) {
-        setActiveInvestigation(incidents[0]);
-      }
     } catch (err) {
       console.error('Failed to fetch alert data:', err);
     } finally {
       setLoading(false);
     }
-  }, [activeInvestigation]);
+  }, []);
+
+  const handleClearInvestigation = async () => {
+    setActiveInvestigation(null);
+    try {
+      await api.incidents.clear();
+    } catch { /* ignore */ }
+  };
 
   useEffect(() => {
     fetchData();
@@ -560,6 +564,15 @@ export function Alerts() {
                     style={{ width: `${Math.round((activeInvestigation.confidence || 0.94) * 100)}%` }}
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={handleClearInvestigation}
+                  title="Clear & Dismiss Analysis"
+                  className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-surface border border-line text-ink-muted hover:text-ink hover:border-line-strong transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                >
+                  <X size={13} />
+                  <span>Dismiss</span>
+                </button>
               </div>
             </div>
 
@@ -744,6 +757,23 @@ export function Alerts() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Nominal / Idle State when no incident is under investigation */}
+        {!activeInvestigation && !investigating && (
+          <div className="rounded-2xl border border-line bg-surface/50 p-4.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-500 shrink-0">
+                <CheckCircle2 size={16} />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-ink">System Status: All Telemetry Nominal</h4>
+                <p className="text-[11px] text-ink-muted mt-0.5">
+                  No active incidents detected. To run root cause analysis, enter an incident alert symptom or choose a simulation scenario above.
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>

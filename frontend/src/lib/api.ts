@@ -572,6 +572,7 @@ export const api = {
       request<any>('/incidents/investigate', { method: 'POST', body: JSON.stringify(data) }),
     simulate: (scenario: string) =>
       request<any>('/incidents/simulate', { method: 'POST', body: JSON.stringify({ scenario }) }),
+    clear: () => request<{ success: boolean }>('/incidents', { method: 'DELETE' }),
   },
   agentTokens: {
     generate: (agentId: string) =>

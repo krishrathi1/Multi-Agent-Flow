@@ -15,6 +15,12 @@ router.get('/', async (req: AuthRequest, res: any) => {
   res.json(items);
 });
 
+// DELETE /api/incidents — clear recent investigations
+router.delete('/', async (req: AuthRequest, res: any) => {
+  incidentService.clearInvestigations();
+  res.json({ success: true });
+});
+
 // POST? /api/incidents/investigate — run incident investigation agent
 router.post('/investigate', async (req: AuthRequest, res: any) => {
   try {

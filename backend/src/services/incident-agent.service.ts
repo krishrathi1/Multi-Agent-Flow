@@ -113,7 +113,8 @@ export async function investigateIncident(
   const investigationId = `inc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
   
   // 1. Gather live organization environment state
-  const [agents, recentActivities, recentSessions, alertRules] = await Promise.all([
+  const [processCount, agents, recentActivities, recentSessions, alertRules] = await Promise.all([
+    prisma.process.count({ where: { organizationId } }),
     prisma.agent.findMany({
       where: { organizationId },
       select: { id: true, name: true, displayName: true, status: true, heartbeatInterval: true, updatedAt: true },
@@ -140,6 +141,52 @@ export async function investigateIncident(
   const agentNames = agents.length > 0 ? agents.map((a) => a.displayName) : ['Orchestrator Agent', 'Worker Agent'];
   const offlineAgents = agents.filter((a) => a.status === 'OFFLINE');
   const userSymptom = (input.symptom || input.alertTitle || '').trim();
+
+  // If no projects/agents exist and user did not trigger a specific simulation or symptom, return clean nominal idle state
+  if (processCount === 0 && agents.length === 0 && !input.scenario && !userSymptom) {
+    const result: IncidentInvestigationResult = {
+      id: investigationId,
+      title: 'No Active Incident Detected (Idle Environment)',
+      severity: 'INFO',
+      status: 'RESOLVED',
+      confidence: 1.0,
+      rootCause: 'No productions, processes, or agents have been created in this workspace yet. Fleet telemetry is completely nominal.',
+      impactSummary: 'Zero service impact. All systems idle and ready for deployment.',
+      affectedServices: ['system-idle'],
+      evidence: {
+        metrics: {
+          latencyP95Ms: 0,
+          latencyBaselineMs: 0,
+          errorRatePercent: 0,
+          errorRateBaselinePercent: 0,
+          cpuUtilizationPercent: 0,
+          memoryUtilizationPercent: 0,
+          anomalies: [],
+        },
+        logs: { source: 'System', sampleErrors: [], topExceptions: [], logVolumeSpikePercent: 0 },
+        kubernetes: { cluster: 'Local Dev', namespace: 'default', failingPods: [], recentEvents: [] },
+        deployments: {
+          latestRelease: 'v1.0.0',
+          deployedAtAgo: 'recently',
+          commitHash: liveCommit.hash,
+          author: liveCommit.author,
+          commitMessage: liveCommit.message,
+          changedFiles: liveCommit.changedFiles,
+          ciPipelineStatus: 'Passed',
+        },
+      },
+      recommendedAction: {
+        type: 'PATCH_CONFIG',
+        title: 'System Nominal — No Action Required',
+        description: 'All system parameters and fleet nodes are healthy and idle.',
+        commandOrPayload: { action: 'none' },
+        riskLevel: 'LOW',
+      },
+      postMortemReport: '# System Nominal\n\nNo active incidents detected.',
+      createdAt: new Date().toISOString(),
+    };
+    return result;
+  }
 
   // 2. Query configured LLM Provider if available for dynamic Root Cause Analysis
   let llmAnalysis: {
@@ -437,4 +484,8 @@ JSON schema:
 
 export function getRecentInvestigations(): IncidentInvestigationResult[] {
   return recentInvestigations;
+}
+
+export function clearInvestigations(): void {
+  recentInvestigations.length = 0;
 }
