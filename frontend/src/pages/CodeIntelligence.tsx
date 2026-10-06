@@ -221,6 +221,7 @@ export function CodeIntelligence() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(true);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [alignRight, setAlignRight] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -233,6 +234,29 @@ export function CodeIntelligence() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Auto-detect alignment to prevent dropdown from clipping off-screen
+  useEffect(() => {
+    function updateAlignment() {
+      if (dropdownRef.current) {
+        const rect = dropdownRef.current.getBoundingClientRect();
+        const spaceOnRight = window.innerWidth - rect.left;
+        const spaceOnLeft = rect.right;
+        // If there is limited space on right (< 420px) but ample space on left, align to right edge
+        if (spaceOnRight < 420 && spaceOnLeft > 420) {
+          setAlignRight(true);
+        } else {
+          setAlignRight(false);
+        }
+      }
+    }
+
+    if (dropdownOpen) {
+      updateAlignment();
+      window.addEventListener('resize', updateAlignment);
+      return () => window.removeEventListener('resize', updateAlignment);
+    }
+  }, [dropdownOpen]);
 
   // Fetch workspaces on mount
   const fetchWorkspaces = useCallback(async () => {
@@ -330,7 +354,12 @@ export function CodeIntelligence() {
             </button>
 
             {dropdownOpen && (
-              <div className="absolute right-0 mt-2 w-80 md:w-96 rounded-2xl bg-surface border border-line shadow-xl z-50 p-2 space-y-1 backdrop-blur-md animate-in fade-in duration-150">
+              <div
+                className={cn(
+                  'absolute mt-2 w-80 md:w-96 max-w-[calc(100vw-2rem)] rounded-2xl bg-surface border border-line shadow-xl z-50 p-2 space-y-1 backdrop-blur-md animate-in fade-in duration-150',
+                  alignRight ? 'right-0' : 'left-0'
+                )}
+              >
                 <div className="px-3 py-2 border-b border-line-subtle mb-1">
                   <div className="flex items-center justify-between">
                     <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">
