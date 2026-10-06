@@ -159,7 +159,7 @@ export function McpHub() {
       name: 'Vercel Deployment MCP',
       category: 'DEPLOY',
       icon: '▲',
-      badge: 'Deploy & Serverless',
+      badge: 'Deploy',
       url: 'https://mcp.vercel.com/sse',
       transport: 'SSE' as const,
       description: 'Trigger instant frontend deployments, manage preview domains, inspect Vercel logs, and fetch environment variables directly from AI agents.',
@@ -181,7 +181,7 @@ export function McpHub() {
       name: 'Secure Filesystem MCP',
       category: 'DEV',
       icon: '📁',
-      badge: 'Local Workspace',
+      badge: 'Filesystem',
       url: 'http://host.docker.internal:8001/sse',
       transport: 'SSE' as const,
       description: 'Local workspace file manipulation, directory trees, diff patching, and file creation with granular safety permissions.',
@@ -192,7 +192,7 @@ export function McpHub() {
       name: 'PostgreSQL Database MCP',
       category: 'DATA',
       icon: '🐘',
-      badge: 'Database & SQL',
+      badge: 'Database',
       url: 'http://host.docker.internal:8002/sse',
       transport: 'SSE' as const,
       description: 'Run parameterized read-only queries, introspect database schemas, generate ER diagrams, and check execution plans.',
@@ -214,7 +214,7 @@ export function McpHub() {
       name: 'Brave Web Search MCP',
       category: 'SEARCH',
       icon: '🦁',
-      badge: 'Web & Research',
+      badge: 'Search',
       url: 'http://host.docker.internal:8004/sse',
       transport: 'SSE' as const,
       description: 'Real-time web search index, documentation retrieval, news scanning, and fact-checking for autonomous research agents.',
@@ -503,49 +503,51 @@ export function McpHub() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
           {MCP_PRESETS.filter((p) => activeCategory === 'ALL' || p.category === activeCategory).map((preset) => {
             const isAlreadyAdded = servers.some((s) => s.name.toLowerCase().includes(preset.id) || s.url === preset.url);
             return (
               <div
                 key={preset.id}
-                className="group relative flex flex-col justify-between rounded-2xl border border-line bg-surface p-4 hover:border-brand-500/40 hover:shadow-xs transition-all shadow-2xs"
+                className="group relative flex flex-col justify-between rounded-2xl border border-line bg-surface p-4 hover:border-brand-500/40 hover:shadow-xs transition-all shadow-2xs overflow-hidden h-full"
               >
-                <div className="space-y-2.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-inset border border-line-subtle flex items-center justify-center text-base shrink-0 group-hover:scale-105 transition-transform">
-                        {preset.icon}
+                <div className="space-y-2.5 flex-1 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-start justify-between gap-2.5 mb-2">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded-xl bg-inset border border-line-subtle flex items-center justify-center text-base shrink-0 group-hover:scale-105 transition-transform">
+                          {preset.icon}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-bold text-ink truncate group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors" title={preset.name}>
+                            {preset.name}
+                          </h4>
+                          <span className="text-[10px] text-ink-faint font-mono truncate block" title={preset.url}>
+                            {preset.url}
+                          </span>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-bold text-ink truncate group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
-                          {preset.name}
-                        </h4>
-                        <span className="text-[10px] text-ink-faint font-mono truncate block">
-                          {preset.url}
-                        </span>
-                      </div>
+                      <Badge tone="neutral" size="sm" className="shrink-0 text-[10px] font-semibold whitespace-nowrap">
+                        {preset.badge}
+                      </Badge>
                     </div>
-                    <Badge tone="neutral" size="sm">
-                      {preset.badge}
-                    </Badge>
+
+                    <p className="text-[11px] text-ink-muted line-clamp-2 leading-relaxed min-h-[34px]">
+                      {preset.description}
+                    </p>
                   </div>
 
-                  <p className="text-[11px] text-ink-muted line-clamp-2 leading-relaxed">
-                    {preset.description}
-                  </p>
-
-                  <div className="flex flex-wrap gap-1 pt-1">
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
                     {preset.tools.slice(0, 3).map((t) => (
                       <span
                         key={t}
-                        className="px-1.5 py-0.5 rounded bg-inset border border-line text-[9px] font-mono text-ink-muted"
+                        className="px-2 py-0.5 rounded-md bg-inset border border-line text-[9px] font-mono text-ink-muted"
                       >
                         {t}
                       </span>
                     ))}
                     {preset.tools.length > 3 && (
-                      <span className="px-1 py-0.5 text-[9px] font-mono text-ink-faint">
+                      <span className="px-1.5 py-0.5 rounded-md text-[9px] font-mono text-ink-faint font-medium">
                         +{preset.tools.length - 3} more
                       </span>
                     )}
