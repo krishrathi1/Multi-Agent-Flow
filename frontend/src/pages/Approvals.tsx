@@ -23,6 +23,7 @@ import {
   Activity,
   RefreshCw,
   Plus,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -242,6 +243,29 @@ export function Approvals() {
     }
   };
 
+  const handleDeleteApproval = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await api.approvals.delete(id);
+      setApprovals(prev => prev.filter(a => a.id !== id));
+      const newStats = await api.approvals.stats().catch(() => null);
+      if (newStats) setStats(newStats);
+    } catch (err) {
+      console.error('Failed to delete approval:', err);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    try {
+      await api.approvals.clear();
+      setApprovals([]);
+      const newStats = await api.approvals.stats().catch(() => null);
+      if (newStats) setStats(newStats);
+    } catch (err) {
+      console.error('Failed to clear approvals:', err);
+    }
+  };
+
   const handleCreateTestApproval = async () => {
     try {
       setCreatingTest(true);
@@ -312,6 +336,16 @@ export function Approvals() {
             >
               Simulate Request
             </Button>
+            {approvals.length > 0 && (
+              <Button
+                variant="secondary"
+                size="xs"
+                icon={Trash2}
+                onClick={handleClearHistory}
+              >
+                Clear All
+              </Button>
+            )}
           </div>
         }
       />
@@ -452,6 +486,7 @@ export function Approvals() {
               highlighted={approval.id === highlightedId}
               onApprove={handleApprove}
               onReject={handleReject}
+              onDelete={handleDeleteApproval}
             />
           ))}
         </div>
@@ -466,11 +501,13 @@ function ApprovalCard({
   approval,
   onApprove,
   onReject,
+  onDelete,
   highlighted = false,
 }: {
   approval: Approval;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  onDelete: (id: string, e: React.MouseEvent) => void;
   highlighted?: boolean;
 }) {
   const [payloadExpanded, setPayloadExpanded] = useState(false);
@@ -543,9 +580,20 @@ function ApprovalCard({
               </span>
             )}
 
-            <span className="text-2xs font-mono font-medium text-ink-muted ml-auto shrink-0">
-              {timeAgo(approval.createdAt)}
-            </span>
+            <div className="flex items-center gap-2 ml-auto shrink-0">
+              <span className="text-2xs font-mono font-medium text-ink-muted">
+                {timeAgo(approval.createdAt)}
+              </span>
+              <button
+                type="button"
+                onClick={(e) => onDelete(approval.id, e)}
+                className="p-1 rounded-md text-ink-muted hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                title="Delete this approval"
+                aria-label="Delete approval"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
           </div>
 
           {/* Remediation Title & Description */}

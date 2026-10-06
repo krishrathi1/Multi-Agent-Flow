@@ -565,6 +565,8 @@ export const api = {
     reject: (id: string) => request<Approval>(`/approvals/${id}/reject`, { method: 'POST' }),
     create: (data: { boardId: string; taskId?: string; agentId?: string; actionType: string; payload?: Record<string, unknown>; confidence?: number }) =>
       request<Approval>('/approvals', { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id: string) => request<{ success: boolean }>(`/approvals/${id}`, { method: 'DELETE' }),
+    clear: (status?: string) => request<{ success: boolean }>(`/approvals${status ? `?status=${status}` : ''}`, { method: 'DELETE' }),
   },
   incidents: {
     list: () => request<any[]>('/incidents'),

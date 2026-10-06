@@ -98,4 +98,24 @@ router.post('/:id/reject', async (req, res) => {
   res.json(approval);
 });
 
+router.delete('/:id', async (req, res) => {
+  await prisma.approval.deleteMany({
+    where: { id: req.params.id, board: { organizationId: req.organizationId! } },
+  });
+  req.app.get('io')?.to(`org:${req.organizationId}`).emit('approval:deleted', { id: req.params.id });
+  res.json({ success: true });
+});
+
+router.delete('/', async (req, res) => {
+  const status = req.query.status as ApprovalStatus | undefined;
+  await prisma.approval.deleteMany({
+    where: {
+      board: { organizationId: req.organizationId! },
+      ...(status ? { status } : {}),
+    },
+  });
+  req.app.get('io')?.to(`org:${req.organizationId}`).emit('approval:cleared');
+  res.json({ success: true });
+});
+
 export default router;

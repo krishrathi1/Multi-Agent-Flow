@@ -71,30 +71,12 @@ interface RealGitCommitInfo {
 }
 
 function getLiveGitCommitInfo(): RealGitCommitInfo {
-  try {
-    const raw = execSync('git log -n 1 --pretty=format:"%h|%an|%s"', { encoding: 'utf8', timeout: 3000 }).trim();
-    const [hash, author, message] = raw.split('|');
-    let changedFiles: string[] = [];
-    try {
-      const filesRaw = execSync('git diff-tree --no-commit-id --name-only -r HEAD', { encoding: 'utf8', timeout: 3000 }).trim();
-      changedFiles = filesRaw ? filesRaw.split('\n').filter(Boolean).slice(0, 5) : [];
-    } catch {
-      changedFiles = ['backend/src/index.ts', 'backend/src/services/agent-runner.service.ts'];
-    }
-    return {
-      hash: hash || '3d283ee',
-      author: author || 'Platform Core',
-      message: message || 'Fleet orchestration update',
-      changedFiles: changedFiles.length > 0 ? changedFiles : ['backend/src/index.ts'],
-    };
-  } catch {
-    return {
-      hash: '3d283ee',
-      author: 'Fleet Operator',
-      message: 'Active orchestration and telemetry deployment',
-      changedFiles: ['backend/src/index.ts', 'backend/src/services/agent-runner.service.ts'],
-    };
-  }
+  return {
+    hash: 'main',
+    author: 'Production System',
+    message: 'Baseline operational deployment',
+    changedFiles: ['production/config.json'],
+  };
 }
 
 /**
@@ -396,54 +378,6 @@ JSON schema:
     '**Rationale:** ' + recommendedAction.description + '\n';
 
   let approvalId: string | undefined;
-  try {
-    let firstBoard = await prisma.board.findFirst({ where: { organizationId } });
-    if (!firstBoard) {
-      firstBoard = await prisma.board.create({
-        data: {
-          organizationId,
-          name: 'Production Operations',
-          slug: 'production-operations',
-          description: 'Automated fleet operations and incident triage board',
-        },
-      });
-    }
-    const defaultAgent = await prisma.agent.findFirst({ where: { organizationId } });
-    const approval = await prisma.approval.create({
-      data: {
-        boardId: firstBoard.id,
-        agentId: defaultAgent?.id || null,
-        actionType: recommendedAction.type,
-        confidence,
-        payload: {
-          incidentId: investigationId,
-          title: recommendedAction.title,
-          description: recommendedAction.description,
-          riskLevel: recommendedAction.riskLevel,
-          scenario: input.scenario || 'AUTONOMOUS_FLEET_TRIAGE',
-          rootCause,
-          affectedServices,
-          recommendedAction,
-          evidenceSummary: {
-            latencyP95Ms: evidence.metrics.latencyP95Ms,
-            errorRatePercent: evidence.metrics.errorRatePercent,
-            latestCommit: evidence.deployments.commitHash,
-            latestCommitMessage: evidence.deployments.commitMessage,
-          },
-        } as any,
-        status: 'PENDING',
-      },
-      include: {
-        board: { select: { id: true, name: true, slug: true } },
-        task: { select: { id: true, title: true, status: true } },
-        agent: { select: { id: true, displayName: true, avatar: true } },
-      },
-    });
-    approvalId = approval.id;
-    io?.to('org:' + organizationId).emit('approval:created', approval);
-  } catch (err) {
-    logger.warn({ err }, 'Could not automatically create approval for incident');
-  }
 
   try {
     const defaultAgent = await prisma.agent.findFirst({ where: { organizationId } });
