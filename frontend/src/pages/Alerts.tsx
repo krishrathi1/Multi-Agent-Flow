@@ -31,6 +31,7 @@ import {
   FileText,
   RefreshCw,
   Zap,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -183,11 +184,13 @@ export function Alerts() {
 
     socket.on('alert:event:created', handleAlert);
     socket.on('alert:event:acknowledged', handleAlert);
+    socket.on('alert:events:cleared', handleAlert);
     socket.on('incident:investigation:completed', handleIncident);
 
     return () => {
       socket.off('alert:event:created', handleAlert);
       socket.off('alert:event:acknowledged', handleAlert);
+      socket.off('alert:events:cleared', handleAlert);
       socket.off('incident:investigation:completed', handleIncident);
     };
   }, [fetchData]);
@@ -300,6 +303,20 @@ export function Alerts() {
       navigate('/approvals');
     } finally {
       setSubmittingToApprovals(false);
+    }
+  };
+
+  const [clearingEvents, setClearingEvents] = useState(false);
+
+  const handleClearAllEvents = async () => {
+    try {
+      setClearingEvents(true);
+      await api.alerts.clearAll();
+      setEvents([]);
+    } catch (err) {
+      console.error('Failed to clear alert events:', err);
+    } finally {
+      setClearingEvents(false);
     }
   };
 
@@ -783,6 +800,20 @@ export function Alerts() {
                   options={ackOptions}
                   onChange={setAckFilter}
                 />
+
+                {events.length > 0 && (
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    icon={Trash2}
+                    loading={clearingEvents}
+                    onClick={handleClearAllEvents}
+                    className="text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10"
+                    title="Clear all alert events"
+                  >
+                    Clear All
+                  </Button>
+                )}
               </div>
             </div>
 

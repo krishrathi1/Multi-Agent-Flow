@@ -41,4 +41,18 @@ router.post('/events/:id/acknowledge', async (req, res) => {
   res.json(event);
 });
 
+// DELETE /events — clear all alert events
+router.delete('/events', async (req, res) => {
+  const result = await alertService.clearAlertEvents(req.organizationId!);
+  req.app.get('io')?.to(`org:${req.organizationId}`).emit('alert:events:cleared');
+  res.json(result);
+});
+
+// POST /events/acknowledge-all — acknowledge all alert events
+router.post('/events/acknowledge-all', async (req, res) => {
+  const result = await alertService.acknowledgeAllEvents(req.organizationId!);
+  req.app.get('io')?.to(`org:${req.organizationId}`).emit('alert:events:cleared');
+  res.json(result);
+});
+
 export default router;

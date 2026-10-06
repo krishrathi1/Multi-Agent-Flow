@@ -119,10 +119,10 @@ async function syncLiveAlerts(organizationId: string) {
       }
     }
 
-    // Check if agent missed heartbeats
+    // Check if agent missed heartbeats (only if actively marked ONLINE)
     const timeSinceUpdate = (now - new Date(agent.updatedAt).getTime()) / 60000;
     const missedThreshold = (agent.heartbeatInterval || 30) * 2;
-    if (timeSinceUpdate > missedThreshold) {
+    if (agent.status === 'ONLINE' && timeSinceUpdate > missedThreshold) {
       const hbRule = allRules.find((r) => r.condition === 'HEARTBEAT_MISSED');
       if (hbRule) {
         const existing = await prisma.alertEvent.findFirst({
@@ -247,3 +247,22 @@ export async function acknowledgeEvent(id: string, organizationId: string) {
     },
   });
 }
+
+export async function clearAlertEvents(organizationId: string) {
+  const deleted = await prisma.alertEvent.deleteMany({
+    where: { organizationId },
+  });
+  return { success: true, count: deleted.count };
+}
+
+export async function acknowledgeAllEvents(organizationId: string) {
+  const updated = await prisma.alertEvent.updateMany({
+    where: { organizationId, acknowledged: false },
+    data: {
+      acknowledged: true,
+      acknowledgedAt: new Date(),
+    },
+  });
+  return { success: true, count: updated.count };
+}
+

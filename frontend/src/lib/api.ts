@@ -487,6 +487,10 @@ export const api = {
     },
     acknowledge: (id: string) =>
       request<AlertEvent>(`/alerts/events/${id}/acknowledge`, { method: 'POST' }),
+    clearAll: () =>
+      request<{ success: boolean; count: number }>('/alerts/events', { method: 'DELETE' }),
+    acknowledgeAll: () =>
+      request<{ success: boolean; count: number }>('/alerts/events/acknowledge-all', { method: 'POST' }),
   },
   commands: {
     send: (data: { agentId: string; type: string; payload?: Record<string, unknown> }) =>
