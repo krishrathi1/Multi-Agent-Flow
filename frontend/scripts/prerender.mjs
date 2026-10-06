@@ -16,10 +16,9 @@ import puppeteer from 'puppeteer';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = join(__dirname, '..', 'dist');
-const PORT = Number(process.env.PRERENDER_PORT);
-const PRERENDER_HOST = process.env.PRERENDER_HOST;
+const PORT = Number(process.env.PRERENDER_PORT || 45678);
+const PRERENDER_HOST = process.env.PRERENDER_HOST || '127.0.0.1';
 if (!Number.isInteger(PORT) || PORT <= 0) throw new Error('PRERENDER_PORT must be a positive integer');
-if (!PRERENDER_HOST) throw new Error('PRERENDER_HOST is required');
 
 // Public routes to pre-render
 const ROUTES = [
