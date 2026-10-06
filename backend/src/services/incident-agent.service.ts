@@ -4,6 +4,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { execSync } from 'child_process';
 import { decryptField } from '../lib/crypto.js';
 
+import { config } from '../config.js';
 export interface IncidentEvidence {
   metrics: {
     latencyP95Ms: number;
@@ -195,7 +196,7 @@ JSON schema:
 }`;
 
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+        `${config.geminiApiBaseUrl}/v1beta/models/${config.geminiModel}:generateContent?key=${encodeURIComponent(apiKey)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -349,37 +350,50 @@ JSON schema:
 
   let approvalId: string | undefined;
   try {
-    const firstBoard = await prisma.board.findFirst({ where: { organizationId } });
-    if (firstBoard) {
-      const approval = await prisma.approval.create({
+    let firstBoard = await prisma.board.findFirst({ where: { organizationId } });
+    if (!firstBoard) {
+      firstBoard = await prisma.board.create({
         data: {
-          boardId: firstBoard.id,
-          actionType: recommendedAction.type,
-          confidence,
-          payload: {
-            incidentId: investigationId,
-            scenario: input.scenario || 'AUTONOMOUS_FLEET_TRIAGE',
-            rootCause,
-            affectedServices,
-            recommendedAction,
-            evidenceSummary: {
-              latencyP95Ms: evidence.metrics.latencyP95Ms,
-              errorRatePercent: evidence.metrics.errorRatePercent,
-              latestCommit: evidence.deployments.commitHash,
-              latestCommitMessage: evidence.deployments.commitMessage,
-            },
-          } as any,
-          status: 'PENDING',
-        },
-        include: {
-          board: { select: { id: true, name: true, slug: true } },
-          task: { select: { id: true, title: true, status: true } },
-          agent: { select: { id: true, displayName: true, avatar: true } },
+          organizationId,
+          name: 'Production Operations',
+          slug: 'production-operations',
+          description: 'Automated fleet operations and incident triage board',
         },
       });
-      approvalId = approval.id;
-      io?.to('org:' + organizationId).emit('approval:created', approval);
     }
+    const defaultAgent = await prisma.agent.findFirst({ where: { organizationId } });
+    const approval = await prisma.approval.create({
+      data: {
+        boardId: firstBoard.id,
+        agentId: defaultAgent?.id || null,
+        actionType: recommendedAction.type,
+        confidence,
+        payload: {
+          incidentId: investigationId,
+          title: recommendedAction.title,
+          description: recommendedAction.description,
+          riskLevel: recommendedAction.riskLevel,
+          scenario: input.scenario || 'AUTONOMOUS_FLEET_TRIAGE',
+          rootCause,
+          affectedServices,
+          recommendedAction,
+          evidenceSummary: {
+            latencyP95Ms: evidence.metrics.latencyP95Ms,
+            errorRatePercent: evidence.metrics.errorRatePercent,
+            latestCommit: evidence.deployments.commitHash,
+            latestCommitMessage: evidence.deployments.commitMessage,
+          },
+        } as any,
+        status: 'PENDING',
+      },
+      include: {
+        board: { select: { id: true, name: true, slug: true } },
+        task: { select: { id: true, title: true, status: true } },
+        agent: { select: { id: true, displayName: true, avatar: true } },
+      },
+    });
+    approvalId = approval.id;
+    io?.to('org:' + organizationId).emit('approval:created', approval);
   } catch (err) {
     logger.warn({ err }, 'Could not automatically create approval for incident');
   }

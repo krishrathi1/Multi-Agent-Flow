@@ -12,7 +12,7 @@ export const test = base.extend<{
 }>({
   apiHelper: async ({}, use) => {
     const auth = await getSharedAuth();
-    const helper = new ApiHelper('http://localhost:4000');
+    const helper = new ApiHelper(process.env.E2E_API_URL || 'http://localhost:4000');
     helper.setToken(auth.accessToken);
     await use(helper);
   },

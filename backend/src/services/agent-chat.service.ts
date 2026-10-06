@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import { Prisma, ActivityType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
@@ -7,6 +8,7 @@ import { safeFetch } from '../lib/url-validator.js';
 import { listWorkspaceFiles, workspaceFor } from './agent-runner.service.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
 import { askAiAndSpawnFixerAgent } from './process.service.js';
+import { run as runOpenCode } from './opencode.service.js';
 
 const HISTORY_LIMIT = 30;
 
@@ -80,7 +82,22 @@ async function callChatLLM(params: {
     latestSteps?: string[];
   };
 }): Promise<{ text: string; model: string; inputTokens: number; outputTokens: number; costUsd: number }> {
-  // 1. Try Claude CLI if enabled and requested
+  // 1. Explicit OpenCode model selection. OpenCode accepts provider/model IDs
+  // and becomes the unified execution path for providers configured there.
+  if (params.preferredModel?.includes('/') && !params.preferredModel.startsWith('local/')) {
+    try {
+      const op = await runOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, params.preferredModel);
+      if (op.result) {
+        const inputTokens = Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
+        const outputTokens = Math.max(50, Math.ceil(op.result.length / 4));
+        return { text: op.result, model: op.model || params.preferredModel, inputTokens, outputTokens, costUsd: calcCost(op.model || params.preferredModel, inputTokens, outputTokens) };
+      }
+    } catch (err) {
+      logger.warn({ err, model: params.preferredModel }, 'OpenCode model execution failed; continuing through configured fallbacks');
+    }
+  }
+
+  // 2. Try Claude CLI if enabled and requested
   if (isClaudeCliEnabled()) {
     try {
       const cliRes = await runClaudeCli(params.prompt, {
@@ -106,7 +123,7 @@ async function callChatLLM(params: {
     candidateModels.push(preferred);
   }
   // Default cloud fallbacks in order of speed and capability
-  for (const m of ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gpt-4o-mini', 'claude-3-5-sonnet']) {
+  for (const m of config.geminiModels) {
     if (!candidateModels.includes(m)) {
       candidateModels.push(m);
     }
@@ -130,7 +147,7 @@ async function callChatLLM(params: {
         const cleanModel = model.replace(/^google\//, '').replace(/^gemini\//, '');
         const combined = `${params.systemPrompt}\n\n${params.prompt}`;
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          `${config.geminiApiBaseUrl}/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(geminiKey)}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
@@ -166,12 +183,8 @@ async function callChatLLM(params: {
     }
   }
 
-  // 3. Try Local PC Ollama on Windows Host (qwen2.5-coder:1.5b or local models)
-  const candidateEndpoints = [
-    'http://127.0.0.1:11434',
-    'http://localhost:11434',
-    'http://host.docker.internal:11434',
-  ];
+  // 3. Try Local PC Ollama on Windows Host (configured local model)
+  const candidateEndpoints = config.localLlmEndpoints;
 
   for (const ep of candidateEndpoints) {
     try {
@@ -179,7 +192,7 @@ async function callChatLLM(params: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: preferred?.includes('ollama') ? preferred.replace(/^ollama\//, '') : 'qwen2.5-coder:1.5b',
+          model: preferred?.includes('ollama') ? preferred.replace(/^ollama\//, '') : config.localLlmModel,
           prompt: `${params.systemPrompt}\n\n${params.prompt}`,
           stream: false,
         }),
@@ -195,7 +208,7 @@ async function callChatLLM(params: {
           const outputTokens: number = data?.eval_count ?? Math.max(50, Math.ceil(text.length / 4));
           return {
             text: text.trim(),
-            model: 'qwen2.5-coder:1.5b (Local Host)',
+            model: `${config.localLlmModel} (Local Host)`,
             inputTokens,
             outputTokens,
             costUsd: 0, // Local model — no API cost
@@ -354,6 +367,7 @@ export async function chatWithMother(
   organizationId: string,
   message: string,
   processId?: string,
+  requestedModel?: string,
 ): Promise<{ result: string; model: string; sessionKey: string }> {
   const { messages: history } = await getMotherChatHistory(organizationId, processId);
 
@@ -366,7 +380,7 @@ export async function chatWithMother(
 
   // Gather complete production context & structured cowork telemetry
   let processContext = '';
-  let preferredModel: string | undefined;
+  let preferredModel: string | undefined = requestedModel?.trim() || undefined;
   let coworkData: any = undefined;
   let activeProcessId: string | null = null;
 
@@ -498,13 +512,13 @@ ${allAgents.map((a) => `- ${a.displayName} (${a.processRole || 'Agent'}, Status:
           autoHealReport = `\n\n[ACTION EXECUTED BY MOTHER CORE]:
 - Recruited & Provisioned Specialist Agent: "${fixRes.agentSpawned.displayName}" (Stage ${fixRes.agentSpawned.processStage}: ${fixRes.agentSpawned.processRole}) with Avatar ${fixRes.agentSpawned.avatar}.
 - Dispatched fix task & patched ${fixRes.fixedFiles.length} workspace files (${fixRes.fixedFiles.join(', ')}).
-- Pushed clean atomic commit to GitHub: ${fixRes.pushResult?.repoUrl || 'https://github.com/krishrathi1/testing'}.
+- Pushed clean atomic commit to GitHub: ${fixRes.pushResult?.repoUrl || '(repository URL unavailable)'}.
 - Re-triggered live Vercel Cloud Deployment: ${fixRes.deployResult?.previewUrl || 'Vercel Deployment Initialized'}.`;
         } else {
           autoHealReport = `\n\n[ACTION EXECUTED BY MOTHER CORE]:
 - Diagnosis: ${fixRes.diagnosis}
 - Auto-healed workspace across ${fixRes.fixedFiles.length} files (${fixRes.fixedFiles.join(', ')}).
-- Pushed clean atomic commit to GitHub: ${fixRes.pushResult?.repoUrl || 'https://github.com/krishrathi1/testing'}.
+- Pushed clean atomic commit to GitHub: ${fixRes.pushResult?.repoUrl || '(repository URL unavailable)'}.
 - Re-triggered live Vercel Cloud Deployment: ${fixRes.deployResult?.previewUrl || 'Vercel Deploy Initialized'}.`;
         }
       }

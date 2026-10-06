@@ -29,7 +29,7 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 
 /** `claude` on PATH unless the operator pins a path. */
 function cliBinary(): string {
-  return process.env.CLAUDE_CLI_PATH || 'claude';
+  return process.env.CLAUDE_CLI_PATH || (() => { throw new Error('CLAUDE_CLI_PATH must be configured when Claude CLI planning is enabled'); })();
 }
 
 export function isClaudeCliEnabled(): boolean {

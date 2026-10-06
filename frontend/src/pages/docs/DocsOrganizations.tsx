@@ -8,7 +8,7 @@ export function DocsOrganizations() {
       <SEO
         title="Organizations & Teams — Enterprise AI Agent Management"
         description="Manage teams with role-based access control for enterprise AI agent operations. Set up organizations, assign roles, and control access to your agent infrastructure with MyceliumOps by Blostem."
-        canonical="https://nexus.blostem.com/docs/organizations"
+        canonical="/docs/organizations"
         keywords="enterprise AI agent management, team management, role-based access control, AI agent RBAC, multi-tenant AI platform, Blostem AI"
       />
       <h1 className="text-4xl font-bold text-white mb-2">Organizations & Teams</h1>

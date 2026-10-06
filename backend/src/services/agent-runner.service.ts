@@ -12,6 +12,7 @@ import { fireWebhooks } from './process-extras.service.js';
 import { notify } from './insights.service.js';
 import { pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
 
+import { config } from '../config.js';
 /**
  * Intelligent Multi-LLM Execution Engine.
  * Supports Claude CLI, Google Gemini API, Local PC Ollama (qwen2.5-coder, etc.), and code synthesis.
@@ -33,7 +34,7 @@ async function executeAgentWork(params: {
         systemPrompt: params.systemPrompt,
         cwd: params.workspace,
         allowedTools: agentTools(),
-        model: process.env.AGENT_RUN_MODEL ?? 'claude-sonnet-5',
+        model: config.defaultAgentRunModel,
         timeoutMs: params.timeoutMs,
         onSpawn: params.onSpawn,
       });
@@ -66,13 +67,13 @@ async function executeAgentWork(params: {
   if (!geminiKey && process.env.GOOGLE_API_KEY) geminiKey = process.env.GOOGLE_API_KEY;
 
   if (geminiKey) {
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const candidateModels = config.geminiModels;
     for (const model of candidateModels) {
       try {
         const promptText = `${params.systemPrompt}\n\nTask Goal: ${params.goal}\nRole: ${params.agent.processRole || params.agent.description}\n\n${params.userPrompt}\n\nPlease generate complete production-ready code files for this task. Format code blocks with filepath as: \`\`\`typescript:src/filename.ts\n...code...\n\`\`\``;
         
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          `${config.geminiApiBaseUrl}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
@@ -108,7 +109,7 @@ async function executeAgentWork(params: {
   }
 
   // 3. Fast probe for Local PC Model (Ollama)
-  const localCandidates = ['http://127.0.0.1:11434', 'http://localhost:11434'];
+  const localCandidates = config.localLlmEndpoints;
 
   for (const ep of localCandidates) {
     try {
@@ -117,7 +118,7 @@ async function executeAgentWork(params: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'qwen2.5-coder:1.5b',
+          model: config.localLlmModel,
           prompt: promptCombined,
           stream: false,
         }),
@@ -134,7 +135,7 @@ async function executeAgentWork(params: {
           const costUsd = Number(((inputTokens * 0.00000012) + (outputTokens * 0.00000045) + 0.0009).toFixed(5));
           return {
             text: generatedText,
-            model: 'qwen2.5-coder:1.5b (Local PC)',
+            model: `${config.localLlmModel} (Local PC)`,
             costUsd,
             inputTokens,
             outputTokens,
@@ -595,7 +596,7 @@ export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal,
   const [consoleLogs, setConsoleLogs] = useState<string[]>([
     '[INIT] Workspace mounted successfully',
     \`[CHAIN] Agent \${leadAgent} completed architectural synthesis\`,
-    '[READY] Live preview online at http://localhost:3000',
+    \`[READY] Live preview online at \${process.env.PREVIEW_BASE_URL}\`,
   ]);
 
   const handleExecute = (e: React.FormEvent) => {
@@ -716,7 +717,7 @@ import cors from 'cors';
 import { apiRouter } from './routes/api';
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = config.port;
 
 app.use(cors({ origin: '*' }));
 app.use(express.json());
@@ -735,7 +736,7 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 app.listen(PORT, () => {
-  console.log(\`⚡ Server listening on http://localhost:\${PORT}\`);
+  console.log(\`⚡ Server listening on \${process.env.APP_URL}\`);
 });
 
 export default app;
@@ -810,11 +811,11 @@ export type ConfigPayload = z.infer<typeof ConfigSchema>;
       await writeWorkspaceFile(
         workspace,
         '.env.example',
-        `PORT=4000
+        `PORT=${config.port}
 NODE_ENV=production
 PROJECT_NAME="${projectName}"
-DATABASE_URL="postgresql://user:password@localhost:5432/${projectSlug}"
-API_SECRET_KEY="nexus_secret_key_production"
+DATABASE_URL="${process.env.AGENT_DATABASE_URL ?? ""}"
+API_SECRET_KEY="${process.env.AGENT_API_SECRET_KEY ?? ""}"
 `,
       );
     }
@@ -1372,7 +1373,7 @@ async function runStep(
   });
   emit('agent:updated', { id: agent.id, status: 'ONLINE' });
 
-  await prisma.activity.create({
+  const startActivity = await prisma.activity.create({
     data: {
       organizationId,
       agentId: agent.id,
@@ -1381,6 +1382,7 @@ async function runStep(
       message: `${agent.displayName} started stage ${agent.processStage}.`,
     },
   });
+  emit('activity:new', startActivity);
 
   // Persist the step so history survives a restart.
   const stepRow = runId
@@ -1398,14 +1400,32 @@ async function runStep(
   // Create or link a Task for this execution stage so the Kanban Board updates in real-time
   let currentTaskRow: any = null;
   try {
-    const defaultBoard = await prisma.board.findFirst({
-      where: { organizationId },
+    const processMeta = await prisma.process.findFirst({
+      where: { id: processId, organizationId },
+      select: { name: true },
+    });
+    const boardName = processMeta?.name?.trim() || 'Production Operations';
+    const boardSlug = boardName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 80) || 'production-operations';
+    const executionBoard = await prisma.board.upsert({
+      where: { organizationId_slug: { organizationId, slug: boardSlug } },
+      create: {
+        organizationId,
+        name: boardName,
+        slug: boardSlug,
+        description: `Execution board for ${boardName}`,
+        boardType: 'continuous',
+      },
+      update: {},
       select: { id: true },
     });
     currentTaskRow = await prisma.task.create({
       data: {
         organizationId,
-        boardId: defaultBoard?.id ?? null,
+        boardId: executionBoard.id,
         title: `Stage ${agent.processStage}: ${agent.processRole ?? agent.displayName}`,
         description: `Autonomous execution for stage ${agent.processStage}: ${goal.slice(0, 300)}`,
         status: 'IN_PROGRESS',
@@ -1523,7 +1543,7 @@ async function runStep(
 
   const tokens = res.inputTokens + res.outputTokens;
 
-  await prisma.$transaction([
+  const [, , , completionActivity] = await prisma.$transaction([
     prisma.session.update({
       where: { id: session.id },
       data: {
@@ -1590,7 +1610,7 @@ async function runStep(
   }
 
   emit('agent:updated', { id: agent.id, status: 'IDLE' });
-  emit('activity:new', { processId, agentId: agent.id });
+  emit('activity:new', completionActivity);
 
   logger.info(
     { processId, agentId: agent.id, stage: agent.processStage, tokens, files: newFiles.length },
@@ -1983,6 +2003,7 @@ export function startChainRun(
       status.finishedAt = new Date().toISOString();
       status.result = result ?? undefined;
       emit('process:run', { processId, state: status.state });
+      emit('process:run:updated', { processId, state: status.state });
     })
     .catch((err) => {
       status.state = 'failed';
@@ -1990,6 +2011,7 @@ export function startChainRun(
       status.error = (err as Error).message;
       logger.error({ err, processId }, 'Chain run threw');
       emit('process:run', { processId, state: 'failed' });
+      emit('process:run:updated', { processId, state: 'failed' });
     })
     .finally(() => {
       // The normal path clears these at the end of the chain; a throw skips
@@ -2074,6 +2096,7 @@ async function recordHandoff(
   fromAgentId: string,
   toAgentId: string,
   summary: string,
+  emit?: Emit,
 ): Promise<void> {
   try {
     // One thread per chain keeps its conversation together.
@@ -2082,13 +2105,24 @@ async function recordHandoff(
       (await prisma.thread.findFirst({ where: { organizationId, title } })) ??
       (await prisma.thread.create({ data: { organizationId, title } }));
 
-    await prisma.message.create({
+    const message = await prisma.message.create({
       data: {
         threadId: thread.id,
         senderId: fromAgentId,
         receiverId: toAgentId,
         content: summary.slice(0, 4000),
       },
+      include: {
+        sender: { select: { id: true, displayName: true } },
+        receiver: { select: { id: true, displayName: true } },
+      },
+    });
+    emit?.('agent:message', {
+      processId,
+      threadId: thread.id,
+      messageId: message.id,
+      senderId: fromAgentId,
+      receiverId: toAgentId,
     });
   } catch (err) {
     // Graph enrichment must never break a run.
@@ -2104,6 +2138,7 @@ async function requestStageApproval(
   stage: number,
   agentId: string,
   handoffs: Array<{ agent: string; summary: string }>,
+  emit?: Emit,
 ): Promise<void> {
   const last = handoffs[handoffs.length - 1];
   const chainApproval = await prisma.chainApproval.create({
@@ -2166,7 +2201,7 @@ ${last.summary.slice(0, 1500)}` : ''),
     logger.warn({ err }, 'Could not mirror stage approval to board approval');
   }
 
-  await prisma.activity.create({
+  const approvalActivity = await prisma.activity.create({
     data: {
       organizationId,
       agentId,
@@ -2175,6 +2210,7 @@ ${last.summary.slice(0, 1500)}` : ''),
       message: `"${proc.name}" is waiting for approval before stage ${stage}.`,
     },
   });
+  emit?.('activity:new', approvalActivity);
 }
 
 export interface ChainRunResult {
@@ -2238,6 +2274,8 @@ export async function runProcessChain(
     },
   });
   if (live) live.runId = runRow.id;
+  emit('process:run:created', { processId, runId: runRow.id, state: RunState.RUNNING });
+  emit('process:run:updated', { processId, runId: runRow.id, state: RunState.RUNNING });
   // Prove liveness while the chain works, so the reaper can tell a slow run
   // from an abandoned one.
   startHeartbeat(runRow.id, processId);
@@ -2330,6 +2368,7 @@ export async function runProcessChain(
         stage,
         gateAgent.id,
         handoffs,
+        emit,
       );
       await prisma.processRun.update({
         where: { id: runRow.id },
@@ -2400,6 +2439,7 @@ export async function runProcessChain(
             r.agentId,
             receiver.id,
             r.summary,
+            emit,
           );
         }
       }
@@ -2454,6 +2494,7 @@ export async function runProcessChain(
     },
   });
   emit('process:updated', { id: processId, status: allOk ? 'COMPLETED' : 'FAILED' });
+  emit('process:run:updated', { processId, runId: runRow.id, state: finalState });
 
   cancelled.delete(processId);
   activeChildren.delete(processId);
@@ -2468,8 +2509,8 @@ export async function runProcessChain(
       proc.prompt.match(/Target GitHub Repository:\s*([^\s\(\n]+)/i) ||
       proc.prompt.match(/Action:\s*Create New GitHub Repository[\s\S]*?Name:\s*([^\n]+)/i);
     let targetRepo = repoMatch ? repoMatch[1].trim() : null;
-    if (targetRepo && !targetRepo.includes('/')) {
-      targetRepo = `krishrathi1/${targetRepo}`;
+    if (targetRepo && !targetRepo.includes('/') && config.defaultGithubOwner) {
+      targetRepo = `${config.defaultGithubOwner}/${targetRepo}`;
     }
 
     const org = await prisma.organization.findUnique({ where: { id: organizationId } });

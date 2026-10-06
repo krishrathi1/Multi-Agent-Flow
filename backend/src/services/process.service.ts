@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import { randomBytes } from 'node:crypto';
 import { Prisma, ProcessStatus, ActivityType, ApprovalMode } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
@@ -602,7 +603,7 @@ export async function askAiAndSpawnFixerAgent(params: {
     proc.prompt.match(/Target GitHub Repository:\s*([^\s\(\n]+)/i) ||
     proc.prompt.match(/Action:\s*Create New GitHub Repository[\s\S]*?Name:\s*([^\n]+)/i);
   let targetRepo = repoMatch ? repoMatch[1].trim() : null;
-  if (targetRepo && !targetRepo.includes('/')) targetRepo = `krishrathi1/${targetRepo}`;
+  if (targetRepo && !targetRepo.includes('/') && config.defaultGithubOwner) targetRepo = `${config.defaultGithubOwner}/${targetRepo}`;
 
   if (targetRepo && ghToken) {
     pushResult = await pushWorkspaceToGitHub({

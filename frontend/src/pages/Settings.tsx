@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { config } from '../config';
 import {
   Building2,
   Users,
@@ -163,7 +164,7 @@ function OrganizationTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="nexus-page space-y-6">
       <SectionHeading
         title="Organization Profile"
         description="General information and workspace identification."
@@ -812,7 +813,72 @@ interface LiveModelItem {
   created?: string | number;
 }
 
+interface OpenCodeModelItem {
+  id: string;
+  name: string;
+  provider: string;
+  family?: string;
+  status?: string;
+  context?: number;
+  output?: number;
+  free?: boolean;
+}
+
 function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
+  const [openCodeStatus, setOpenCodeStatus] = useState<{ installed: boolean; version: string | null; command: string; error?: string } | null>(null);
+  const [openCodeInstalling, setOpenCodeInstalling] = useState(false);
+  const [openCodeLoading, setOpenCodeLoading] = useState(false);
+  const [openCodeModelsList, setOpenCodeModelsList] = useState<OpenCodeModelItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus:opencode_models');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [openCodeRawOutput, setOpenCodeRawOutput] = useState('');
+  const [showOpenCodeRaw, setShowOpenCodeRaw] = useState(false);
+  const [openCodeFilter, setOpenCodeFilter] = useState<'all' | 'free' | 'opencode' | 'nvidia'>('all');
+
+  const refreshOpenCodeModels = useCallback(async () => {
+    setOpenCodeLoading(true);
+    try {
+      const result = await api.opencode.models();
+      const list = (result.models || []) as OpenCodeModelItem[];
+      setOpenCodeModelsList(list);
+      setOpenCodeRawOutput(result.output || '');
+      localStorage.setItem('nexus:opencode_models', JSON.stringify(list));
+    } catch (error: any) {
+      setOpenCodeRawOutput(error?.message || 'Unable to query OpenCode.');
+    } finally {
+      setOpenCodeLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    api.opencode.status()
+      .then((status) => {
+        setOpenCodeStatus(status);
+        if (status.installed) {
+          refreshOpenCodeModels();
+        }
+      })
+      .catch(() => setOpenCodeStatus({ installed: false, version: null, command: 'opencode' }));
+  }, [refreshOpenCodeModels]);
+
+  const installOpenCode = async () => {
+    setOpenCodeInstalling(true);
+    try {
+      const result = await api.opencode.install();
+      setOpenCodeStatus(result.status);
+      if (result.status.installed) {
+        refreshOpenCodeModels();
+      }
+    } catch (error: any) {
+      setOpenCodeStatus((prev) => ({ ...(prev || { version: null, command: 'opencode' }), installed: false, error: error?.message || 'Installation failed' }));
+    } finally {
+      setOpenCodeInstalling(false);
+    }
+  };
+
   // Provider API Keys input state
   const [geminiKey, setGeminiKey] = useState('');
   const [showGeminiKey, setShowGeminiKey] = useState(false);
@@ -848,7 +914,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
   const [openaiError, setOpenaiError] = useState<string | null>(null);
 
   // Local PC State
-  const [localEndpoint, setLocalEndpoint] = useState(() => localStorage.getItem('nexus:local_llm_endpoint') || 'http://localhost:11434');
+  const [localEndpoint, setLocalEndpoint] = useState(() => localStorage.getItem('nexus:local_llm_endpoint') || config.localLlmEndpoint);
   const [localModels, setLocalModels] = useState<LiveModelItem[]>(() => {
     try {
       const saved = localStorage.getItem('nexus:live_models_local');
@@ -868,7 +934,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
   const [activeProvider, setActiveProvider] = useState(() => localStorage.getItem('nexus:active_llm_provider') || 'local');
 
   // Filter & Search
-  const [activeFilter, setActiveFilter] = useState<'all' | 'google' | 'anthropic' | 'openai' | 'local'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'opencode' | 'google' | 'anthropic' | 'openai' | 'local'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
@@ -1107,8 +1173,211 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
     return list.filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q) || (m.description && m.description.toLowerCase().includes(q)));
   };
 
+  // Filtered OpenCode models based on openCodeFilter and searchQuery
+  const filteredOpenCodeModels = openCodeModelsList.filter((m) => {
+    if (openCodeFilter === 'free' && !m.free) return false;
+    if (openCodeFilter === 'opencode' && m.provider !== 'opencode') return false;
+    if (openCodeFilter === 'nvidia' && m.provider !== 'nvidia') return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      m.id.toLowerCase().includes(q) ||
+      m.name.toLowerCase().includes(q) ||
+      m.provider.toLowerCase().includes(q) ||
+      (m.family && m.family.toLowerCase().includes(q))
+    );
+  });
+
+  const openCodeCard = (
+    <Card padding="md" className="border border-emerald-500/20 bg-surface shadow-xs space-y-4">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-line-subtle pb-4">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white shadow-xs">
+            <Terminal size={18} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-bold text-ink">OpenCode</h3>
+              <Badge tone={openCodeStatus?.installed ? 'success' : 'neutral'} dot={openCodeStatus?.installed}>
+                {openCodeStatus?.installed ? openCodeStatus.version || 'Installed' : 'Not installed'}
+              </Badge>
+              {openCodeModelsList.length > 0 && (
+                <Badge tone="brand">
+                  {openCodeModelsList.length} Models Loaded
+                </Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-2xs text-ink-muted">
+              Official OpenCode CLI • Free reasoning tiers and automated multi-provider model selection.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {!openCodeStatus?.installed && isAdmin && (
+            <Button size="sm" variant="primary" loading={openCodeInstalling} onClick={installOpenCode}>
+              Install OpenCode
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={RefreshCw}
+            loading={openCodeLoading}
+            onClick={refreshOpenCodeModels}
+          >
+            Refresh models
+          </Button>
+        </div>
+      </div>
+
+      {/* Subheader: CLI Info & Filter pills */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">CLI:</span>
+          <code className="rounded-md border border-line-subtle bg-inset px-2 py-0.5 font-mono text-2xs text-ink">
+            {openCodeStatus?.command || 'opencode.exe'}
+          </code>
+          {openCodeModelsList.length > 0 && (
+            <span className="text-2xs font-semibold text-emerald-600 dark:text-emerald-400 hidden sm:inline">
+              • Click any box to set as Active Default Model
+            </span>
+          )}
+        </div>
+
+        {openCodeModelsList.length > 0 && (
+          <div className="flex items-center gap-1">
+            {[
+              { id: 'all', label: `All (${openCodeModelsList.length})` },
+              { id: 'free', label: `Free Tier (${openCodeModelsList.filter((m) => m.free).length})` },
+              { id: 'opencode', label: `OpenCode Zen (${openCodeModelsList.filter((m) => m.provider === 'opencode').length})` },
+              { id: 'nvidia', label: `Nvidia (${openCodeModelsList.filter((m) => m.provider === 'nvidia').length})` },
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setOpenCodeFilter(f.id as any)}
+                className={cn(
+                  'rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all cursor-pointer',
+                  openCodeFilter === f.id
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-canvas border border-line text-ink-muted hover:text-ink'
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Model Cards Grid (Box format) */}
+      {openCodeLoading ? (
+        <div className="flex flex-col items-center justify-center py-10 rounded-xl border border-line-subtle bg-canvas">
+          <RefreshCw size={22} className="animate-spin text-emerald-500 mb-2" />
+          <span className="text-xs font-semibold text-ink-muted">Querying OpenCode models from CLI...</span>
+        </div>
+      ) : openCodeModelsList.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-line bg-canvas p-6 text-center text-xs text-ink-muted">
+          {openCodeStatus?.error ? (
+            <span className="text-rose-500">{openCodeStatus.error}</span>
+          ) : (
+            'No OpenCode models loaded. Click "Refresh models" above to query OpenCode CLI.'
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[460px] overflow-y-auto pr-1 no-scrollbar">
+          {filteredOpenCodeModels.map((m) => {
+            const isSelected = activeModel === m.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => handleSelectModel(m.id, m.provider || 'opencode')}
+                className={cn(
+                  'group flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-all shadow-2xs hover:shadow-xs relative cursor-pointer',
+                  isSelected
+                    ? 'border-emerald-500 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200 ring-1 ring-emerald-500/50'
+                    : 'border-line bg-canvas text-ink-muted hover:border-line-strong hover:bg-hover hover:text-ink'
+                )}
+              >
+                <div className="flex items-center justify-between w-full gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Terminal
+                      size={13}
+                      className={isSelected ? 'text-emerald-600 shrink-0' : 'text-ink-faint shrink-0 group-hover:text-ink'}
+                    />
+                    <span className="font-mono text-xs font-bold text-ink truncate" title={m.id}>
+                      {m.id}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {m.free && (
+                      <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.2 text-[9px] uppercase font-bold text-emerald-600 dark:text-emerald-400">
+                        Free
+                      </span>
+                    )}
+                    {isSelected && (
+                      <span className="rounded bg-emerald-600 text-white px-1.5 py-0.2 text-[9px] uppercase font-bold">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-[12px] font-semibold text-ink line-clamp-1">{m.name}</div>
+
+                <div className="flex flex-wrap items-center gap-1.5 mt-auto pt-1 text-[10px] text-ink-muted font-mono">
+                  <span className="rounded bg-surface px-1.5 py-0.5 border border-line-subtle text-ink-faint capitalize">
+                    {m.provider}
+                  </span>
+                  {m.context ? (
+                    <span className="rounded bg-surface px-1.5 py-0.5 border border-line-subtle text-ink-faint">
+                      ctx {m.context >= 1000 ? `${Math.round(m.context / 1000)}k` : m.context}
+                    </span>
+                  ) : null}
+                  {m.output ? (
+                    <span className="rounded bg-surface px-1.5 py-0.5 border border-line-subtle text-ink-faint">
+                      out {m.output >= 1000 ? `${Math.round(m.output / 1000)}k` : m.output}
+                    </span>
+                  ) : null}
+                  {m.family ? (
+                    <span className="rounded bg-surface px-1.5 py-0.5 border border-line-subtle text-ink-faint">
+                      {m.family}
+                    </span>
+                  ) : null}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Raw output accordion */}
+      {openCodeRawOutput && (
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setShowOpenCodeRaw(!showOpenCodeRaw)}
+            className="text-2xs font-semibold text-ink-faint hover:text-ink flex items-center gap-1 cursor-pointer"
+          >
+            <span>{showOpenCodeRaw ? '▼ Hide' : '▶ Show'} raw CLI output</span>
+          </button>
+          {showOpenCodeRaw && (
+            <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-line-subtle bg-inset p-2.5 font-mono text-[10px] text-ink-muted">
+              {openCodeRawOutput}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {openCodeStatus?.error && <p className="mt-1 text-xs text-rose-500">{openCodeStatus.error}</p>}
+    </Card>
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="nexus-page space-y-6">
       {/* Header */}
       <SectionHeading
         title="AI Models & LLM Providers"
@@ -1193,6 +1462,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
           {(
             [
               { id: 'all', label: 'All Providers' },
+              { id: 'opencode', label: 'OpenCode CLI' },
               { id: 'google', label: 'Google Gemini' },
               { id: 'anthropic', label: 'Anthropic Claude' },
               { id: 'openai', label: 'OpenAI & Codex' },
@@ -1226,6 +1496,9 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
           />
         </div>
       </div>
+
+      {/* PROVIDER 0: OpenCode CLI */}
+      {(activeFilter === 'all' || activeFilter === 'opencode') && openCodeCard}
 
       {/* PROVIDER 1: Google Gemini */}
       {(activeFilter === 'all' || activeFilter === 'google') && (
@@ -1782,7 +2055,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
                   type="text"
                   value={localEndpoint}
                   onChange={(e) => setLocalEndpoint(e.target.value)}
-                  placeholder="http://localhost:11434"
+                  placeholder={config.localLlmEndpoint}
                   required
                   className="flex-1 rounded-xl border border-line bg-canvas px-3.5 py-2.5 font-mono text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-purple-500 focus:outline-none"
                 />
@@ -1791,7 +2064,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
                 </Button>
               </div>
               <p className="mt-1 text-2xs text-ink-muted">
-                Ollama: <code className="font-mono text-ink">http://localhost:11434</code> • LM Studio: <code className="font-mono text-ink">http://localhost:1234/v1</code>
+                Local LLM default: <code className="font-mono text-ink">{config.localLlmEndpoint}</code>
               </p>
             </div>
           </form>
@@ -1832,11 +2105,11 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
                       Download via Terminal:
                     </span>
                     <div className="flex items-center justify-between gap-2 font-mono text-2xs bg-canvas px-2.5 py-1.5 rounded border border-line">
-                      <code>ollama run qwen2.5-coder:1.5b</code>
+                      <code>{`ollama run ${config.localLlmModel}`}</code>
                       <button
                         type="button"
                         onClick={() => {
-                          navigator.clipboard.writeText('ollama run qwen2.5-coder:1.5b');
+                          navigator.clipboard.writeText(`ollama run ${config.localLlmModel}`);
                           setToastMessage({ type: 'success', text: 'Copied command to clipboard!' });
                         }}
                         className="text-purple-600 hover:text-purple-700 font-sans font-semibold text-[11px]"

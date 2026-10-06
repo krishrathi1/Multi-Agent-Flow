@@ -5,6 +5,7 @@ import * as processService from '../services/process.service.js';
 import * as runner from '../services/agent-runner.service.js';
 import { prisma } from '../lib/prisma.js';
 import { validate } from '../middleware/validate.js';
+import { config } from '../config.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from '../services/git-deploy.service.js';
 
 const router = Router();
@@ -233,10 +234,12 @@ router.get('/:id/git-audit', async (req, res) => {
     let log = '';
     let diffStat = '';
     let latestCommit = '';
+    let branch = '';
     try {
       log = execSync('git log -n 3 --stat', { encoding: 'utf-8' });
       diffStat = execSync('git diff --stat HEAD~1 HEAD', { encoding: 'utf-8' });
       latestCommit = execSync('git log -1 --format="%H||%an||%ad||%s"', { encoding: 'utf-8' }).trim();
+      branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
     } catch {
       /* ignore git sub-errors */
     }
@@ -247,11 +250,12 @@ router.get('/:id/git-audit', async (req, res) => {
       processId: id,
       processName: proc.name,
       commit: {
-        hash: hash || 'd647c3496bb653a77c8a7d750583febba606e96c',
-        shortHash: hash?.slice(0, 8) || 'd647c349',
-        author: author || 'krishrathi1 <krishrathi877@gmail.com>',
-        date: date || new Date().toUTCString(),
-        message: message || 'feat: simplify agent creation with Build with AI, overhaul Agent Controls, Communications, and Mother Chat UI',
+        hash: hash || null,
+        shortHash: hash?.slice(0, 8) || null,
+        author: author || 'Unknown',
+        date: date || null,
+        message: message || null,
+        branch: branch || null,
       },
       log,
       diffStat,
@@ -261,10 +265,13 @@ router.get('/:id/git-audit', async (req, res) => {
       processId: id,
       processName: proc.name,
       commit: {
-        shortHash: 'd647c349',
-        message: 'feat: simplify agent creation with Build with AI, overhaul Agent Controls, Communications, and Mother Chat UI',
+        hash: null,
+        shortHash: null,
+        author: null,
+        date: null,
+        message: null,
       },
-      log: 'Git audit log initialized',
+      log: '',
       diffStat: '',
     });
   }
@@ -346,13 +353,7 @@ router.post('/test-api', async (req, res) => {
 router.post('/github-repos', async (req, res) => {
   const { token } = req.body;
   if (!token) {
-    return res.json({
-      repos: [
-        { name: 'Multi-Agent-Flow', full_name: 'krishrathi1/Multi-Agent-Flow', default_branch: 'main', description: 'Multi-Agent Production Workflow Orchestration System' },
-        { name: 'nexus-ai', full_name: 'krishrathi1/nexus-ai', default_branch: 'main', description: 'Autonomous agent runtime' },
-      ],
-      connected: false,
-    });
+    return res.json({ repos: [], connected: false });
   }
 
   try {
@@ -379,12 +380,7 @@ router.post('/github-repos', async (req, res) => {
     // ignore
   }
 
-  res.json({
-    repos: [
-      { name: 'Multi-Agent-Flow', full_name: 'krishrathi1/Multi-Agent-Flow', default_branch: 'main', description: 'Multi-Agent Production Workflow Orchestration System' },
-    ],
-    connected: false,
-  });
+  res.json({ repos: [], connected: false });
 });
 
 /** Create a new GitHub Repository via Personal Access Token */
@@ -499,7 +495,7 @@ router.post('/:id/auto-heal', async (req, res) => {
     proc.prompt.match(/Target GitHub Repository:\s*([^\s\(\n]+)/i) ||
     proc.prompt.match(/Action:\s*Create New GitHub Repository[\s\S]*?Name:\s*([^\n]+)/i);
   let targetRepo = repoMatch ? repoMatch[1].trim() : null;
-  if (targetRepo && !targetRepo.includes('/')) targetRepo = `krishrathi1/${targetRepo}`;
+  if (targetRepo && !targetRepo.includes('/') && config.defaultGithubOwner) targetRepo = `${config.defaultGithubOwner}/${targetRepo}`;
 
   if (targetRepo && ghToken) {
     pushResult = await pushWorkspaceToGitHub({

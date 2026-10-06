@@ -7,27 +7,26 @@ import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
+import { config } from './config.js';
 
 if (process.env.OTEL_DEBUG === 'true') {
   diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 }
 
-const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318';
-
 const sdk = new NodeSDK({
-  serviceName: process.env.OTEL_SERVICE_NAME || 'nexus-backend',
+  serviceName: config.otel.serviceName || 'nexus-backend',
   traceExporter: new OTLPTraceExporter({
-    url: `${otlpEndpoint}/v1/traces`,
+    url: `${config.otel.endpoint}/v1/traces`,
   }),
   metricReader: new PeriodicExportingMetricReader({
     exporter: new OTLPMetricExporter({
-      url: `${otlpEndpoint}/v1/metrics`,
+      url: `${config.otel.endpoint}/v1/metrics`,
     }),
     exportIntervalMillis: 30_000,
   }),
   logRecordProcessors: [
     new BatchLogRecordProcessor(
-      new OTLPLogExporter({ url: `${otlpEndpoint}/v1/logs` }),
+      new OTLPLogExporter({ url: `${config.otel.endpoint}/v1/logs` }),
     ),
   ],
   instrumentations: [
@@ -41,7 +40,9 @@ const sdk = new NodeSDK({
   ],
 });
 
-sdk.start();
+if (config.otel.enabled && config.otel.endpoint && config.otel.serviceName) sdk.start();
 
-process.on('SIGTERM', () => sdk.shutdown());
-process.on('SIGINT', () => sdk.shutdown());
+if (config.otel.enabled && config.otel.endpoint && config.otel.serviceName) {
+  process.on('SIGTERM', () => sdk.shutdown());
+  process.on('SIGINT', () => sdk.shutdown());
+}

@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { runClaudeCli, isClaudeCliEnabled } from '../lib/claude-cli.js';
 
@@ -379,7 +380,7 @@ export function planHeuristically(prompt: string, requested?: number): ProcessPl
    rather than failing the request.
    ---------------------------------------------------------------------- */
 
-const PLANNER_MODEL = 'claude-sonnet-5';
+const PLANNER_MODEL = config.defaultAgentRunModel;
 
 const PLANNER_SYSTEM = `You design small teams of autonomous AI agents ("production chains").
 
@@ -506,11 +507,11 @@ async function planWithLlm(prompt: string, requested?: number): Promise<ProcessP
 
   // 1. Try Google Gemini models
   if (geminiKey) {
-    for (const model of ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']) {
+    for (const model of config.geminiModels) {
       try {
         const combined = `${PLANNER_SYSTEM}\n\nUser Production Request:\n${ask}\n\nRespond ONLY with the JSON plan.`;
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          `${config.geminiApiBaseUrl}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
@@ -572,13 +573,13 @@ async function planWithLlm(prompt: string, requested?: number): Promise<ProcessP
   }
 
   // 3. Try Local PC Ollama
-  for (const ep of ['http://localhost:11434', 'http://127.0.0.1:11434', 'http://host.docker.internal:11434']) {
+  for (const ep of config.localLlmEndpoints) {
     try {
       const res = await fetch(`${ep}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'qwen2.5-coder:1.5b',
+          model: config.localLlmModel,
           prompt: `${PLANNER_SYSTEM}\n\nTask:\n${ask}\n\nRespond ONLY with JSON plan:`,
           stream: false,
         }),
@@ -588,7 +589,7 @@ async function planWithLlm(prompt: string, requested?: number): Promise<ProcessP
       if (res.ok) {
         const data = (await res.json()) as any;
         if (data?.response) {
-          const plan = parsePlanJson(data.response, prompt, 'ollama:qwen2.5-coder');
+          const plan = parsePlanJson(data.response, prompt, `ollama:${config.localLlmModel}`);
           if (plan && plan.agents.length > 0) return plan;
         }
       }

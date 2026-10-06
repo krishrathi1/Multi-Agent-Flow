@@ -98,13 +98,14 @@ export function ActivityFeed() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <ProcessScope align="right" />
+        <div className="flex items-center gap-2 self-start sm:self-auto w-full sm:w-auto">
+          <ProcessScope align="right" className="flex-1 sm:flex-initial min-w-0" />
           <Button
             variant="secondary"
             size="xs"
             icon={RefreshCw}
             loading={loading}
+            className="shrink-0"
             onClick={() =>
               fetchActivities({
                 agentId: filterAgent || undefined,

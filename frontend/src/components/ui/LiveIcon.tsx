@@ -127,7 +127,7 @@ export function LiveGatewayBadge({
         <>
           <LiveRadarBeacon size={6} tone="emerald" />
           <span className="tracking-wide">Live</span>
-          <LiveWaveform color="bg-emerald-500 dark:bg-emerald-400" className="scale-75 origin-left" />
+          <LiveWaveform color="bg-emerald-500 dark:bg-emerald-400" className="scale-75 origin-left hidden sm:inline-flex" />
         </>
       ) : (
         <>

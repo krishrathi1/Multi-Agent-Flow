@@ -48,7 +48,7 @@ export function Login() {
       <SEO
         title="Log In — MyceliumOps AI Agent Platform"
         description="Sign in to MyceliumOps, the AI agent orchestration and mission control platform by Blostem. Manage your autonomous AI agents, agentic workflows, and enterprise agent operations."
-        canonical="https://nexus.blostem.com/login"
+        canonical="/login"
         keywords="MyceliumOps login, AI agent platform login, Blostem AI"
       />
       <div className="w-full max-w-md">

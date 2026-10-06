@@ -276,16 +276,16 @@ export function AgentControls() {
               <div
                 key={agent.id}
                 onClick={() => setSelectedAgent(agent)}
-                className="w-full rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line hover:bg-hover/30 transition-all flex items-center justify-between gap-3 text-left cursor-pointer active:scale-[0.99]"
+                className="w-full rounded-2xl border border-line-subtle bg-surface p-3.5 sm:p-4 shadow-2xs hover:border-line hover:bg-hover/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left cursor-pointer active:scale-[0.99]"
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="w-10 h-10 rounded-2xl bg-brand-500/10 border border-brand-500/20 text-brand-600 dark:text-brand-400 flex items-center justify-center text-base shrink-0">
                     {agent.avatar ? agent.avatar : '🤖'}
                   </div>
 
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs sm:text-sm font-bold text-ink truncate">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs sm:text-sm font-bold text-ink">
                         {agent.displayName}
                       </span>
                       <Badge tone={tone} size="sm" dot pulse={isOnline}>
@@ -308,7 +308,7 @@ export function AgentControls() {
                 </div>
 
                 {/* Direct Actions: Activate / Deactivate Toggle + Directives */}
-                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto pt-2 sm:pt-0 border-t border-line-subtle/60 sm:border-0 justify-end">
                   <Button
                     variant={isOnline ? 'secondary' : 'primary'}
                     size="xs"
@@ -316,6 +316,7 @@ export function AgentControls() {
                     loading={togglingAgentId === agent.id}
                     onClick={(e) => handleToggleAgent(agent, e)}
                     className={cn(
+                      'flex-1 sm:flex-initial justify-center',
                       isOnline && 'text-amber-600 dark:text-amber-400 hover:text-rose-600 border-line'
                     )}
                   >
@@ -325,6 +326,7 @@ export function AgentControls() {
                   <Button
                     variant="secondary"
                     size="xs"
+                    className="flex-1 sm:flex-initial justify-center"
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelectedAgent(agent);

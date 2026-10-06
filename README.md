@@ -235,3 +235,7 @@ This starts:
 ## 📄 License
 
 This project is developed as part of the AIDevOps curriculum.
+
+## CI secrets
+
+The GitHub Actions test database and cryptographic test configuration are supplied through repository secrets: `CI_POSTGRES_PASSWORD`, `CI_JWT_SECRET`, `CI_JWT_REFRESH_SECRET`, and `CI_ENCRYPTION_KEY`. No test credentials are committed to the workflow.

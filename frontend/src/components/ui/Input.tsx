@@ -188,7 +188,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           className={cn(
             fieldBase,
             error ? fieldError : fieldIdle,
-            'h-9 appearance-none pl-3 pr-9 text-base',
+            'h-10 appearance-none pl-3.5 pr-10 text-sm font-medium cursor-pointer shadow-2xs',
             className,
           )}
           {...props}

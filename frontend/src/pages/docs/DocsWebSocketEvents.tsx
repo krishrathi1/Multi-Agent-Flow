@@ -8,7 +8,7 @@ export function DocsWebSocketEvents() {
       <SEO
         title="WebSocket Events — Real-time AI Agent Communication"
         description="Build live dashboards and integrations with real-time WebSocket event streaming from AI agents. Stream agent status, task updates, and board events with MyceliumOps by Blostem."
-        canonical="https://nexus.blostem.com/docs/websocket-events"
+        canonical="/docs/websocket-events"
         keywords="AI agent WebSocket, real-time agent events, live AI dashboard, agent event streaming, real-time AI communication, Blostem AI"
       />
       <h1 className="text-4xl font-bold text-white mb-2">WebSocket Events</h1>

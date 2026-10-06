@@ -4,7 +4,7 @@ import { api } from '../../lib/api';
 import type { Process } from '../../types';
 import { Card, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { Select } from '../ui/Input';
+import { CustomSelect } from '../ui/CustomSelect';
 import { useToast } from '../ui/Toast';
 
 /** Bundles can be pasted or dropped; anything larger is not a chain. */
@@ -107,23 +107,26 @@ export function ChainPortability({
             <p className="text-sm text-ink-subtle">No chains to export yet.</p>
           ) : (
             <div className="flex flex-wrap items-end gap-2">
-              <Select
-                label="Chain"
-                value={chainId}
-                onChange={(e) => setSelected(e.target.value)}
-                className="min-w-[12rem] flex-1"
-              >
-                {processes.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
+              <div className="min-w-[14rem] flex-1">
+                <label className="block text-2xs font-semibold uppercase tracking-[0.09em] text-ink-faint mb-1.5">
+                  Chain
+                </label>
+                <CustomSelect
+                  value={chainId}
+                  onChange={(val) => setSelected(val)}
+                  options={processes.map((p) => ({
+                    value: p.id,
+                    label: p.name,
+                  }))}
+                  size="md"
+                />
+              </div>
               <Button
                 variant="secondary"
                 icon={Download}
                 loading={busy}
                 onClick={handleExport}
+                className="h-9"
               >
                 Download
               </Button>

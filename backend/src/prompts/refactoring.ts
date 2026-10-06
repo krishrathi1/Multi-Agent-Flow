@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import type { PromptTemplate } from './index.js';
 
 export const refactoringPrompt: PromptTemplate = {
@@ -8,7 +9,7 @@ export const refactoringPrompt: PromptTemplate = {
     'Analyzes code and suggests refactoring opportunities using established patterns ' +
     '(Extract Method, Replace Conditional with Polymorphism, etc.). Produces before/after diffs.',
   category: 'refactoring',
-  models: ['gpt-4', 'claude-sonnet-4-20250514', 'starcoder2-15b', 'deepseek-coder-33b'],
+  models: config.promptModels['refactoring'] ?? config.geminiModels,
   systemPrompt: `You are a senior software architect specializing in code refactoring for {{language}}.
 
 Analyze the following code and identify refactoring opportunities. For each suggestion:

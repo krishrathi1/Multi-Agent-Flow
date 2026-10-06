@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -154,6 +154,8 @@ export function Approvals() {
   const [creatingTest, setCreatingTest] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ApprovalStatus | 'ALL'>('ALL');
   const [boardFilter, setBoardFilter] = useState<string>('ALL');
+  const [searchParams] = useSearchParams();
+  const highlightedId = searchParams.get('id');
 
   const fetchData = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) setRefreshing(true);
@@ -417,11 +419,29 @@ export function Approvals() {
             <CheckCircle2 size={24} />
           </div>
           <h3 className="text-sm font-bold text-ink mb-1">No Approvals Pending</h3>
-          <p className="text-xs text-ink-muted max-w-md mx-auto leading-relaxed">
+          <p className="text-xs text-ink-muted max-w-md mx-auto leading-relaxed mb-4">
             {statusFilter !== 'ALL'
               ? `No ${statusFilter.toLowerCase()} requests found matching the active filter.`
-              : 'All autonomous agent actions have been resolved. Approvals will appear here when agents request human sign-off.'}
+              : 'All autonomous agent actions have been resolved. Approvals will appear here when agents or Incident Doctor request human sign-off.'}
           </p>
+          <div className="flex items-center justify-center gap-2.5">
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Plus}
+              loading={creatingTest}
+              onClick={handleCreateTestApproval}
+            >
+              Generate Sample Request
+            </Button>
+            <Link
+              to="/alerts"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-line bg-inset text-xs font-semibold text-ink hover:text-ink-strong hover:bg-hover transition-colors"
+            >
+              <Activity size={13} />
+              Open Incident Doctor
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="space-y-3.5">
@@ -429,6 +449,7 @@ export function Approvals() {
             <ApprovalCard
               key={approval.id}
               approval={approval}
+              highlighted={approval.id === highlightedId}
               onApprove={handleApprove}
               onReject={handleReject}
             />
@@ -445,17 +466,33 @@ function ApprovalCard({
   approval,
   onApprove,
   onReject,
+  highlighted = false,
 }: {
   approval: Approval;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  highlighted?: boolean;
 }) {
   const [payloadExpanded, setPayloadExpanded] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'approve' | 'reject' | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (highlighted && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlighted]);
 
   const style = statusConfig[approval.status];
   const isPending = approval.status === 'PENDING';
   const StatusIcon = style.icon;
+
+  const payload = (approval.payload && typeof approval.payload === 'object' ? approval.payload : {}) as any;
+  const title = payload?.title || payload?.recommendedAction?.title || null;
+  const description = payload?.description || payload?.recommendedAction?.description || null;
+  const riskLevel = payload?.riskLevel || payload?.recommendedAction?.riskLevel || null;
+  const rootCause = payload?.rootCause || null;
+  const evidenceSummary = payload?.evidenceSummary || null;
 
   const handleActionClick = (action: 'approve' | 'reject') => {
     if (confirmAction === action) {
@@ -469,8 +506,10 @@ function ApprovalCard({
 
   return (
     <div
+      ref={cardRef}
       className={cn(
         'rounded-2xl border p-4.5 sm:p-5 transition-all shadow-2xs',
+        highlighted ? 'ring-2 ring-brand-500 border-brand-500 bg-brand-500/[0.02] shadow-md' : '',
         isPending
           ? 'border-amber-500/30 bg-surface shadow-xs'
           : 'border-line-subtle bg-surface/80 hover:border-line-strong',
@@ -480,8 +519,8 @@ function ApprovalCard({
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         {/* Left Content */}
         <div className="flex-1 min-w-0 space-y-3">
-          {/* Top Row: Status Badge + Action Type + Timestamp */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          {/* Top Row: Status Badge + Action Type + Risk Badge + Timestamp */}
+          <div className="flex flex-wrap items-center gap-2">
             <span
               className={cn(
                 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border',
@@ -498,10 +537,55 @@ function ApprovalCard({
               {approval.actionType}
             </span>
 
+            {riskLevel && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20">
+                {riskLevel} Risk
+              </span>
+            )}
+
             <span className="text-2xs font-mono font-medium text-ink-muted ml-auto shrink-0">
               {timeAgo(approval.createdAt)}
             </span>
           </div>
+
+          {/* Remediation Title & Description */}
+          {title && (
+            <div className="space-y-1">
+              <h4 className="text-sm sm:text-base font-bold text-ink tracking-tight">
+                {title}
+              </h4>
+              {description && (
+                <p className="text-xs text-ink-muted leading-relaxed">
+                  {description}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Root Cause Callout Box if incident */}
+          {rootCause && (
+            <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block">
+                Identified Root Cause
+              </span>
+              <p className="text-ink leading-relaxed font-medium">
+                {rootCause}
+              </p>
+              {evidenceSummary && (
+                <div className="flex items-center gap-3 pt-1 text-2xs font-mono text-ink-muted flex-wrap">
+                  {evidenceSummary.latencyP95Ms && (
+                    <span>P95: <strong className="text-rose-500">{evidenceSummary.latencyP95Ms}ms</strong></span>
+                  )}
+                  {evidenceSummary.errorRatePercent && (
+                    <span>Error Rate: <strong className="text-amber-500">{evidenceSummary.errorRatePercent}%</strong></span>
+                  )}
+                  {evidenceSummary.latestCommit && (
+                    <span>Commit: <strong className="text-ink">{evidenceSummary.latestCommit}</strong></span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Context Details */}
           <div className="flex flex-wrap items-center gap-y-1.5 gap-x-4 text-xs font-medium">

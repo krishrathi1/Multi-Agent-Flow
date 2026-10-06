@@ -1,8 +1,7 @@
 import { Helmet } from 'react-helmet-async';
+import { config } from '../config';
 
 const SITE_NAME = 'MyceliumOps by Blostem';
-const SITE_URL = 'https://nexus.blostem.com';
-const DEFAULT_OG_IMAGE = 'https://blostem.com/opengraph-image?c02686070905cb54';
 
 interface SEOProps {
   title: string;
@@ -19,12 +18,12 @@ export function SEO({
   description,
   canonical,
   keywords,
-  ogImage = DEFAULT_OG_IMAGE,
+  ogImage = config.defaultOgImage,
   structuredData,
   noindex = false,
 }: SEOProps) {
   const fullTitle = title.includes('Blostem') ? title : `${title} | Blostem`;
-  const canonicalUrl = canonical || SITE_URL;
+  const canonicalUrl = canonical ? new URL(canonical, `${config.siteUrl}/`).href : config.siteUrl;
 
   return (
     <Helmet>

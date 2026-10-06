@@ -53,20 +53,21 @@ export function StatCard({
         {Icon && (
           <span
             className={cn(
-              'grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs transition-colors',
+              'grid h-6.5 w-6.5 sm:h-7 sm:w-7 shrink-0 place-items-center rounded-full text-xs transition-colors',
               t.soft,
               t.text,
             )}
           >
-            <Icon size={14} strokeWidth={2} aria-hidden />
+            <Icon size={13} strokeWidth={2} className="sm:hidden" aria-hidden />
+            <Icon size={14} strokeWidth={2} className="hidden sm:inline" aria-hidden />
           </span>
         )}
       </div>
 
-      <div className="mt-2 flex items-baseline justify-between gap-2">
+      <div className="mt-1.5 sm:mt-2 flex items-baseline justify-between gap-2">
         <span
           className={cn(
-            'text-2xl font-bold tracking-tight leading-none',
+            'text-xl sm:text-2xl font-bold tracking-tight leading-none',
             muted ? 'text-ink-subtle' : 'text-ink',
           )}
         >
@@ -87,13 +88,13 @@ export function StatCard({
       </div>
 
       {(sublabel || deltaLabel) && (
-        <p className="mt-1.5 text-xs text-ink-faint truncate">{sublabel ?? deltaLabel}</p>
+        <p className="mt-1 sm:mt-1.5 text-[11px] sm:text-xs text-ink-faint truncate">{sublabel ?? deltaLabel}</p>
       )}
     </>
   );
 
   const shell = cn(
-    'group relative block rounded-2xl border border-line-subtle bg-surface p-4.5',
+    'group relative block rounded-2xl border border-line-subtle bg-surface p-3 sm:p-4.5',
     'shadow-xs transition-all duration-150',
     to &&
       'hover:-translate-y-0.5 hover:border-line-strong hover:shadow-sm active:translate-y-0',

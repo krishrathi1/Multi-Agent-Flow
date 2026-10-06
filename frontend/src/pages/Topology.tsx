@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
 import { cn, timeAgo } from '@/lib/utils';
 import { agentStatusTone } from '@/lib/design';
 import { useChartTheme } from '@/lib/use-chart-theme';
@@ -81,6 +82,18 @@ export function Topology() {
 
   useEffect(() => {
     loadData();
+
+    // Refresh the communication graph when a running production creates a
+    // real handoff/message. The graph is persisted server-side, so this is a
+    // lightweight re-read rather than trying to reconstruct edges in React.
+    const socket = getSocket();
+    const refreshGraph = () => { void loadData(); };
+    socket.on('agent:message', refreshGraph);
+    socket.on('process:run', refreshGraph);
+    return () => {
+      socket.off('agent:message', refreshGraph);
+      socket.off('process:run', refreshGraph);
+    };
   }, [loadData]);
 
   const activeProcess = processes.find((p) => p.id === scopeId) ?? null;
@@ -197,42 +210,42 @@ export function Topology() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <ProcessScope align="right" />
-          <Button variant="secondary" size="xs" icon={RefreshCw} loading={loading} onClick={loadData}>
+        <div className="flex items-center gap-2 self-start sm:self-auto w-full sm:w-auto">
+          <ProcessScope align="right" className="flex-1 sm:flex-initial min-w-0" />
+          <Button variant="secondary" size="xs" icon={RefreshCw} loading={loading} onClick={loadData} className="shrink-0">
             Refresh
           </Button>
         </div>
       </div>
 
       {/* KPI Metric Strip */}
-      <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5">
-        <div className="p-3 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
-          <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted block">Network Nodes</span>
-          <div className="text-lg sm:text-xl font-bold font-mono text-ink">{nodes.length}</div>
-          <span className="text-[10px] text-ink-faint font-mono block">Active agents</span>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
+        <div className="p-2.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1 min-w-0">
+          <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-ink-muted block truncate">Network Nodes</span>
+          <div className="text-base sm:text-xl font-bold font-mono text-ink">{nodes.length}</div>
+          <span className="text-[10px] text-ink-faint font-mono block truncate">Active agents</span>
         </div>
 
-        <div className="p-3 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
-          <span className="text-2xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">Links / Edges</span>
-          <div className="text-lg sm:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{edges.length}</div>
-          <span className="text-[10px] text-ink-faint font-mono block">Peer routes</span>
+        <div className="p-2.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1 min-w-0">
+          <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block truncate">Links / Edges</span>
+          <div className="text-base sm:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{edges.length}</div>
+          <span className="text-[10px] text-ink-faint font-mono block truncate">Peer routes</span>
         </div>
 
-        <div className="p-3 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1">
-          <span className="text-2xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 block">Messages</span>
-          <div className="text-lg sm:text-xl font-bold font-mono text-purple-600 dark:text-purple-400">{totalMessages}</div>
-          <span className="text-[10px] text-ink-faint font-mono block">Dispatched</span>
+        <div className="p-2.5 sm:p-4 rounded-2xl border border-line-subtle bg-surface shadow-2xs space-y-1 min-w-0">
+          <span className="text-[10px] sm:text-2xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 block truncate">Messages</span>
+          <div className="text-base sm:text-xl font-bold font-mono text-purple-600 dark:text-purple-400">{totalMessages}</div>
+          <span className="text-[10px] text-ink-faint font-mono block truncate">Dispatched</span>
         </div>
       </div>
 
       {/* View Switcher Chips: Graph View | Flow View */}
-      <div className="flex items-center gap-1.5 border-b border-line-subtle pb-2">
+      <div className="flex items-center gap-1.5 border-b border-line-subtle pb-2 overflow-x-auto">
         <button
           type="button"
           onClick={() => setViewMode('graph')}
           className={cn(
-            'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5',
+            'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 shrink-0',
             viewMode === 'graph'
               ? 'bg-brand-600 text-white shadow-xs'
               : 'border border-line bg-surface text-ink-muted hover:text-ink hover:bg-hover'
@@ -246,7 +259,7 @@ export function Topology() {
           type="button"
           onClick={() => setViewMode('flow')}
           className={cn(
-            'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5',
+            'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 shrink-0',
             viewMode === 'flow'
               ? 'bg-brand-600 text-white shadow-xs'
               : 'border border-line bg-surface text-ink-muted hover:text-ink hover:bg-hover'

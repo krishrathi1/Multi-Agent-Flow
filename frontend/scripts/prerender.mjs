@@ -16,7 +16,10 @@ import puppeteer from 'puppeteer';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = join(__dirname, '..', 'dist');
-const PORT = 4173;
+const PORT = Number(process.env.PRERENDER_PORT);
+const PRERENDER_HOST = process.env.PRERENDER_HOST;
+if (!Number.isInteger(PORT) || PORT <= 0) throw new Error('PRERENDER_PORT must be a positive integer');
+if (!PRERENDER_HOST) throw new Error('PRERENDER_HOST is required');
 
 // Public routes to pre-render
 const ROUTES = [
@@ -65,7 +68,7 @@ function startServer() {
 
   return new Promise((resolve) => {
     server.listen(PORT, () => {
-      console.log(`[prerender] Static server running on http://localhost:${PORT}`);
+      console.log(`[prerender] Static server running on http://${PRERENDER_HOST}:${PORT}`);
       resolve(server);
     });
   });
@@ -98,7 +101,7 @@ async function prerender() {
   for (const route of ROUTES) {
     try {
       const page = await browser.newPage();
-      const url = `http://localhost:${PORT}${route}`;
+      const url = `http://${PRERENDER_HOST}:${PORT}${route}`;
 
       await page.goto(url, {
         waitUntil: 'networkidle0',

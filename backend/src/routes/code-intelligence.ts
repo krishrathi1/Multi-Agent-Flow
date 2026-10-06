@@ -106,12 +106,12 @@ router.get('/stats', async (_req, res) => {
  * Ask a question about the repository and receive grounded explanations with citations.
  */
 router.post('/ask', async (req, res) => {
-  const { question } = req.body as { question: string };
+  const { question, model } = req.body as { question: string; model?: string };
   if (!question || !question.trim()) {
     return res.status(400).json({ error: 'Question is required' });
   }
 
-  const result = await codeIntel.askCodebase(question, req.organizationId);
+  const result = await codeIntel.askCodebase(question, req.organizationId, model);
   res.json(result);
 });
 

@@ -62,10 +62,10 @@ export function PageHeader({
         </nav>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-y-3.5 gap-x-6">
+        <div className="flex min-w-0 items-start sm:items-center gap-3">
           {Icon && (
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-line bg-surface/90 text-brand-600 dark:text-brand-400 shadow-xs">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-line bg-surface/90 text-brand-600 dark:text-brand-400 shadow-xs mt-0.5 sm:mt-0">
               <Icon size={18} strokeWidth={2} aria-hidden />
             </span>
           )}
@@ -85,7 +85,7 @@ export function PageHeader({
         </div>
 
         {actions && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+          <div className="w-full sm:w-auto shrink-0 flex items-center">{actions}</div>
         )}
       </div>
 

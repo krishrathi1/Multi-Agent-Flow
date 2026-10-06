@@ -708,11 +708,16 @@ async function main() {
   });
   console.log(`Created organization: ${org.name}`);
 
-  // Create admin user (pre-verified)
-  const hashedPassword = await bcrypt.hash('admin123', 10);
+  // Create admin user (pre-verified). Credentials are supplied by the runtime environment.
+  const seedAdminEmail = process.env.SEED_ADMIN_EMAIL?.trim();
+  const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!seedAdminEmail || !seedAdminPassword) {
+    throw new Error('SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD must be set before running the seed.');
+  }
+  const hashedPassword = await bcrypt.hash(seedAdminPassword, 10);
   const adminUser = await prisma.user.create({
     data: {
-      email: 'admin@nexus.local',
+      email: seedAdminEmail,
       password: hashedPassword,
       name: 'Admin',
       emailVerified: true,
@@ -729,7 +734,7 @@ async function main() {
       allBoardsWrite: true,
     },
   });
-  console.log('Created admin user (admin@nexus.local / admin123) as OWNER');
+  console.log(`Created admin user (${seedAdminEmail}) as OWNER`);
 
   // Create a sample API key for the org
   const apiKey = `nxk_${randomBytes(32).toString('hex')}`;
@@ -896,7 +901,7 @@ async function main() {
   console.log(`Created ${marketplaceSkills.length} marketplace skills`);
 
   console.log('\nSeeding complete!');
-  console.log('Login: admin@nexus.local / admin123');
+  console.log(`Login: ${seedAdminEmail} / <SEED_ADMIN_PASSWORD>`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

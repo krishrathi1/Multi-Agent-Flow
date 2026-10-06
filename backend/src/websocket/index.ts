@@ -3,6 +3,7 @@ import type { Server as HTTPServer } from 'http';
 import { verifyAccessToken } from '../lib/jwt.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+import { config } from '../config.js';
 
 // WebSocket rate limiting per client
 const WS_RATE_LIMIT_WINDOW_MS = 10_000; // 10 seconds
@@ -23,7 +24,7 @@ function checkWsRateLimit(socketId: string): boolean {
 // CORS: env-based origin configuration for WebSocket
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
-  : ['http://localhost:5173', 'http://localhost:5174'];
+  : config.corsOrigins;
 
 export function setupWebSocket(httpServer: HTTPServer) {
   const io = new SocketIOServer(httpServer, {

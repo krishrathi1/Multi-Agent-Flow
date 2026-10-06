@@ -236,9 +236,9 @@ export function Communications() {
         description="Agent-to-agent message threads and who they flow between."
         badge={activeProcess ? <Badge tone="brand">{activeProcess.name}</Badge> : undefined}
         actions={
-          <div className="flex items-center gap-2">
-            <ProcessScope align="right" />
-            <Button variant="secondary" size="sm" icon={RefreshCw} onClick={loadData} loading={loading}>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <ProcessScope align="right" className="flex-1 sm:flex-initial min-w-0" />
+            <Button variant="secondary" size="sm" icon={RefreshCw} onClick={loadData} loading={loading} className="shrink-0">
               Refresh
             </Button>
           </div>

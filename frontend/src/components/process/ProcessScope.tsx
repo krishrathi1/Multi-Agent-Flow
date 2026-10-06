@@ -29,11 +29,26 @@ export function ProcessScope({
 }) {
   const { processes, scopeId, setScope, fetchProcesses } = useProcessStore();
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<'left' | 'right'>(align);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (processes.length === 0) fetchProcesses();
   }, [processes.length, fetchProcesses]);
+
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const spaceRight = window.innerWidth - rect.left;
+    const spaceLeft = rect.right;
+    if (align === 'right' && spaceLeft < 295) {
+      setPlacement('left');
+    } else if (align === 'left' && spaceRight < 295) {
+      setPlacement('right');
+    } else {
+      setPlacement(align);
+    }
+  }, [open, align]);
 
   useEffect(() => {
     if (!open) return;
@@ -61,7 +76,7 @@ export function ProcessScope({
         aria-expanded={open}
         aria-label={`${label}: ${active ? active.name : 'All productions'}`}
         className={cn(
-          'inline-flex h-8 max-w-[280px] items-center gap-2 rounded-md border px-2.5',
+          'inline-flex h-8 w-full sm:w-auto max-w-[200px] xs:max-w-[240px] sm:max-w-[280px] items-center gap-2 rounded-md border px-2.5',
           'text-sm font-medium transition-colors duration-150',
           active
             ? cn(activeTone.soft, activeTone.text)
@@ -73,7 +88,7 @@ export function ProcessScope({
         ) : (
           <Layers size={14} strokeWidth={1.75} className="shrink-0" aria-hidden />
         )}
-        <span className="truncate">{active ? active.name : 'All productions'}</span>
+        <span className="truncate flex-1 text-left">{active ? active.name : 'All productions'}</span>
         <ChevronDown
           size={13}
           strokeWidth={2}
@@ -86,9 +101,9 @@ export function ProcessScope({
         <div
           role="listbox"
           className={cn(
-            'absolute top-full z-50 mt-2 max-h-[420px] w-72 overflow-y-auto animate-scale-in',
+            'absolute top-full z-50 mt-2 max-h-[420px] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto animate-scale-in',
             'rounded-lg border border-line bg-overlay p-1 shadow-e4',
-            align === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left',
+            placement === 'right' ? 'right-0 origin-top-right' : 'left-0 origin-top-left',
           )}
         >
           <button

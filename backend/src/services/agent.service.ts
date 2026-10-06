@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import { prisma } from '../lib/prisma.js';
 import type { AgentStatus } from '@prisma/client';
 import { getGatewayClient } from '../openclaw/client.js';
@@ -7,11 +8,7 @@ import { trace, SpanStatusCode } from '@opentelemetry/api';
 
 // Map Nexus LLM provider names to OpenClaw model identifiers.
 // These must match models in the gateway's agents.defaults.models allowlist.
-const PROVIDER_MODEL_MAP: Record<string, string> = {
-  anthropic: 'anthropic/claude-sonnet-4-5-20250929',
-  openai: 'openai/gpt-4o',
-  google: 'google/gemini-2.0-flash',
-};
+const PROVIDER_MODEL_MAP = config.providerModelMap;
 
 async function resolveGatewayModel(organizationId: string): Promise<string | undefined> {
   const provider = await prisma.llmProvider.findFirst({

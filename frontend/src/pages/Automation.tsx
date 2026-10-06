@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { getSocket } from '../lib/socket';
 import {
   BookmarkPlus,
   Check,
@@ -31,6 +32,7 @@ import { Button } from '../components/ui/Button';
 import { Badge, Chip } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input, Select, Textarea, Toggle } from '../components/ui/Input';
+import { CustomSelect } from '../components/ui/CustomSelect';
 import { EmptyState, Spinner } from '../components/ui/States';
 import { useToast } from '../components/ui/Toast';
 import { ChainPortability } from '../components/process/ChainPortability';
@@ -111,6 +113,27 @@ export function Automation() {
   useEffect(() => {
     fetchProcesses();
     load();
+
+    // Automation Hub is a live control surface: approvals, gate decisions,
+    // scheduled runs and webhook deliveries can change without this page
+    // being manually refreshed. Re-read the small orchestration payload when
+    // those server events arrive.
+    const socket = getSocket();
+    const refresh = () => { void load(); };
+    socket.on('approval:created', refresh);
+    socket.on('approval:resolved', refresh);
+    socket.on('gate:decided', refresh);
+    socket.on('run:awaiting-approval', refresh);
+    socket.on('process:run', refresh);
+    socket.on('process:updated', refresh);
+    return () => {
+      socket.off('approval:created', refresh);
+      socket.off('approval:resolved', refresh);
+      socket.off('gate:decided', refresh);
+      socket.off('run:awaiting-approval', refresh);
+      socket.off('process:run', refresh);
+      socket.off('process:updated', refresh);
+    };
   }, [fetchProcesses, load]);
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -575,20 +598,21 @@ function SaveTemplateModal({
       }
     >
       <div className="space-y-4">
-        <Select
-          label="Production"
-          required
-          value={processId}
-          onChange={(e) => setProcessId(e.target.value)}
-          error={error && !processId ? error : undefined}
-        >
-          <option value="">Choose a production…</option>
-          {processes.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} ({p.agentCount} agents)
-            </option>
-          ))}
-        </Select>
+        <div>
+          <label className="block text-2xs font-semibold uppercase tracking-[0.09em] text-ink-faint mb-1.5">
+            Production <span className="text-danger">*</span>
+          </label>
+          <CustomSelect
+            value={processId}
+            onChange={(val) => setProcessId(val)}
+            options={processes.map((p) => ({
+              value: p.id,
+              label: `${p.name} (${p.agentCount} agents)`,
+            }))}
+            placeholder="Choose a production…"
+          />
+          {error && !processId && <p className="mt-1 text-xs text-danger">{error}</p>}
+        </div>
         <Input
           label="Template name"
           required
@@ -665,20 +689,21 @@ function ScheduleModal({
       }
     >
       <div className="space-y-4">
-        <Select
-          label="Production"
-          required
-          value={processId}
-          onChange={(e) => setProcessId(e.target.value)}
-          error={error}
-        >
-          <option value="">Choose a production…</option>
-          {processes.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </Select>
+        <div>
+          <label className="block text-2xs font-semibold uppercase tracking-[0.09em] text-ink-faint mb-1.5">
+            Production <span className="text-danger">*</span>
+          </label>
+          <CustomSelect
+            value={processId}
+            onChange={(val) => setProcessId(val)}
+            options={processes.map((p) => ({
+              value: p.id,
+              label: p.name,
+            }))}
+            placeholder="Choose a production…"
+          />
+          {error && !processId && <p className="mt-1 text-xs text-danger">{error}</p>}
+        </div>
 
         <div>
           <p className="mb-2 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-faint">
@@ -773,19 +798,20 @@ function WebhookModal({
       }
     >
       <div className="space-y-4">
-        <Select
-          label="Production"
-          required
-          value={processId}
-          onChange={(e) => setProcessId(e.target.value)}
-        >
-          <option value="">Choose a production…</option>
-          {processes.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </Select>
+        <div>
+          <label className="block text-2xs font-semibold uppercase tracking-[0.09em] text-ink-faint mb-1.5">
+            Production <span className="text-danger">*</span>
+          </label>
+          <CustomSelect
+            value={processId}
+            onChange={(val) => setProcessId(val)}
+            options={processes.map((p) => ({
+              value: p.id,
+              label: p.name,
+            }))}
+            placeholder="Choose a production…"
+          />
+        </div>
         <Input
           label="Destination URL"
           required

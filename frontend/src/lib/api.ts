@@ -405,7 +405,7 @@ export const api = {
   },
   tasks: {
     list: () => request<Task[]>('/tasks'),
-    create: (data: { title: string; description?: string; priority?: string; agentId?: string }) =>
+    create: (data: { title: string; description?: string; priority?: string; status?: string; agentId?: string; boardId?: string }) =>
       request<Task>('/tasks', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<Task>) =>
       request<Task>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -515,8 +515,8 @@ export const api = {
       request<ChatResponse>(`/agents/${agentId}/chat`, { method: 'POST', body: JSON.stringify({ message }) }),
     motherHistory: (processId?: string) =>
       request<ChatHistory>(`/agents/mother/history${processId ? `?processId=${encodeURIComponent(processId)}` : ''}`),
-    sendToMother: (message: string, processId?: string) =>
-      request<ChatResponse>('/agents/mother/chat', { method: 'POST', body: JSON.stringify({ message, processId }) }),
+    sendToMother: (message: string, processId?: string, model?: string) =>
+      request<ChatResponse>('/agents/mother/chat', { method: 'POST', body: JSON.stringify({ message, processId, model }) }),
   },
   files: {
     list: (agentId: string) => request<WorkspaceFile[]>(`/agents/${agentId}/files`),
@@ -572,8 +572,28 @@ export const api = {
     generate: (agentId: string) =>
       request<{ token: string }>(`/agents/${agentId}/token`, { method: 'POST' }),
   },
+  opencode: {
+    status: () => request<{ installed: boolean; version: string | null; command: string; error?: string }>('/opencode/status'),
+    models: () => request<{
+      installed: boolean;
+      output: string;
+      models?: Array<{
+        id: string;
+        name: string;
+        provider: string;
+        family?: string;
+        status?: string;
+        context?: number;
+        output?: number;
+        free?: boolean;
+      }>;
+      error?: string;
+    }>('/opencode/models'),
+    install: () => request<{ output: string; status: { installed: boolean; version: string | null; command: string } }>('/opencode/install', { method: 'POST' }),
+  },
   llmProviders: {
     list: () => request<LlmProvider[]>('/llm-providers'),
+    availableModels: () => request<{ models: Array<{ id: string; name: string; provider: string; source: string }> }>('/llm-providers/available-models'),
     upsert: (data: { provider: string; mode: string; apiKey?: string }) =>
       request<LlmProvider>('/llm-providers', { method: 'POST', body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/llm-providers/${id}`, { method: 'DELETE' }),

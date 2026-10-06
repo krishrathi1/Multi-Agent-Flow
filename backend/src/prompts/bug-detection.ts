@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import type { PromptTemplate } from './index.js';
 
 export const bugDetectionPrompt: PromptTemplate = {
@@ -8,7 +9,7 @@ export const bugDetectionPrompt: PromptTemplate = {
     'Scans code for potential bugs, race conditions, null pointer issues, off-by-one errors, ' +
     'resource leaks, and common anti-patterns. Prioritizes findings by likelihood and severity.',
   category: 'bug-detection',
-  models: ['gpt-4', 'claude-sonnet-4-20250514', 'code-llama-34b', 'deepseek-coder-33b'],
+  models: config.promptModels['bug-detection'] ?? config.geminiModels,
   systemPrompt: `You are a static analysis expert specializing in finding bugs in {{language}} code.
 
 Scan the following code for potential bugs and issues. Check for:

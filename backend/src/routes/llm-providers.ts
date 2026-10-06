@@ -1,12 +1,37 @@
 import { Router } from 'express';
 import * as llmService from '../services/llm-provider.service.js';
 import { requireRole } from '../middleware/auth.js';
+import { config } from '../config.js';
+import * as opencode from '../services/opencode.service.js';
 
 const router = Router();
 
 router.get('/', async (req, res) => {
   const providers = await llmService.getProviders(req.organizationId!);
   res.json(providers);
+});
+
+
+router.get('/available-models', async (_req, res) => {
+  const models = new Map<string, { id: string; name: string; provider: string; source: string }>();
+  const templateCategories = new Set(['code-review', 'code-completion', 'code-explanation', 'refactoring']);
+  for (const [provider, ids] of Object.entries(config.promptModels)) {
+    if (templateCategories.has(provider)) continue;
+    for (const id of ids) {
+      const modelId = `${provider}/${id}`;
+      models.set(modelId, { id: modelId, name: id, provider, source: 'nexus-config' });
+    }
+  }
+  const localId = process.env.LOCAL_LLM_MODEL?.trim();
+  if (localId) models.set(`local/${localId}`, { id: `local/${localId}`, name: localId, provider: 'local', source: 'nexus-config' });
+
+  const open = await opencode.models();
+  if (open.installed && Array.isArray(open.models)) {
+    for (const m of open.models) {
+      models.set(m.id, { id: m.id, name: m.name, provider: m.provider, source: 'opencode' });
+    }
+  }
+  res.json({ models: Array.from(models.values()) });
 });
 
 router.get('/local-models', async (req, res) => {

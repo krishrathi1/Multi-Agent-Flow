@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/ui/PageHeader';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -135,6 +135,7 @@ function CustomDropdown<T extends string>({
 }
 
 export function Alerts() {
+  const navigate = useNavigate();
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,6 +143,7 @@ export function Alerts() {
   const [ackFilter, setAckFilter] = useState<'all' | 'unacknowledged' | 'acknowledged'>('all');
   const [showAddRule, setShowAddRule] = useState(false);
   const [activeTab, setActiveTab] = useState<'events' | 'rules'>('events');
+  const [submittingToApprovals, setSubmittingToApprovals] = useState(false);
 
   // DevOps Incident Agent State
   const [incidentSymptom, setIncidentSymptom] = useState('');
@@ -246,6 +248,58 @@ export function Alerts() {
       setShowAddRule(false);
     } catch (err) {
       console.error('Failed to create rule:', err);
+    }
+  };
+
+  const handleReviewInApprovals = async () => {
+    if (!activeInvestigation) {
+      navigate('/approvals');
+      return;
+    }
+    if (activeInvestigation.approvalId) {
+      navigate(`/approvals?id=${activeInvestigation.approvalId}`);
+      return;
+    }
+    try {
+      setSubmittingToApprovals(true);
+      const boards = await api.boards.list().catch(() => []);
+      let targetBoardId = boards[0]?.id;
+      if (!targetBoardId) {
+        const newBoard = await api.boards.create({ name: 'Production Operations' });
+        targetBoardId = newBoard.id;
+      }
+      const rec = activeInvestigation.recommendedAction;
+      const created = await api.approvals.create({
+        boardId: targetBoardId,
+        actionType: rec?.type || 'ROLLBACK_DEPLOYMENT',
+        confidence: activeInvestigation.confidence || 0.95,
+        payload: {
+          incidentId: activeInvestigation.id,
+          title: rec?.title || 'Incident Remediation',
+          description: rec?.description || 'Autonomous incident remediation action',
+          riskLevel: rec?.riskLevel || 'LOW',
+          rootCause: activeInvestigation.rootCause,
+          affectedServices: activeInvestigation.affectedServices,
+          commandOrPayload: rec?.commandOrPayload,
+          evidenceSummary: {
+            latencyP95Ms: activeInvestigation.evidence?.metrics?.latencyP95Ms,
+            errorRatePercent: activeInvestigation.evidence?.metrics?.errorRatePercent,
+            latestCommit: activeInvestigation.evidence?.deployments?.commitHash,
+            latestCommitMessage: activeInvestigation.evidence?.deployments?.commitMessage,
+          },
+        },
+      });
+      setActiveInvestigation((prev: any) => ({
+        ...prev,
+        approvalId: created.id,
+        status: 'AWAITING_APPROVAL',
+      }));
+      navigate(`/approvals?id=${created.id}`);
+    } catch (err) {
+      console.error('Failed to dispatch approval:', err);
+      navigate('/approvals');
+    } finally {
+      setSubmittingToApprovals(false);
     }
   };
 
@@ -661,14 +715,16 @@ export function Alerts() {
                   <p className="text-[11px] text-ink-muted">{activeInvestigation.recommendedAction.description}</p>
                 </div>
 
-                <Link
-                  to="/approvals"
-                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-xs transition-all shrink-0 flex items-center justify-center gap-1.5"
+                <button
+                  type="button"
+                  onClick={handleReviewInApprovals}
+                  disabled={submittingToApprovals}
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-xs transition-all shrink-0 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <ShieldCheck size={14} />
-                  Review in Approvals
+                  {submittingToApprovals ? 'Dispatching to Queue...' : 'Review in Approvals'}
                   <ArrowRight size={13} />
-                </Link>
+                </button>
               </div>
             )}
           </div>

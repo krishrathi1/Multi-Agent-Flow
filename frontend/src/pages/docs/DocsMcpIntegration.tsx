@@ -9,7 +9,7 @@ export function DocsMcpIntegration() {
       <SEO
         title="MCP Integration — Connect AI Agent Tools to Nexus"
         description="Integrate Model Context Protocol (MCP) servers with your AI agents. Connect external tools, data sources, and APIs to autonomous agents using Nexus by Blostem."
-        canonical="https://nexus.blostem.com/docs/mcp-integration"
+        canonical="/docs/mcp-integration"
         keywords="MCP integration, Model Context Protocol, AI agent tools, AI agent data sources, tool binding, Nexus AI platform, Blostem"
       />
       <h1 className="text-4xl font-bold text-white mb-2">MCP Integration</h1>

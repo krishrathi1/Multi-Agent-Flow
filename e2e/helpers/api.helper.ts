@@ -4,7 +4,7 @@ export class ApiHelper {
   private baseUrl: string;
   private token = '';
 
-  constructor(baseUrl = 'http://localhost:4000') {
+  constructor(baseUrl = process.env.E2E_API_URL || 'http://localhost:4000') {
     this.baseUrl = baseUrl;
   }
 

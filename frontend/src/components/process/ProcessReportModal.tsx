@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { config } from '../../config';
 import {
   Check,
   CheckCircle2,
@@ -36,6 +37,8 @@ export function ProcessReportModal({ process, open, onClose }: ProcessReportModa
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [files, setFiles] = useState<WorkspaceArtifact[]>([]);
+  const [reportGitHash, setReportGitHash] = useState<string | null>(null);
+  const [reportGitBranch, setReportGitBranch] = useState<string | null>(null);
   const toast = useToast();
 
   useEffect(() => {
@@ -49,6 +52,8 @@ export function ProcessReportModal({ process, open, onClose }: ProcessReportModa
     ])
       .then(([artifacts, gitAudit]) => {
         setFiles(artifacts);
+        setReportGitHash(gitAudit?.commit?.shortHash ?? gitAudit?.commit?.hash ?? null);
+        setReportGitBranch(gitAudit?.commit?.branch ?? null);
         setReportContent(generateCommitAuditReport(process, artifacts, gitAudit));
       })
       .catch(() => {
@@ -58,17 +63,17 @@ export function ProcessReportModal({ process, open, onClose }: ProcessReportModa
   }, [open, process]);
 
   const generateCommitAuditReport = (p: Process, artifacts: WorkspaceArtifact[], gitAudit: any) => {
-    const commitMsg = gitAudit?.commit?.message || 'feat: simplify agent creation with Build with AI, overhaul Agent Controls, Communications, and Mother Chat UI';
-    const commitHash = gitAudit?.commit?.hash || 'd647c3496bb653a77c8a7d750583febba606e96c';
-    const author = gitAudit?.commit?.author || 'krishrathi1 <krishrathi877@gmail.com>';
+    const commitMsg = gitAudit?.commit?.message || 'No commit metadata available';
+    const commitHash = gitAudit?.commit?.hash || 'N/A';
+    const author = gitAudit?.commit?.author || 'Unknown';
     const date = gitAudit?.commit?.date || new Date().toUTCString();
 
     return `# 📋 Git Commit & Autonomous Production Audit Report
 
-**Repository Target:** \`krishrathi1/Multi-Agent-Flow\`  
+**Repository Target:** \`${p.prompt.match(/Target GitHub Repository:\s*([^\s(\n]+)/i)?.[1] || 'Not configured'}\`  
 **Production Name:** \`${p.name}\`  
 **Report Generated:** ${new Date().toLocaleString()}  
-**Overall Architecture & Security Score:** **9.6 / 10**  
+**Overall Architecture & Security Score:** **Not calculated**  
 
 ---
 
@@ -77,52 +82,25 @@ export function ProcessReportModal({ process, open, onClose }: ProcessReportModa
 - **Commit Message:** **\`${commitMsg}\`**
 - **Author:** \`${author}\`
 - **Date & Timestamp:** \`${date}\`
-- **Branch:** \`main\` (Up to date with origin/main)
+- **Branch:** \`${gitAudit?.commit?.branch || 'Unknown'}\`
 
 ---
 
-## 📂 Changed Files in this Commit (+653 / -827 lines)
+## 📂 Workspace Artifacts
 
-| File Path | Status | Changes | Description |
-|---|---|---|---|
-| \`frontend/src/components/process/CreateProcessModal.tsx\` | 🟡 Modified | +240 / -433 | Added **"✨ Build with AI"** 1-click autonomous fleet builder with local/cloud model switcher. |
-| \`frontend/src/pages/AgentControls.tsx\` | 🟡 Modified | +310 / -217 | Complete UI redesign with high-contrast cards, pause/resume, instruction injection & SOUL.md editor. |
-| \`frontend/src/pages/Chat.tsx\` | 🟡 Modified | +80 / -59 | Redesigned **Mother Chat** with scoped production dropdown, supervisor badges & markdown composer. |
-| \`frontend/src/pages/Communications.tsx\` | 🟡 Modified | +65 / -58 | Overhauled thread cards, sender/receiver transcript bubbles, and glassmorphic network graph. |
-| \`frontend/src/components/layout/Sidebar.tsx\` | 🟡 Modified | +0 / -5 | Removed unneeded modules (Prompt Lab, Code Intelligence, Custom Fields, Automation). |
-| \`frontend/src/App.tsx\` | 🟡 Modified | +13 / -1 | Cleaned route definitions and bundle imports for removed modules. |
+${artifacts.length ? artifacts.map((f: any) => `- \`${f.path || f.name || 'unknown'}\``).join('\n') : '- No workspace artifacts were reported.'}
 
----
+## 🚀 Production Summary
 
-## 🚀 Key Feature Upgrades in this Commit
+- Production status: **${p.status}**
+- Agents: **${p.agentCount ?? p.agents?.length ?? 0}**
+- Tasks: **${p.taskCount ?? 0}**
+- Activities: **${p.activityCount ?? 0}**
+- Commit message: **${commitMsg}**
 
-### 1. ✨ "Build with AI" (Simplified Agent Creation)
-- **1-Click Requirement Templates:** Added templates for *Code Review & Security Audit*, *Fullstack Feature & API Builder*, *Automated QA*, and *DevOps CI/CD*.
-- **Inference Engine Switcher:** Seamlessly switch between Local PC models (\`qwen2.5-coder:1.5b\` • 0 Token Cost) and Cloud Gemini Flash.
-- **Fleet Size Selector:** Choose between 1 Solo Specialist to 4-Stage Full Autonomous Teams.
+## 🛡️ Verification
 
-### 2. 🎛️ Agent Controls Overhaul
-- **High-Contrast Cards:** Fixed light/dark theme contrast; text and badges are crisp and legible.
-- **Human-in-the-Loop Actions:** Added Pause, Resume, and real-time Instruction Injection directly into agent working memory.
-- **Directives & History:** In-card collapsible SOUL.md editor and live command history audit logs.
-
-### 3. 💬 Communications & Mother Chat Upgrades
-- **Transcript Bubbles:** Enhanced agent-to-agent message flow with directional routing badges.
-- **Mother Chat Intelligence:** Central orchestrator with one-way command protocol and quick ask questions.
-
-### 4. 🧹 Codebase Cleanup
-- Completely purged unused pages and navigation items (Prompt Lab, Code Intelligence, Custom Fields, Automation) to minimize bundle size and eliminate clutter.
-
----
-
-## 🛡️ Security, Quality & Performance Verification
-
-| Category | Evaluation | Verdict | Notes |
-|---|---|---|---|
-| 🔒 **Security Audit** | Clean | ✅ Passed | No plaintext secrets or exposed tokens; environment variables protected |
-| ⚡ **Performance** | Optimized | ✅ Passed | Zero unneeded re-renders; Vite build compressed to 383 kB gzip |
-| 📐 **Type Conformance** | Strict | ✅ Passed | Full TypeScript strict typechecking passed with 0 errors |
-| 🧪 **Container Health** | Stable | ✅ Passed | Docker containers (backend, frontend, postgres) healthy & synced |
+This report displays repository metadata returned by the backend. It does not claim a security, performance, TypeScript, or container score unless those checks were actually executed.
 
 ---
 *Report generated automatically by Nexus AI Multi-Agent Intelligence Engine.*`;
@@ -180,8 +158,8 @@ export function ProcessReportModal({ process, open, onClose }: ProcessReportModa
                 <GitCommit size={13} className="text-brand-500" />
                 Latest Commit
               </div>
-              <p className="mt-1 text-md font-semibold text-ink truncate font-mono">d647c349</p>
-              <span className="text-2xs text-brand-600 dark:text-brand-400 font-medium">main branch</span>
+              <p className="mt-1 text-md font-semibold text-ink truncate font-mono">{reportGitHash || 'N/A'}</p>
+              <span className="text-2xs text-brand-600 dark:text-brand-400 font-medium">{reportGitBranch || 'Unknown branch'}</span>
             </div>
 
             <div className="rounded-lg border border-line-subtle bg-inset p-3">

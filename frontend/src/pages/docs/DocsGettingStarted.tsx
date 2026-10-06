@@ -8,7 +8,7 @@ export function DocsGettingStarted() {
       <SEO
         title="Getting Started with MyceliumOps — AI Agent Platform Documentation"
         description="Learn how to set up MyceliumOps, the AI agent orchestration platform by Blostem. Connect gateways, deploy autonomous AI agents, and start building agentic workflows in minutes."
-        canonical="https://nexus.blostem.com/docs"
+        canonical="/docs"
         keywords="AI agent setup, getting started AI agents, MyceliumOps documentation, Blostem AI platform, agentic workflow tutorial, AI agent deployment guide"
       />
       <h1 className="text-4xl font-bold text-white mb-2">Getting Started with MyceliumOps</h1>

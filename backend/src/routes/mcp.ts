@@ -103,6 +103,7 @@ orgMcpRouter.post('/', async (req, res) => {
       }
     }
     const server = await mcpService.addMcpServer(targetAgentId, { name, url, transport });
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:created', server);
     res.status(201).json(server);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -118,6 +119,7 @@ orgMcpRouter.post('/:id/refresh', async (req: any, res) => {
   if (!server) return res.status(404).json({ error: 'MCP server not found' });
   try {
     const tools = await mcpService.refreshMcpTools(server.id, server.agentId);
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:updated', { id: server.id, tools, lastConnected: new Date().toISOString() });
     res.json(tools);
   } catch (error: any) {
     res.status(502).json({ error: error.message });
@@ -153,6 +155,7 @@ orgMcpRouter.patch('/:id', async (req: any, res) => {
   if (!server) return res.status(404).json({ error: 'MCP server not found' });
   try {
     const updated = await mcpService.updateMcpServer(server.id, server.agentId, req.body);
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:updated', updated);
     res.json(updated);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -168,6 +171,7 @@ orgMcpRouter.delete('/:id', async (req: any, res) => {
   if (!server) return res.status(404).json({ error: 'MCP server not found' });
   try {
     await mcpService.deleteMcpServer(server.id, server.agentId);
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:deleted', { id: server.id });
     res.status(204).end();
   } catch (error: any) {
     res.status(400).json({ error: error.message });

@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import type { PromptTemplate } from './index.js';
 
 export const codeCompletionPrompt: PromptTemplate = {
@@ -8,7 +9,7 @@ export const codeCompletionPrompt: PromptTemplate = {
     'Completes partial code by inferring intent from context, imports, types, and surrounding code. ' +
     'Generates idiomatic, type-safe completions that integrate seamlessly.',
   category: 'code-completion',
-  models: ['starcoder2-15b', 'code-llama-34b', 'deepseek-coder-33b', 'gpt-4', 'claude-sonnet-4-20250514'],
+  models: config.promptModels['code-completion'] ?? config.geminiModels,
   systemPrompt: `You are an AI code completion engine for {{language}}.
 
 Given the following partial code, complete it by:

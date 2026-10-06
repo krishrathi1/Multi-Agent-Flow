@@ -17,17 +17,14 @@ router.post('/', async (req, res) => {
     const { commit, branch, repo } = req.body || {};
     logger.info({ commit, branch, repo }, 'Received Git push / commit auto-trigger');
 
-    // Find target production process
-    let proc = await prisma.process.findFirst({
-      where: {
-        OR: [
-          { name: { contains: 'Multi-Agent-Flow', mode: 'insensitive' } },
-          { prompt: { contains: 'Multi-Agent-Flow', mode: 'insensitive' } },
-          { name: { contains: 'Review', mode: 'insensitive' } },
-        ],
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+    // Prefer the process whose prompt references the pushed repository;
+    // otherwise fall back to the most recently updated process.
+    const repoFilter = typeof repo === 'string' && repo.trim()
+      ? [{ prompt: { contains: repo.trim(), mode: 'insensitive' as const } }]
+      : [];
+    let proc = repoFilter.length
+      ? await prisma.process.findFirst({ where: { OR: repoFilter }, orderBy: { updatedAt: 'desc' } })
+      : null;
 
     if (!proc) {
       proc = await prisma.process.findFirst({ orderBy: { updatedAt: 'desc' } });

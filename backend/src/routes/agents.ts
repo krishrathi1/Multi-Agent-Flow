@@ -167,7 +167,7 @@ router.get('/mother/history', async (req, res) => {
 
 router.post('/mother/chat', async (req, res) => {
   try {
-    const { message, processId } = req.body;
+    const { message, processId, model } = req.body;
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'Message is required' });
     }
@@ -175,6 +175,7 @@ router.post('/mother/chat', async (req, res) => {
       req.organizationId!,
       message,
       processId,
+      model,
     );
     res.json(response);
   } catch (err: any) {

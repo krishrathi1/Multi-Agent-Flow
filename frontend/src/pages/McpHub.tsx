@@ -1,3 +1,4 @@
+import { config } from '../config';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Cpu,
@@ -34,6 +35,7 @@ import { LiveRadarBeacon, LiveWaveform, LiveGearIcon } from '../components/ui/Li
 import { LottieAnimation } from '../components/ui/LottieAnimation';
 import { HourglassLoader } from '../components/ui/HourglassLoader';
 import { api } from '../lib/api';
+import { getSocket } from '../lib/socket';
 import { cn, timeAgo } from '../lib/utils';
 import type { McpServer, McpTool, Agent } from '../types';
 
@@ -153,74 +155,7 @@ export function McpHub() {
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'DEPLOY' | 'DEV' | 'DATA' | 'SEARCH'>('ALL');
 
   // Popular standard MCP Server Presets (including Vercel, GitHub, Postgres, etc.)
-  const MCP_PRESETS = [
-    {
-      id: 'vercel',
-      name: 'Vercel Deployment MCP',
-      category: 'DEPLOY',
-      icon: '▲',
-      badge: 'Deploy',
-      url: 'https://mcp.vercel.com/sse',
-      transport: 'SSE' as const,
-      description: 'Trigger instant frontend deployments, manage preview domains, inspect Vercel logs, and fetch environment variables directly from AI agents.',
-      tools: ['deploy_project', 'list_deployments', 'get_deployment_logs', 'manage_env_vars', 'alias_domain'],
-    },
-    {
-      id: 'github',
-      name: 'GitHub Cloud & Git MCP',
-      category: 'DEV',
-      icon: '🐙',
-      badge: 'Code & PRs',
-      url: 'http://host.docker.internal:8000/sse',
-      transport: 'SSE' as const,
-      description: 'Create pull requests, search repositories, push commits, review diffs, and inspect workflow CI statuses.',
-      tools: ['create_pull_request', 'get_file_contents', 'push_files', 'search_code', 'list_issues'],
-    },
-    {
-      id: 'filesystem',
-      name: 'Secure Filesystem MCP',
-      category: 'DEV',
-      icon: '📁',
-      badge: 'Filesystem',
-      url: 'http://host.docker.internal:8001/sse',
-      transport: 'SSE' as const,
-      description: 'Local workspace file manipulation, directory trees, diff patching, and file creation with granular safety permissions.',
-      tools: ['read_file', 'write_file', 'list_directory', 'directory_tree', 'move_file'],
-    },
-    {
-      id: 'postgres',
-      name: 'PostgreSQL Database MCP',
-      category: 'DATA',
-      icon: '🐘',
-      badge: 'Database',
-      url: 'http://host.docker.internal:8002/sse',
-      transport: 'SSE' as const,
-      description: 'Run parameterized read-only queries, introspect database schemas, generate ER diagrams, and check execution plans.',
-      tools: ['query', 'list_tables', 'describe_table', 'explain_query'],
-    },
-    {
-      id: 'docker',
-      name: 'Docker & Container MCP',
-      category: 'DEPLOY',
-      icon: '🐳',
-      badge: 'Containers',
-      url: 'http://host.docker.internal:8003/sse',
-      transport: 'SSE' as const,
-      description: 'Inspect running containers, stream container logs, trigger docker builds, and manage volumes.',
-      tools: ['list_containers', 'container_logs', 'restart_container', 'inspect_image'],
-    },
-    {
-      id: 'brave-search',
-      name: 'Brave Web Search MCP',
-      category: 'SEARCH',
-      icon: '🦁',
-      badge: 'Search',
-      url: 'http://host.docker.internal:8004/sse',
-      transport: 'SSE' as const,
-      description: 'Real-time web search index, documentation retrieval, news scanning, and fact-checking for autonomous research agents.',
-      tools: ['brave_web_search', 'brave_local_search', 'extract_webpage'],
-    },
-  ];
+  const MCP_PRESETS = config.mcpPresets;
 
   // Interactive Tool Calling Modal State
   const [activeToolCall, setActiveToolCall] = useState<{
@@ -253,6 +188,16 @@ export function McpHub() {
 
   useEffect(() => {
     loadData();
+    const socket = getSocket();
+    const refresh = () => loadData();
+    socket.on('mcp:updated', refresh);
+    socket.on('mcp:created', refresh);
+    socket.on('mcp:deleted', refresh);
+    return () => {
+      socket.off('mcp:updated', refresh);
+      socket.off('mcp:created', refresh);
+      socket.off('mcp:deleted', refresh);
+    };
   }, [loadData]);
 
   const handleRefreshTools = async (server: McpServerWithDetails) => {
@@ -406,7 +351,7 @@ export function McpHub() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="nexus-page space-y-6">
       {/* ── Page Header ── */}
       <PageHeader
         icon={Cpu}
@@ -946,11 +891,11 @@ export function McpHub() {
                   required
                   value={serverUrl}
                   onChange={(e) => setServerUrl(e.target.value)}
-                  placeholder="http://host.docker.internal:8000/sse"
+                  placeholder="http(s)://your-mcp-server/sse"
                   className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
                 />
                 <p className="text-[11px] text-ink-muted mt-1.5 leading-relaxed">
-                  💡 <strong>Local servers:</strong> Use <code className="font-mono text-brand-600 dark:text-brand-400 bg-brand-500/10 px-1 py-0.5 rounded">http://host.docker.internal:PORT/sse</code> to connect to servers running on your machine. For remote servers, use their HTTPS URL.
+                  💡 <strong>Local servers:</strong> Use <code className="font-mono text-brand-600 dark:text-brand-400 bg-brand-500/10 px-1 py-0.5 rounded">http(s)://your-mcp-server/PORT/sse</code> to connect to servers running on your machine. For remote servers, use their HTTPS URL.
                 </p>
               </div>
 

@@ -128,6 +128,7 @@ export function Metrics() {
     socket.on('token:usage', update);
     socket.on('process:run:created', update);
     socket.on('process:run:updated', update);
+    socket.on('process:run', update);
     setSocketConnected(socket.connected);
     const onConn = () => setSocketConnected(true);
     const onDis = () => setSocketConnected(false);
@@ -140,6 +141,7 @@ export function Metrics() {
       socket.off('token:usage', update);
       socket.off('process:run:created', update);
       socket.off('process:run:updated', update);
+      socket.off('process:run', update);
       socket.off('connect', onConn);
       socket.off('disconnect', onDis);
     };

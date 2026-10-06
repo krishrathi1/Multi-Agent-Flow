@@ -104,16 +104,12 @@ export function Layout() {
     document.getElementById('main-content')?.focus({ preventScroll: true });
   }, [pathname]);
 
-  return (
-    <div className="relative min-h-dvh bg-canvas overflow-x-clip">
-      {/* Sleek Modern Architectural Tech Background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
-        {/* Clean Subtle Dot Grid Pattern */}
-        <div className="absolute inset-0 bg-[radial-gradient(#94a3b8_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.22] dark:opacity-[0.35]" />
+  const isChat = pathname === '/chat';
 
-        {/* Soft Cohesive Top Radial Vignette */}
-        <div className="absolute -top-[25%] left-1/2 -translate-x-1/2 w-[1100px] h-[550px] bg-gradient-to-b from-brand-500/8 dark:from-brand-500/12 via-brand-500/2 to-transparent rounded-full blur-3xl transform-gpu" />
-      </div>
+  return (
+    <div className={cn('relative bg-canvas overflow-x-clip', isChat ? 'h-dvh flex flex-col overflow-hidden' : 'min-h-dvh')}>
+      {/* Product UI intentionally uses flat surfaces and hairline borders. */}
+      <div className="fixed inset-0 pointer-events-none z-0 bg-canvas" aria-hidden="true" />
 
       {/* Keyboard users can jump past the 17-item nav. */}
       <a
@@ -141,7 +137,8 @@ export function Layout() {
 
       <div
         className={cn(
-          'relative z-10 flex min-h-dvh flex-col transition-[padding] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)]',
+          'relative z-10 flex flex-col min-w-0 max-w-full overflow-x-hidden transition-[padding] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)]',
+          isChat ? 'h-dvh flex-1 overflow-hidden min-h-0' : 'min-h-dvh',
           'pl-0',
           sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[248px]',
         )}
@@ -151,10 +148,13 @@ export function Layout() {
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 px-3.5 sm:px-6 pt-3.5 sm:pt-5 pb-2 sm:pb-3 outline-none"
+          className={cn(
+            'flex-1 outline-none min-h-0 flex flex-col',
+            isChat ? 'p-0 overflow-hidden' : 'px-3.5 sm:px-6 pt-3.5 sm:pt-5 pb-2 sm:pb-3'
+          )}
         >
           {/* Caps line length on ultrawide displays instead of stretching. */}
-          <div className="mx-auto w-full max-w-[1600px]">
+          <div className={cn(isChat ? 'flex-1 min-h-0 flex flex-col w-full h-full' : 'mx-auto w-full max-w-[1600px]')}>
             <Outlet />
           </div>
         </main>

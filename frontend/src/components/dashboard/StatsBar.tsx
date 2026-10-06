@@ -36,16 +36,16 @@ export function StatsBar() {
   // Reserve the row's height while loading so the page below doesn't jump.
   if (!stats) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 sm:grid-cols-3 xl:grid-cols-6">
         {statItems.map((item) => (
-          <Skeleton key={item.key} className="h-[104px] rounded-xl" />
+          <Skeleton key={item.key} className="h-[88px] sm:h-[104px] rounded-xl" />
         ))}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 sm:grid-cols-3 xl:grid-cols-6">
       {statItems.map((item) => {
         const value = stats[item.key] ?? 0;
         return (

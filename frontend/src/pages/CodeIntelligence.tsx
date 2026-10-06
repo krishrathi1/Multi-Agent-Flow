@@ -93,10 +93,10 @@ const codeIntelApi = {
     api._request<{ symbol: string; count: number; imports: any[]; usages: any[] }>(
       `/code-intelligence/references/${encodeURIComponent(symbol)}`
     ),
-  ask: (question: string) =>
+  ask: (question: string, model?: string) =>
     api._request<{ question: string; answer: string; citations: { file: string; line?: number; reason: string }[]; relatedSymbols: CodeSymbol[] }>(
       '/code-intelligence/ask',
-      { method: 'POST', body: JSON.stringify({ question }) }
+      { method: 'POST', body: JSON.stringify({ question, model }) }
     ),
   reindex: () => api._request<{ message: string; stats: CodebaseStats }>('/code-intelligence/reindex', { method: 'POST' }),
 };
@@ -163,7 +163,7 @@ export function CodeIntelligence() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="nexus-page space-y-6">
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -866,6 +866,9 @@ function FileViewer({ path, highlightLine, onClose }: { path: string; highlightL
 
 function AskTab() {
   const [question, setQuestion] = useState('');
+  const [chatModel, setChatModel] = useState(() => localStorage.getItem('nexus:code_intel_model') || '');
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; provider: string }>>([]);
+  useEffect(() => { api.llmProviders.availableModels().then((r) => setAvailableModels(r.models)).catch(() => {}); }, []);
   const [loading, setLoading] = useState(false);
   const [fileViewer, setFileViewer] = useState<{ path: string; highlightLine?: number } | null>(null);
   const [result, setResult] = useState<{
@@ -887,7 +890,7 @@ function AskTab() {
     if (!q.trim()) return;
     setLoading(true);
     try {
-      const data = await codeIntelApi.ask(q);
+      const data = await codeIntelApi.ask(q, chatModel || undefined);
       setResult(data);
       if (qText) setQuestion(qText);
     } catch {
@@ -911,6 +914,13 @@ function AskTab() {
           <div>
             <h2 className="text-base font-bold text-ink">Ask the Nexus AI Repository</h2>
             <p className="text-xs text-ink-muted">Grounded code understanding with file citations and symbol tracing</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">Model</label>
+              <select value={chatModel} onChange={(e) => { setChatModel(e.target.value); localStorage.setItem('nexus:code_intel_model', e.target.value); }} className="h-8 rounded-md border border-line bg-inset px-2 text-xs text-ink">
+                <option value="">Auto / configured default</option>
+                {availableModels.map((m) => <option key={m.id} value={m.id}>{m.provider} / {m.name}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 

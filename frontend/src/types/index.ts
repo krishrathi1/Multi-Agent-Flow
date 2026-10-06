@@ -57,6 +57,7 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   agentId: string | null;
+  boardId?: string | null;
   createdAt: string;
   updatedAt: string;
   agent: {

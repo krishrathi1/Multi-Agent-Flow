@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Header } from '@/components/layout/Header';
+import { getSocket } from '@/lib/socket';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { CustomSelect } from '@/components/ui/CustomSelect';
@@ -67,6 +68,31 @@ export function BoardDetail() {
     loadBoard();
   }, [loadBoard]);
 
+  // Keep this board live while a production is running. The app-level socket
+  // store is useful elsewhere, but BoardDetail owns a board-scoped task list,
+  // so it must apply task events directly to the visible board.
+  useEffect(() => {
+    const socket = getSocket();
+    const onTaskUpdate = (task: Task) => {
+      if (task.boardId !== id) return;
+      setTasks((prev) => {
+        const exists = prev.some((t) => t.id === task.id);
+        return exists
+          ? prev.map((t) => (t.id === task.id ? task : t))
+          : [...prev, task];
+      });
+    };
+    const onTaskDelete = ({ id: taskId }: { id: string }) => {
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    };
+    socket.on('task:update', onTaskUpdate);
+    socket.on('task:delete', onTaskDelete);
+    return () => {
+      socket.off('task:update', onTaskUpdate);
+      socket.off('task:delete', onTaskDelete);
+    };
+  }, [id]);
+
   const tasksByStatus = useCallback(
     (status: TaskStatus) => tasks.filter(t => t.status === status),
     [tasks]
@@ -96,10 +122,11 @@ export function BoardDetail() {
       const task = await api.tasks.create({
         title,
         priority,
+        status,
+        boardId: id,
         agentId: undefined,
       });
-      // Also update board association via task update if needed
-      setTasks(prev => [...prev, { ...task, status }]);
+      setTasks(prev => [...prev, task]);
       setShowAddTask(null);
     } catch (err) {
       console.error('Failed to create task:', err);

@@ -31,7 +31,7 @@ export function Signup() {
       <SEO
         title="Sign Up Free — MyceliumOps AI Agent Orchestration Platform"
         description="Create your free MyceliumOps account and start orchestrating autonomous AI agents. Deploy agents, build agentic workflows, and manage enterprise AI operations with Blostem's AI agent platform."
-        canonical="https://nexus.blostem.com/signup"
+        canonical="/signup"
         keywords="sign up AI agent platform, free AI agent management, MyceliumOps registration, Blostem AI, agentic workflow platform"
       />
       <div className="w-full max-w-md">

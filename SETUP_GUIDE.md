@@ -194,3 +194,9 @@ cd backend
 npx prisma migrate reset --force   # Reset and re-apply all migrations
 npx tsx prisma/seed.ts              # Re-seed data
 ```
+
+## Environment configuration
+
+Runtime and deployment configuration is intentionally not hardcoded in application code. Copy `.env.example` to `.env` and provide the required values for your environment. Never commit `.env`, provider API keys, JWT secrets, encryption keys, or database credentials.
+
+The frontend has its own build-time configuration in `frontend/.env.example`; Docker passes those values as build arguments. The backend validates required runtime configuration at startup.

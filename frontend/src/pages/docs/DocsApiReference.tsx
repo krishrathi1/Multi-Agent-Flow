@@ -8,7 +8,7 @@ export function DocsApiReference() {
       <SEO
         title="API Reference — MyceliumOps AI Agent Platform"
         description="Complete REST API documentation for the MyceliumOps AI agent orchestration platform. Endpoints for agents, boards, tasks, approvals, gateways, and more. Built by Blostem."
-        canonical="https://nexus.blostem.com/docs/api-reference"
+        canonical="/docs/api-reference"
         keywords="AI agent API, REST API reference, agent orchestration API, MyceliumOps API documentation, Blostem AI platform API"
       />
       <h1 className="text-4xl font-bold text-white mb-2">API Reference</h1>

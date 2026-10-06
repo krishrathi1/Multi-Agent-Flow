@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import { prisma } from '../lib/prisma.js';
 import { safeFetch } from '../lib/url-validator.js';
 import { encryptField, decryptField } from '../lib/crypto.js';
@@ -171,7 +172,7 @@ export async function testProvider(
   
   // Local LLM endpoints
   if (prov === 'local' || prov === 'ollama' || prov === 'lmstudio' || prov === 'vllm') {
-    const endpoint = apiKey.startsWith('http') ? apiKey : 'http://localhost:11434/api/tags';
+    const endpoint = apiKey.startsWith('http') ? apiKey : `${config.localLlmEndpoints[0]}/api/tags`;
     try {
       const res = await safeFetch(endpoint, { method: 'GET', timeoutMs: 5000 });
       if (res.ok) {
@@ -194,11 +195,11 @@ export async function testProvider(
       headers: { Authorization: `Bearer ${apiKey}` },
     },
     google: {
-      url: `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+      url: `${config.geminiApiBaseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}`,
       headers: {},
     },
     gemini: {
-      url: `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+      url: `${config.geminiApiBaseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}`,
       headers: {},
     },
     grok: {
@@ -501,13 +502,7 @@ export async function fetchLocalModels(customEndpoint?: string): Promise<{ model
         customEndpoint.replace('localhost', 'host.docker.internal').replace('127.0.0.1', 'host.docker.internal'),
         customEndpoint,
       ]
-    : [
-        'http://host.docker.internal:11434',
-        'http://localhost:11434',
-        'http://127.0.0.1:11434',
-        'http://host.docker.internal:1234',
-        'http://localhost:1234',
-      ];
+    : config.localLlmEndpoints;
 
   for (const base of candidateEndpoints) {
     const clean = base.replace(/\/$/, '');
@@ -556,7 +551,7 @@ export async function fetchLocalModels(customEndpoint?: string): Promise<{ model
   // Not reachable: accurately return empty models array and reachable: false
   return {
     models: [],
-    endpoint: customEndpoint || 'http://localhost:11434',
+    endpoint: customEndpoint || config.localLlmEndpoints[0],
     reachable: false,
   };
 }
@@ -648,7 +643,7 @@ export async function fetchLiveModels(
   if (prov === 'google' || prov === 'gemini') {
     try {
       const res = await safeFetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+        `${config.geminiApiBaseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}`,
         { method: 'GET', timeoutMs: 10_000 },
       );
       if (!res.ok) {

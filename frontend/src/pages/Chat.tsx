@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/Button';
 import { LiveBrainIcon, LiveWaveform, LiveRadarBeacon } from '@/components/ui/LiveIcon';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import type { Agent, ChatMessage, AgentStatus, Process } from '@/types';
 
 export function Chat() {
@@ -47,6 +48,17 @@ export function Chat() {
   const [mobileTab, setMobileTab] = useState<'chat' | 'agents'>('chat');
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<Record<number, 'up' | 'down'>>({});
+  const [chatModel, setChatModel] = useState(() => localStorage.getItem('nexus:mother_model') || '');
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; provider: string; source?: string }>>([]);
+
+  const modelOptions = useMemo(() => [
+    { value: '', label: 'Auto / configured default' },
+    ...availableModels.map((m) => ({
+      value: m.id,
+      label: `${m.provider} / ${m.name}`,
+      badge: m.source === 'local' ? 'Local' : m.source === 'opencode' ? 'OpenCode' : undefined,
+    })),
+  ], [availableModels]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const processDropdownRef = useRef<HTMLDivElement>(null);
@@ -64,6 +76,7 @@ export function Chat() {
 
   useEffect(() => {
     fetchProcesses();
+    api.llmProviders.availableModels().then((r) => setAvailableModels(r.models)).catch(() => {});
     api.agents
       .list()
       .then((data) => {
@@ -141,7 +154,7 @@ export function Chat() {
     try {
       if (selectedTarget.type === 'mother') {
         const pId = selectedProcessId === 'all' ? undefined : selectedProcessId;
-        const response = await api.chat.sendToMother(text, pId);
+        const response = await api.chat.sendToMother(text, pId, chatModel || undefined);
         const assistantMessage: ChatMessage = {
           role: 'assistant',
           content: response.result || 'Mother Core acknowledged request.',
@@ -184,18 +197,21 @@ export function Chat() {
   const selectedAgent = selectedTarget.type === 'agent' ? agents.find((a) => a.id === selectedTarget.agentId) : null;
 
   return (
-    <div className="-m-3.5 sm:-m-6 flex h-[calc(100dvh-3.5rem)] overflow-hidden bg-canvas">
+    <div className="flex flex-1 min-h-0 w-full h-full overflow-hidden bg-canvas">
       {/* ── Left Sidebar: Mother Core & Production Selector ── */}
       <aside
         className={cn(
-          'flex flex-col border-r border-line-subtle bg-surface shadow-sm md:w-80 md:shrink-0',
+          'flex flex-col border-r border-line-subtle bg-surface shadow-sm md:w-80 md:shrink-0 h-full min-h-0',
           mobileTab === 'agents' ? 'w-full flex-1' : 'hidden md:flex'
         )}
       >
-        <div className="space-y-3.5 border-b border-line-subtle p-3.5 sm:p-4">
+        <div className="shrink-0 space-y-3.5 border-b border-line-subtle p-3.5 sm:p-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 text-white shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div
+                className="grid h-8 w-8 place-items-center rounded-xl text-white shadow-xs shrink-0"
+                style={{ background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' }}
+              >
                 <LiveBrainIcon size={16} />
               </div>
               <div>
@@ -324,17 +340,20 @@ export function Chat() {
               setMobileTab('chat');
             }}
             className={cn(
-              'flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-all cursor-pointer shadow-2xs',
+              'flex w-full items-center gap-3 rounded-2xl border p-2.5 sm:p-3 text-left transition-all cursor-pointer shadow-2xs',
               selectedTarget.type === 'mother'
                 ? 'border-brand-500 bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold ring-1 ring-brand-500/20'
                 : 'border-line-subtle bg-surface text-ink hover:border-line hover:bg-hover'
             )}
           >
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-600 text-white shadow-xs">
-              <Brain size={16} />
+            <div
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white shadow-sm"
+              style={{ background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' }}
+            >
+              <Brain size={18} className="text-white" />
             </div>
             <div className="min-w-0 flex-1">
-              <span className="truncate text-xs font-bold block">Mother Core</span>
+              <span className="truncate text-xs font-bold block text-ink">Mother Core</span>
               <span className="text-[10px] text-ink-muted font-normal block truncate">
                 Central Orchestration Bot
               </span>
@@ -384,19 +403,22 @@ export function Chat() {
       {/* ── Main Chat Conversation View ── */}
       <main
         className={cn(
-          'flex flex-1 flex-col overflow-hidden bg-canvas',
+          'flex flex-1 min-h-0 flex-col overflow-hidden bg-canvas h-full',
           mobileTab === 'chat' ? 'flex' : 'hidden md:flex'
         )}
       >
         {/* Header */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-line-subtle bg-surface px-4 sm:px-6 shadow-2xs">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-600 to-indigo-600 text-white shadow-xs">
-              {selectedTarget.type === 'mother' ? <Brain size={17} /> : <Bot size={17} />}
+        <header className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2.5 border-b border-line-subtle bg-surface px-3.5 sm:px-6 py-2.5 shadow-2xs">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div
+              className="grid h-8.5 w-8.5 sm:h-9 sm:w-9 shrink-0 place-items-center rounded-xl text-white shadow-sm"
+              style={{ background: selectedTarget.type === 'mother' ? 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' : '#3b82f6' }}
+            >
+              {selectedTarget.type === 'mother' ? <Brain size={17} className="text-white" /> : <Bot size={17} className="text-white" />}
             </div>
 
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <h2 className="truncate text-xs sm:text-sm font-bold text-ink">
                   {selectedTarget.type === 'mother' ? 'Mother Chat' : selectedAgent?.displayName}
                 </h2>
@@ -404,7 +426,7 @@ export function Chat() {
                   {selectedTarget.type === 'mother' ? 'Supreme Core' : `Stage ${selectedAgent?.processStage || 1}`}
                 </Badge>
               </div>
-              <p className="truncate text-2xs text-ink-muted flex items-center gap-1 mt-0.5">
+              <p className="truncate text-[11px] sm:text-2xs text-ink-muted flex items-center gap-1 mt-0.5">
                 <Cpu size={11} className="text-brand-500 shrink-0" />
                 <span className="truncate">
                   {activeProcess
@@ -415,21 +437,40 @@ export function Chat() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <LiveWaveform color="bg-brand-500" />
-            <button
-              type="button"
-              onClick={() => setMobileTab('agents')}
-              className="md:hidden flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-bold text-ink shadow-2xs hover:bg-hover transition-colors shrink-0"
-            >
-              <Workflow size={13} className="text-brand-500" />
-              <span>Agents ({filteredAgents.length})</span>
-            </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end min-w-0">
+            {selectedTarget.type === 'mother' && (
+              <div className="flex items-center gap-1.5 flex-1 sm:flex-initial min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted shrink-0 hidden xs:inline">Model</span>
+                <div className="w-full sm:w-[220px] min-w-0 flex-1">
+                  <CustomSelect
+                    value={chatModel}
+                    onChange={(val) => {
+                      setChatModel(val);
+                      localStorage.setItem('nexus:mother_model', val);
+                    }}
+                    options={modelOptions}
+                    size="sm"
+                    placeholder="Auto / configured default"
+                  />
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <LiveWaveform color="bg-brand-500" className="hidden sm:inline-flex" />
+              <button
+                type="button"
+                onClick={() => setMobileTab('agents')}
+                className="md:hidden flex items-center gap-1.5 rounded-xl border border-line bg-surface px-2.5 py-1.5 text-xs font-bold text-ink shadow-2xs hover:bg-hover transition-colors shrink-0 whitespace-nowrap active:scale-[0.98]"
+              >
+                <Workflow size={13} className="text-brand-500 shrink-0" />
+                <span>Agents ({filteredAgents.length})</span>
+              </button>
+            </div>
           </div>
         </header>
 
         {/* Message Feed */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 no-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3.5 sm:p-6 space-y-4 no-scrollbar">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20">
               <HourglassLoader size={48} label="Syncing telemetry conversation..." />
@@ -467,8 +508,11 @@ export function Chat() {
                   key={index}
                   className="group flex items-start gap-2.5 max-w-3xl mr-auto animate-scale-in"
                 >
-                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-600 to-indigo-700 text-white text-xs font-bold shadow-xs">
-                    {selectedTarget.type === 'mother' ? <Brain size={15} /> : <Bot size={15} />}
+                  <div
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-white text-xs font-bold shadow-xs"
+                    style={{ background: selectedTarget.type === 'mother' ? 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' : '#3b82f6' }}
+                  >
+                    {selectedTarget.type === 'mother' ? <Brain size={15} className="text-white" /> : <Bot size={15} className="text-white" />}
                   </div>
 
                   <div className="flex flex-col items-start min-w-0 space-y-1 max-w-[90%] sm:max-w-2xl">
@@ -540,11 +584,19 @@ export function Chat() {
           )}
 
           {sending && (
-            <div className="flex items-center gap-3 text-xs font-semibold text-ink-muted bg-surface/80 border border-line-subtle p-3 rounded-2xl max-w-md animate-pulse">
-              <div className="w-6 h-6 rounded-lg bg-brand-500/10 text-brand-600 flex items-center justify-center">
-                <Brain size={14} className="animate-spin" />
+            <div className="flex items-start gap-2.5 max-w-3xl mr-auto animate-scale-in">
+              <div
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-white text-xs font-bold shadow-xs"
+                style={{ background: selectedTarget.type === 'mother' ? 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' : '#3b82f6' }}
+              >
+                {selectedTarget.type === 'mother' ? <Brain size={15} className="text-white" /> : <Bot size={15} className="text-white" />}
               </div>
-              <span>Mother Chat is orchestrating fleet execution…</span>
+
+              <div className="rounded-2xl rounded-tl-xs px-4 py-3 shadow-xs border border-line-subtle bg-surface flex items-center gap-1.5 h-10">
+                <span className="h-2 w-2 rounded-full bg-ink-muted/70 animate-bounce [animation-delay:-0.3s]" />
+                <span className="h-2 w-2 rounded-full bg-ink-muted/70 animate-bounce [animation-delay:-0.15s]" />
+                <span className="h-2 w-2 rounded-full bg-ink-muted/70 animate-bounce" />
+              </div>
             </div>
           )}
 
@@ -553,7 +605,7 @@ export function Chat() {
 
         {/* Quick Suggestion Chips */}
         {selectedTarget.type === 'mother' && (
-          <div className="px-3.5 sm:px-6 py-2 border-t border-line-subtle bg-surface/40 flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth">
+          <div className="shrink-0 px-3.5 sm:px-6 py-2 border-t border-line-subtle bg-surface/40 flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth">
             <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted shrink-0 flex items-center gap-1">
               <Sparkles size={11} className="text-brand-500" />
               Quick:
@@ -577,7 +629,7 @@ export function Chat() {
         )}
 
         {/* Chat Composer */}
-        <div className="border-t border-line-subtle bg-surface p-3 sm:p-4 shadow-lg">
+        <div className="shrink-0 border-t border-line-subtle bg-surface p-3 sm:p-4 shadow-lg">
           <form
             onSubmit={(e) => {
               e.preventDefault();

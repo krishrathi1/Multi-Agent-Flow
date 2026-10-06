@@ -1,18 +1,16 @@
+import { config } from '../config.js';
 import nodemailer from 'nodemailer';
 import { logger } from './logger.js';
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'localhost',
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: process.env.SMTP_SECURE === 'true',
-  auth: {
-    user: process.env.SMTP_USER || '',
-    pass: process.env.SMTP_PASS || '',
-  },
+  host: config.smtp.host,
+  port: config.smtp.port,
+  secure: config.smtp.secure,
+  auth: { user: config.smtp.user, pass: config.smtp.pass },
 });
 
-const FROM_ADDRESS = process.env.SMTP_FROM || 'MyceliumOps <noreply@nexus.local>';
-const APP_URL = process.env.APP_URL || 'http://localhost:5174';
+const FROM_ADDRESS = config.smtp.from;
+const APP_URL = config.appUrl;
 
 export async function sendVerificationEmail(email: string, token: string): Promise<void> {
   const verifyUrl = `${APP_URL}/verify-email?token=${token}`;

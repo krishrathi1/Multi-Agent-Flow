@@ -35,17 +35,9 @@ export function startGitWatcher(io: SocketIOServer) {
       );
       lastProcessedCommit = currentCommit;
 
-      // Find active or target process
-      let proc = await prisma.process.findFirst({
-        where: {
-          OR: [
-            { name: { contains: 'Multi-Agent-Flow', mode: 'insensitive' } },
-            { prompt: { contains: 'Multi-Agent-Flow', mode: 'insensitive' } },
-            { name: { contains: 'Review', mode: 'insensitive' } },
-          ],
-        },
-        orderBy: { updatedAt: 'desc' },
-      });
+      // Prefer the most recently updated process; webhook payloads are handled by
+      // the public route, while this local watcher has no repository identity.
+      let proc = await prisma.process.findFirst({ orderBy: { updatedAt: 'desc' } });
 
       if (!proc) {
         proc = await prisma.process.findFirst({ orderBy: { updatedAt: 'desc' } });

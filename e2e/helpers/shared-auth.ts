@@ -5,11 +5,11 @@ let cached: { accessToken: string; user: any; organization: any; role: string } 
 let pending: Promise<typeof cached> | null = null;
 
 async function doLogin() {
-  const ctx = await request.newContext({ baseURL: 'http://localhost:4000' });
+  const ctx = await request.newContext({ baseURL: process.env.E2E_API_URL || 'http://localhost:4000' });
   // Retry up to 3 times to handle transient 401 errors
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await ctx.post('/api/auth/login', {
-      data: { email: 'test@nexus.local', password: 'TestPass123' },
+      data: { email: process.env.E2E_TEST_EMAIL || 'test@nexus.local', password: process.env.E2E_TEST_PASSWORD || 'TestPass123' },
     });
     if (res.ok()) {
       const data = await res.json();

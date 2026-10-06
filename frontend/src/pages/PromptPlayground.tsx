@@ -137,7 +137,7 @@ export function PromptPlayground() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="nexus-page space-y-6">
       {/* ── Header ── */}
       <div>
         <h1 className="text-2xl font-bold text-ink flex items-center gap-3">

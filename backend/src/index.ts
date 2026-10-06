@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { config } from './config.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -26,6 +27,7 @@ import remoteRoutes from './routes/remote.js';
 import { requireApiKey } from './middleware/api-key-auth.js';
 import gatewayRoutes from './routes/gateways.js';
 import llmProviderRoutes from './routes/llm-providers.js';
+import opencodeRoutes from './routes/opencode.js';
 import boardRoutes from './routes/boards.js';
 import approvalRoutes from './routes/approvals.js';
 import agentApiRoutes from './routes/agent-api.js';
@@ -52,7 +54,7 @@ import { connectAllGateways, setSocketIO } from './services/gateway.service.js';
 
 const app = express();
 const httpServer = createServer(app);
-const PORT = process.env.PORT || 4000;
+const PORT = config.port;
 
 // Trust first proxy (nginx/Cloudflare) — required for correct rate limiting & secure cookies
 app.set('trust proxy', 1);
@@ -60,7 +62,7 @@ app.set('trust proxy', 1);
 // CORS: env-based origin configuration
 const corsOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
-  : ['http://localhost:5173', 'http://localhost:5174'];
+  : config.corsOrigins;
 
 // Security middleware
 app.use(helmet({
@@ -126,6 +128,7 @@ app.use('/api/gateways', requireAuth, gatewayRoutes);
 
 // LLM Provider routes
 app.use('/api/llm-providers', requireAuth, llmProviderRoutes);
+app.use('/api/opencode', requireAuth, opencodeRoutes);
 
 // Board routes (boards + board groups)
 app.use('/api/boards', requireAuth, boardRoutes);

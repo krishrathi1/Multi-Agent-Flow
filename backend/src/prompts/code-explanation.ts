@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import type { PromptTemplate } from './index.js';
 
 export const codeExplanationPrompt: PromptTemplate = {
@@ -8,7 +9,7 @@ export const codeExplanationPrompt: PromptTemplate = {
     'Explains complex code in plain language, generates JSDoc/TSDoc documentation, ' +
     'and creates visual flow diagrams for logic-heavy functions.',
   category: 'code-explanation',
-  models: ['gpt-4', 'claude-sonnet-4-20250514', 'code-llama-34b', 'deepseek-coder-33b'],
+  models: config.promptModels['code-explanation'] ?? config.geminiModels,
   systemPrompt: `You are a technical writer and code educator specializing in {{language}}.
 
 Analyze and explain the following code at multiple levels:

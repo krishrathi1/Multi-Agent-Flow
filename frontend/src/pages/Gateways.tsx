@@ -1,3 +1,4 @@
+import { config } from '../config';
 import { useState, useEffect } from 'react';
 import {
   Router as RouterIcon,
@@ -20,6 +21,7 @@ import { LiveRadarBeacon, LiveWaveform } from '@/components/ui/LiveIcon';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
 import { LottieAnimation } from '@/components/ui/LottieAnimation';
 import { api } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
 import { cn } from '@/lib/utils';
 import type { Gateway, GatewayHealth } from '@/types';
 
@@ -40,6 +42,16 @@ export function Gateways() {
 
   useEffect(() => {
     loadGateways();
+    const socket = getSocket();
+    const refresh = () => loadGateways();
+    socket.on('gateway:created', refresh);
+    socket.on('gateway:updated', refresh);
+    socket.on('gateway:deleted', refresh);
+    return () => {
+      socket.off('gateway:created', refresh);
+      socket.off('gateway:updated', refresh);
+      socket.off('gateway:deleted', refresh);
+    };
   }, []);
 
   async function loadGateways() {
@@ -151,7 +163,7 @@ export function Gateways() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="nexus-page space-y-6">
       <PageHeader
         icon={RouterIcon}
         title="Gateways"
@@ -214,7 +226,7 @@ export function Gateways() {
                   type="text"
                   value={formUrl}
                   onChange={(e) => setFormUrl(e.target.value)}
-                  placeholder="ws://localhost:9090"
+                  placeholder={config.gatewayEndpoint}
                   className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
                   required
                 />

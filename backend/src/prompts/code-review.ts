@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import type { PromptTemplate } from './index.js';
 
 export const codeReviewPrompt: PromptTemplate = {
@@ -8,7 +9,7 @@ export const codeReviewPrompt: PromptTemplate = {
     'Reviews code for best practices, potential bugs, security issues, and performance concerns. ' +
     'Provides structured feedback with severity levels and actionable suggestions.',
   category: 'code-review',
-  models: ['gpt-4', 'claude-sonnet-4-20250514', 'code-llama-34b', 'deepseek-coder-33b'],
+  models: config.promptModels['code-review'] ?? config.geminiModels,
   systemPrompt: `You are an expert code reviewer specializing in {{language}} development.
 
 Analyze the following code and provide a structured review covering:

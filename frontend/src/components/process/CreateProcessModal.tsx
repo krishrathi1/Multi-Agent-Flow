@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { config } from '../../config';
 import {
   Sparkles,
   Bot,
@@ -145,14 +146,12 @@ export function CreateProcessModal({
 
   // GitHub Repos State
   const [repoMode, setRepoMode] = useState<'existing' | 'new'>('existing');
-  const [repoList, setRepoList] = useState<Array<{ name: string; full_name: string; default_branch: string }>>([
-    { name: 'Multi-Agent-Flow', full_name: 'krishrathi1/Multi-Agent-Flow', default_branch: 'main' },
-  ]);
-  const [repoInput, setRepoInput] = useState(() => localStorage.getItem('nexus:github_repo') || 'krishrathi1/Multi-Agent-Flow');
-  const [repoBranch, setRepoBranch] = useState('main');
+  const [repoList, setRepoList] = useState<Array<{ name: string; full_name: string; default_branch: string }>>([]);
+  const [repoInput, setRepoInput] = useState(() => localStorage.getItem('nexus:github_repo') || config.defaultGithubRepo);
+  const [repoBranch, setRepoBranch] = useState(config.defaultGithubBranch);
   const [newRepoName, setNewRepoName] = useState('');
   const [newRepoVisibility, setNewRepoVisibility] = useState<'public' | 'private'>('public');
-  const [newRepoBranch, setNewRepoBranch] = useState('main');
+  const [newRepoBranch, setNewRepoBranch] = useState(config.defaultGithubBranch);
   const [newRepoDescription, setNewRepoDescription] = useState('');
   const [initReadme, setInitReadme] = useState(true);
   const [repoGoal, setRepoGoal] = useState('');
@@ -167,18 +166,11 @@ export function CreateProcessModal({
   const [isExpandingPrompt, setIsExpandingPrompt] = useState(false);
 
   // Dynamic API Endpoints list (Add More API feature)
-  const [apiEndpoints, setApiEndpoints] = useState<Array<{ id: string; name: string; url: string; apiKey: string }>>([
-    { id: '1', name: 'Primary API Endpoint', url: 'https://api.example.com/v1/data', apiKey: '' },
-  ]);
+  const [apiEndpoints, setApiEndpoints] = useState<Array<{ id: string; name: string; url: string; apiKey: string }>>([]);
 
   // Local PC Models ONLY
-  const [localModels] = useState<Array<{ id: string; name: string }>>([
-    { id: 'qwen2.5-coder:1.5b', name: 'qwen2.5-coder:1.5b (Local PC • Fast)' },
-    { id: 'llama3.2:3b', name: 'Llama 3.2 3B (Local PC • Balanced)' },
-    { id: 'mistral-7b-instruct', name: 'Mistral 7B Instruct (Local PC • High Precision)' },
-    { id: 'deepseek-coder:6.7b', name: 'DeepSeek Coder 6.7B (Local PC • Expert)' },
-  ]);
-  const [selectedModel, setSelectedModel] = useState('qwen2.5-coder:1.5b');
+  const [localModels] = useState(config.localLlmModels);
+  const [selectedModel, setSelectedModel] = useState(config.localLlmModel);
   const [agentCount, setAgentCount] = useState<string>('auto');
   const [plan, setPlan] = useState<ProcessPlan | null>(null);
   const [planning, setPlanning] = useState(false);
@@ -231,25 +223,40 @@ export function CreateProcessModal({
     }
   };
 
-  const handleTestApi = () => {
+  const handleTestApi = async () => {
     const targetUrl = apiUrl || parsedCurl?.url;
     if (!targetUrl) {
       setTestStatus('failed');
       setTestMessage('Please provide a valid API endpoint URL first.');
       return;
     }
+    try {
+      new URL(targetUrl);
+    } catch {
+      setTestStatus('failed');
+      setTestMessage('Invalid URL format. Please check your endpoint.');
+      return;
+    }
+
     setTestStatus('testing');
     setTestMessage('Testing API connectivity & headers…');
-    setTimeout(() => {
-      try {
-        new URL(targetUrl);
-        setTestStatus('success');
-        setTestMessage(`✓ 200 OK • Endpoint reachable (${Math.floor(Math.random() * 80 + 40)}ms)`);
-      } catch {
-        setTestStatus('failed');
-        setTestMessage('Invalid URL format. Please check your endpoint.');
-      }
-    }, 600);
+    try {
+      const authHeader = apiAuthHeader.trim();
+      const headers = authHeader
+        ? { [authHeader.includes(':') ? authHeader.split(':', 1)[0].trim() : 'Authorization']: authHeader.includes(':') ? authHeader.split(':').slice(1).join(':').trim() : authHeader }
+        : {};
+      const result = await api.processes.testApi({
+        url: targetUrl,
+        method: apiMethod,
+        headers,
+        body: apiBody || undefined,
+      });
+      setTestStatus(result.ok ? 'success' : 'failed');
+      setTestMessage(`${result.ok ? '✓' : '✗'} ${result.status || 'Connection failed'} ${result.statusText} • ${result.latencyMs}ms`);
+    } catch (err) {
+      setTestStatus('failed');
+      setTestMessage((err as Error).message || 'API test failed.');
+    }
   };
 
   const handleSaveParsedApi = () => {
@@ -271,7 +278,7 @@ export function CreateProcessModal({
   const handleAddApiEndpoint = () => {
     setApiEndpoints((prev) => [
       ...prev,
-      { id: String(Date.now()), name: `API Endpoint #${prev.length + 1}`, url: 'https://api.example.com/v1/service', apiKey: '' },
+      { id: String(Date.now()), name: `API Endpoint #${prev.length + 1}`, url: '', apiKey: '' },
     ]);
   };
 
@@ -685,7 +692,7 @@ export function CreateProcessModal({
                 rows={3.5}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. Review the codebase in krishrathi1/Multi-Agent-Flow, build full-stack responsive dashboard, and generate production deliverables..."
+                placeholder="e.g. Review the selected repository, build a full-stack responsive dashboard, and generate production deliverables..."
                 className="w-full rounded-xl border border-line bg-surface p-3 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
               />
             </div>
@@ -1064,7 +1071,7 @@ export function CreateProcessModal({
                       <label className="block text-2xs font-medium text-ink-muted mb-1">New Repository Name</label>
                       <div className="flex items-center">
                         <span className="px-2.5 py-2 rounded-l-xl bg-inset border border-r-0 border-line text-2xs font-mono text-ink-muted">
-                          krishrathi1 /
+                          {config.defaultGithubOwner || 'GitHub account'} /
                         </span>
                         <input
                           type="text"

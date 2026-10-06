@@ -1,3 +1,5 @@
+import { config } from '../config.js';
+import { run as runOpenCode } from './opencode.service.js';
 import { readdir, readFile, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, relative, extname, basename } from 'path';
@@ -608,6 +610,7 @@ export async function listFiles(): Promise<Omit<FileInfo, 'path'>[]> {
 export async function askCodebase(
   question: string,
   organizationId?: string,
+  preferredModel?: string,
 ): Promise<{
   question: string;
   answer: string;
@@ -721,8 +724,17 @@ export async function askCodebase(
     `Provide a clear, detailed, and technically accurate explanation in GitHub-flavored Markdown. ` +
     `Explain how the architecture works, reference specific files and symbols, and provide code guidance where applicable. Keep the tone professional, helpful, and concise.`;
 
-  // 1. Try Claude CLI if enabled
-  if (isClaudeCliEnabled()) {
+  // 1. Explicit provider/model selection through OpenCode. This keeps
+  // Code Intelligence on the same model picker as Mother Chat.
+  if (preferredModel?.includes('/') && !preferredModel.startsWith('local/')) {
+    try {
+      const op = await runOpenCode(prompt, preferredModel);
+      if (op.result && op.result.trim().length > 20) aiAnswer = op.result.trim();
+    } catch { /* continue with configured providers */ }
+  }
+
+  // 2. Try Claude CLI if enabled
+  if (!aiAnswer && isClaudeCliEnabled()) {
     try {
       const cliRes = await runClaudeCli(prompt, { timeoutMs: 15000 });
       if (cliRes?.text && cliRes.text.trim().length > 20) {
@@ -747,11 +759,11 @@ export async function askCodebase(
     }
 
     if (geminiKey) {
-      const candidateModels = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash'];
+      const candidateModels = [preferredModel, ...config.geminiModels].filter(Boolean) as string[];
       for (const m of candidateModels) {
         try {
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+            `${config.geminiApiBaseUrl}/v1beta/models/${m}:generateContent?key=${encodeURIComponent(geminiKey)}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
@@ -759,7 +771,7 @@ export async function askCodebase(
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
               }),
-              signal: AbortSignal.timeout(10000),
+              signal: AbortSignal.timeout(config.localLlmRequestTimeoutMs),
             },
           );
           if (res.ok) {
@@ -777,7 +789,7 @@ export async function askCodebase(
 
   // 3. Try Local PC Ollama
   if (!aiAnswer) {
-    const endpoints = ['http://127.0.0.1:11434', 'http://localhost:11434', 'http://host.docker.internal:11434'];
+    const endpoints = config.localLlmEndpoints;
     for (const ep of endpoints) {
       try {
         const ping = await fetch(`${ep}/api/tags`, { signal: AbortSignal.timeout(1500) });
@@ -787,7 +799,7 @@ export async function askCodebase(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'qwen2.5-coder:1.5b',
+            model: preferredModel?.replace(/^local\//, '') || config.localLlmModel,
             prompt,
             stream: false,
           }),

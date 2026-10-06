@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import { Router } from 'express';
 import { promptRegistry, getPromptById, renderPrompt } from '../prompts/index.js';
 
@@ -78,7 +79,7 @@ router.post('/test', async (req: any, res) => {
 
   const rendered = renderPrompt(template, variables || {});
   let generatedOutput: string | null = null;
-  let executedModel: string = model || template.models[0] || 'gemini-2.0-flash';
+  let executedModel: string = model || template.models[0] || config.geminiModel;
 
   // 1. Try Claude CLI if enabled
   if (isClaudeCliEnabled()) {
@@ -110,17 +111,15 @@ router.post('/test', async (req: any, res) => {
 
     if (geminiKey) {
       const candidateModels = [
-        model || template.models[0] || 'gemini-2.5-flash',
-        'gemini-2.5-flash',
-        'gemini-2.0-flash',
-        'gemini-1.5-flash',
+        model || template.models[0] || config.geminiModel,
+        ...config.geminiModels,
       ];
 
       for (const m of candidateModels) {
         try {
           const cleanModel = m.replace(/^google\//, '').replace(/^gemini\//, '');
           const geminiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+            `${config.geminiApiBaseUrl}/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(geminiKey)}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
@@ -150,24 +149,24 @@ router.post('/test', async (req: any, res) => {
 
   // 3. Try Local PC Ollama (localhost / host.docker.internal)
   if (!generatedOutput) {
-    const localEndpoints = ['http://127.0.0.1:11434', 'http://localhost:11434', 'http://host.docker.internal:11434'];
+    const localEndpoints = config.localLlmEndpoints;
     for (const ep of localEndpoints) {
       try {
         const oRes = await fetch(`${ep}/api/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'qwen2.5-coder:1.5b',
+            model: config.localLlmModel,
             prompt: rendered,
             stream: false,
           }),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(config.localLlmRequestTimeoutMs),
         });
         if (oRes.ok) {
           const oData = (await oRes.json()) as any;
           if (oData?.response && typeof oData.response === 'string') {
             generatedOutput = oData.response.trim();
-            executedModel = 'qwen2.5-coder:1.5b (Local Host)';
+            executedModel = `${config.localLlmModel} (Local Host)`;
             break;
           }
         }

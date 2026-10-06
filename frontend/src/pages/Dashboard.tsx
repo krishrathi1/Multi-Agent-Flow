@@ -34,7 +34,6 @@ import { Card } from '../components/ui/Card';
 import { Avatar } from '../components/ui/Avatar';
 import { cn, timeAgo } from '../lib/utils';
 import { StatsBar } from '../components/dashboard/StatsBar';
-import { SystemHealth } from '../components/dashboard/SystemHealth';
 import { PageHeader, SectionHeading } from '../components/ui/PageHeader';
 import { Button, ButtonLink } from '../components/ui/Button';
 import { EmptyState, SkeletonCard } from '../components/ui/States';
@@ -132,7 +131,7 @@ export function Dashboard() {
     () =>
       (
         [
-          { value: 'all' as const, label: 'All Production Blocks', count: counts.all },
+          { value: 'all' as const, label: 'All Blocks', count: counts.all },
           { value: 'ACTIVE' as const, label: 'Active', count: counts.ACTIVE },
           { value: 'PAUSED' as const, label: 'Paused', count: counts.PAUSED },
           { value: 'PLANNING' as const, label: 'Planning', count: counts.PLANNING },
@@ -149,16 +148,24 @@ export function Dashboard() {
         title="Mission Control Dashboard"
         description="Monitor and orchestrate multi-agent production blocks, autonomous chains, and fleet telemetry."
         actions={
-          <div className="flex items-center gap-2.5">
-            <ButtonLink to="/processes" variant="secondary" icon={Workflow}>
-              Manage Pipelines
+          <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto">
+            <ButtonLink
+              to="/processes"
+              variant="secondary"
+              icon={Workflow}
+              className="justify-center text-xs truncate"
+            >
+              <span className="hidden sm:inline truncate">Manage Pipelines</span>
+              <span className="sm:hidden truncate">Pipelines</span>
             </ButtonLink>
             <Button
               variant="primary"
               icon={Plus}
               onClick={() => setCreateModalOpen(true)}
+              className="justify-center text-xs truncate"
             >
-              New Production Block
+              <span className="hidden sm:inline truncate">New Production Block</span>
+              <span className="sm:hidden truncate">New Block</span>
             </Button>
           </div>
         }
@@ -166,73 +173,62 @@ export function Dashboard() {
 
       <StatsBar />
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px] items-start">
-        {/* Main Column: Production Blocks & Groups */}
-        <div className="space-y-6">
-          <SectionHeading
-            title="Production Blocks & Chains"
-            description="Autonomous multi-agent systems grouped into collaborative production pipelines."
-            actions={
-              <Tabs
-                items={tabs}
-                value={filter}
-                onChange={setFilter}
-                aria-label="Filter production blocks"
-              />
-            }
-          />
+      <div className="mt-6 space-y-6">
+        <SectionHeading
+          title="Production Blocks & Chains"
+          description="Autonomous multi-agent systems grouped into collaborative production pipelines."
+          actions={
+            <Tabs
+              items={tabs}
+              value={filter}
+              onChange={setFilter}
+              aria-label="Filter production blocks"
+            />
+          }
+        />
 
-          {processesLoading && processes.length === 0 ? (
-            <div className="space-y-4">
-              <SkeletonCard />
-              <SkeletonCard />
-            </div>
-          ) : filter === 'standby' ? (
-            /* Standby Agents Only View */
-            <StandbyFleetCard agents={unassignedAgents} onNewProcess={() => setCreateModalOpen(true)} />
-          ) : visibleProcesses.length === 0 ? (
-            <Card padding="none" className="p-8 text-center">
-              <EmptyState
-                icon={Factory}
-                title="No Production Blocks match this filter"
-                description="Create a goal-driven production block and Nexus will auto-organize agents into an automated workflow."
-                action={
-                  <Button
-                    variant="primary"
-                    icon={Plus}
-                    onClick={() => setCreateModalOpen(true)}
-                  >
-                    Create Production Block
-                  </Button>
-                }
-              />
-            </Card>
-          ) : (
-            <div className="space-y-5">
-              {visibleProcesses.map((proc) => (
-                <ProductionBlockCard
-                  key={proc.id}
-                  process={proc}
-                  busy={busyProcessId === proc.id}
-                  onToggleRun={() => handleToggleRun(proc)}
-                />
-              ))}
-
-              {/* Show Standby Fleet at bottom if filtering All and there are unassigned agents */}
-              {filter === 'all' && unassignedAgents.length > 0 && (
-                <StandbyFleetCard agents={unassignedAgents} onNewProcess={() => setCreateModalOpen(true)} />
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Aside: Real-Time Telemetry & Live Activity */}
-        <aside className="min-w-0 space-y-6">
-          <div>
-            <SectionHeading title="Live Operations Feed" />
-            <SystemHealth />
+        {processesLoading && processes.length === 0 ? (
+          <div className="space-y-4">
+            <SkeletonCard />
+            <SkeletonCard />
           </div>
-        </aside>
+        ) : filter === 'standby' ? (
+          /* Standby Agents Only View */
+          <StandbyFleetCard agents={unassignedAgents} onNewProcess={() => setCreateModalOpen(true)} />
+        ) : visibleProcesses.length === 0 ? (
+          <Card padding="none" className="p-8 text-center">
+            <EmptyState
+              icon={Factory}
+              title="No Production Blocks match this filter"
+              description="Create a goal-driven production block and Nexus will auto-organize agents into an automated workflow."
+              action={
+                <Button
+                  variant="primary"
+                  icon={Plus}
+                  onClick={() => setCreateModalOpen(true)}
+                >
+                  Create Production Block
+                </Button>
+              }
+            />
+          </Card>
+        ) : (
+          <div className="space-y-5">
+            {visibleProcesses.map((proc) => (
+              <ProductionBlockCard
+                key={proc.id}
+                process={proc}
+                busy={busyProcessId === proc.id}
+                onToggleRun={() => handleToggleRun(proc)}
+              />
+            ))}
+
+            {/* Show Standby Fleet at bottom if filtering All and there are unassigned agents */}
+            {filter === 'all' && unassignedAgents.length > 0 && (
+              <StandbyFleetCard agents={unassignedAgents} onNewProcess={() => setCreateModalOpen(true)} />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Creation Modal */}
