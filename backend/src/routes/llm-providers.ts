@@ -3,6 +3,7 @@ import * as llmService from '../services/llm-provider.service.js';
 import { requireRole } from '../middleware/auth.js';
 import { config } from '../config.js';
 import * as opencode from '../services/opencode.service.js';
+import { prisma } from '../lib/prisma.js';
 
 const router = Router();
 
@@ -12,25 +13,59 @@ router.get('/', async (req, res) => {
 });
 
 
-router.get('/available-models', async (_req, res) => {
+router.get('/available-models', async (req, res) => {
   const models = new Map<string, { id: string; name: string; provider: string; source: string }>();
   const templateCategories = new Set(['code-review', 'code-completion', 'code-explanation', 'refactoring']);
+
+  // Fetch BYOK providers configured in the DB for this organization
+  const orgProviders = req.organizationId
+    ? await prisma.llmProvider.findMany({ where: { organizationId: req.organizationId, isActive: true } })
+    : [];
+  const configuredDbProviders = new Set(
+    orgProviders
+      .filter((p: { mode: string; apiKey: string | null }) => p.mode === 'PLATFORM' || Boolean(p.apiKey))
+      .map((p: { provider: string }) => p.provider.toLowerCase())
+  );
+
+  const hasPlatformKey = (p: string) => {
+    const pLower = p.toLowerCase();
+    if (pLower === 'google' || pLower === 'gemini') {
+      return Boolean(process.env.PLATFORM_GOOGLE_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim());
+    }
+    if (pLower === 'openai') return Boolean(process.env.PLATFORM_OPENAI_API_KEY?.trim());
+    if (pLower === 'anthropic') return Boolean(process.env.PLATFORM_ANTHROPIC_API_KEY?.trim());
+    if (pLower === 'mistral') return Boolean(process.env.PLATFORM_MISTRAL_API_KEY?.trim());
+    if (pLower === 'groq') return Boolean(process.env.PLATFORM_GROQ_API_KEY?.trim());
+    if (pLower === 'openrouter') return Boolean(process.env.PLATFORM_OPENROUTER_API_KEY?.trim());
+    return false;
+  };
+
   for (const [provider, ids] of Object.entries(config.promptModels)) {
     if (templateCategories.has(provider)) continue;
+    const pLower = provider.toLowerCase();
+    if (!configuredDbProviders.has(pLower) && !hasPlatformKey(pLower)) {
+      continue;
+    }
     for (const id of ids) {
       const modelId = `${provider}/${id}`;
       models.set(modelId, { id: modelId, name: id, provider, source: 'nexus-config' });
     }
   }
-  const localId = process.env.LOCAL_LLM_MODEL?.trim();
-  if (localId) models.set(`local/${localId}`, { id: `local/${localId}`, name: localId, provider: 'local', source: 'nexus-config' });
 
+  // OpenCode models
   const open = await opencode.models();
   if (open.installed && Array.isArray(open.models)) {
     for (const m of open.models) {
       models.set(m.id, { id: m.id, name: m.name, provider: m.provider, source: 'opencode' });
     }
   }
+
+  // Local models (only if explicitly enabled in org settings)
+  const localId = process.env.LOCAL_LLM_MODEL?.trim();
+  if (localId && (configuredDbProviders.has('local') || configuredDbProviders.has('ollama'))) {
+    models.set(`local/${localId}`, { id: `local/${localId}`, name: localId, provider: 'local', source: 'nexus-config' });
+  }
+
   res.json({ models: Array.from(models.values()) });
 });
 

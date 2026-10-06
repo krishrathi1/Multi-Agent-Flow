@@ -21,11 +21,13 @@ import {
   Layers,
   Clock,
   ArrowUpRight,
+  Cpu,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
+import { CustomSelect } from '../components/ui/CustomSelect';
 import { EmptyState, Spinner } from '../components/ui/States';
 
 /* ──────────────────────── Types ──────────────────────── */
@@ -1196,6 +1198,28 @@ function AskTab({ workspaceId, workspaceName }: { workspaceId: string; workspace
   const [chatModel, setChatModel] = useState(() => localStorage.getItem('nexus:code_intel_model') || '');
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; provider: string }>>([]);
   useEffect(() => { api.llmProviders.availableModels().then((r) => setAvailableModels(r.models)).catch(() => {}); }, []);
+
+  const modelOptions = useMemo(() => [
+    {
+      value: '',
+      label: 'Auto / Configured Default',
+      badge: 'Auto',
+      icon: Sparkles,
+    },
+    ...availableModels.map((m) => {
+      const providerLabel =
+        m.provider === 'google' ? 'Gemini' :
+        m.provider === 'opencode' ? 'OpenCode' :
+        m.provider === 'local' ? 'Local' : m.provider;
+      return {
+        value: m.id,
+        label: m.name,
+        badge: providerLabel,
+        icon: Cpu,
+      };
+    }),
+  ], [availableModels]);
+
   const [loading, setLoading] = useState(false);
   const [fileViewer, setFileViewer] = useState<{ path: string; highlightLine?: number } | null>(null);
   const [result, setResult] = useState<{
@@ -1238,17 +1262,25 @@ function AskTab({ workspaceId, workspaceName }: { workspaceId: string; workspace
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-white shadow-xs">
             <Bot className="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h2 className="text-base font-bold text-ink">Ask MyceliumOps AI Repository Assistant</h2>
             <p className="text-xs text-ink-muted">
               Grounded understanding of {workspaceName ? `"${workspaceName}"` : 'this codebase'} with file citations and symbol tracing
             </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">Model</label>
-              <select value={chatModel} onChange={(e) => { setChatModel(e.target.value); localStorage.setItem('nexus:code_intel_model', e.target.value); }} className="h-8 rounded-md border border-line bg-inset px-2 text-xs text-ink">
-                <option value="">Auto / configured default</option>
-                {availableModels.map((m) => <option key={m.id} value={m.id}>{m.provider} / {m.name}</option>)}
-              </select>
+            <div className="mt-3 flex items-center gap-2.5 flex-wrap">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Model</span>
+              <div className="w-64 sm:w-80">
+                <CustomSelect
+                  value={chatModel}
+                  onChange={(val) => {
+                    setChatModel(val);
+                    localStorage.setItem('nexus:code_intel_model', val);
+                  }}
+                  options={modelOptions}
+                  size="sm"
+                  placeholder="Auto / configured default"
+                />
+              </div>
             </div>
           </div>
         </div>
