@@ -447,6 +447,27 @@ export async function setPreviewVisibility(
   });
 }
 
+// In-memory cache of authenticated preview session tokens with 4-hour TTL
+const authorizedPreviewSessions = new Map<string, { processId: string; expiresAt: number }>();
+
+export function recordAuthorizedPreviewSession(processId: string, token: string): void {
+  authorizedPreviewSessions.set(token, {
+    processId,
+    expiresAt: Date.now() + 4 * 60 * 60 * 1000,
+  });
+}
+
+export function isAuthorizedPreviewSession(processId: string, token?: string): boolean {
+  if (!token) return false;
+  const session = authorizedPreviewSessions.get(token);
+  if (!session) return false;
+  if (Date.now() > session.expiresAt) {
+    authorizedPreviewSessions.delete(token);
+    return false;
+  }
+  return session.processId === processId;
+}
+
 /** Decides whether a preview request may proceed. */
 export async function canViewPreview(
   processId: string,
@@ -466,7 +487,12 @@ export async function canViewPreview(
     if (orgs.includes(proc.organizationId)) return true;
   }
 
-  // 2. If token is provided and matches shareToken, allow preview
+  // 2. If token is an active authenticated preview session for this process, allow preview
+  if (token && isAuthorizedPreviewSession(processId, token)) {
+    return true;
+  }
+
+  // 3. If token is provided and matches shareToken, allow preview
   if (proc.shareToken && token) {
     const a = Buffer.from(proc.shareToken);
     const b = Buffer.from(token);
@@ -475,7 +501,7 @@ export async function canViewPreview(
     }
   }
 
-  // 3. PRIVATE or TOKEN without matching org or valid token: deny
+  // 4. PRIVATE or TOKEN without matching org or valid token: deny
   if (proc.previewVisibility === PreviewVisibility.PRIVATE || proc.previewVisibility === PreviewVisibility.TOKEN) {
     return false;
   }

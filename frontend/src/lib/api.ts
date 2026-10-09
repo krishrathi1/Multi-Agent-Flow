@@ -230,6 +230,11 @@ export const api = {
     files: (id: string) => request<WorkspaceArtifact[]>(`/processes/${id}/files`),
     /** Public URL where the chain's built site is served. */
     previewUrl: (id: string) => `/preview/${id}`,
+    /** Authorizes and prepares an authenticated preview session cookie */
+    preparePreview: (id: string) =>
+      request<{ success: boolean; previewUrl: string }>(`/processes/${id}/preview-session`, {
+        method: 'POST',
+      }),
     pause: (id: string) => request<Process>(`/processes/${id}/pause`, { method: 'POST' }),
     update: (
       id: string,

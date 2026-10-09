@@ -11,14 +11,19 @@ describe('Secret Pattern & Hygiene Scanners', () => {
     { name: 'Anthropic Live Key', regex: /sk-ant-api03-[A-Za-z0-9_-]{80,}/ },
     { name: 'OpenAI Live Key', regex: /sk-(?:proj-)?[A-Za-z0-9_-]{48,}/ },
     { name: 'AWS Access Key ID', regex: /(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}/ },
+    { name: 'SendGrid Key', regex: /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/ },
     { name: 'NVIDIA API Key', regex: /nvapi-[A-Za-z0-9_-]{40,}/ },
   ];
 
-  it('detects NVIDIA API key token pattern', () => {
+  it('detects NVIDIA and SendGrid API key token patterns', () => {
     // Construct token dynamically at runtime so source file itself is clean
     const fakeNvapi = ['nvapi', 'TESTING0000111122223333444455556666777788889999'].join('-');
-    const match = SECRET_PATTERNS.find(p => p.name === 'NVIDIA API Key')!;
-    expect(match.regex.test(fakeNvapi)).toBe(true);
+    const nvMatch = SECRET_PATTERNS.find(p => p.name === 'NVIDIA API Key')!;
+    expect(nvMatch.regex.test(fakeNvapi)).toBe(true);
+
+    const fakeSg = ['SG', '1234567890123456789012', '1234567890123456789012345678901234567890123'].join('.');
+    const sgMatch = SECRET_PATTERNS.find(p => p.name === 'SendGrid Key')!;
+    expect(sgMatch.regex.test(fakeSg)).toBe(true);
   });
 
   it('does not trigger on innocent configuration placeholders or variable names', () => {

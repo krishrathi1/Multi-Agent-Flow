@@ -173,9 +173,10 @@ export function CreateProcessModal({
   const [creatingRepo, setCreatingRepo] = useState(false);
   const [createdRepoResult, setCreatedRepoResult] = useState<{ full_name: string; html_url: string } | null>(null);
 
-  // Vercel State: Dynamic check against Settings localStorage token
-  const [isVercelConnected, setIsVercelConnected] = useState(() => !!localStorage.getItem('nexus:vercel_token'));
-  const [vercelAutoDeploy, setVercelAutoDeploy] = useState(() => !!localStorage.getItem('nexus:vercel_token'));
+  // Integration connection state from server API
+  const [isGithubConnected, setIsGithubConnected] = useState(false);
+  const [isVercelConnected, setIsVercelConnected] = useState(false);
+  const [vercelAutoDeploy, setVercelAutoDeploy] = useState(false);
 
   const [isExpandingPrompt, setIsExpandingPrompt] = useState(false);
 
@@ -484,6 +485,7 @@ export function CreateProcessModal({
   useEffect(() => {
     if (open) {
       api.organizations.getIntegrations().then((integrations) => {
+        setIsGithubConnected(integrations.githubConnected);
         setIsVercelConnected(integrations.vercelConnected);
         setVercelAutoDeploy(integrations.vercelConnected);
       }).catch(() => {});
@@ -594,16 +596,14 @@ export function CreateProcessModal({
       setError('Please enter a repository name first.');
       return;
     }
-    const ghToken = localStorage.getItem('nexus:github_token');
-    if (!ghToken) {
-      setError('GitHub Personal Access Token not found. Please connect your GitHub account in Settings > Integrations.');
+    if (!isGithubConnected) {
+      setError('GitHub connection not found. Please connect your GitHub account in Settings > Integrations.');
       return;
     }
     setCreatingRepo(true);
     setError(undefined);
     try {
       const res = await api.processes.githubCreateRepo({
-        token: ghToken,
         name: newRepoName.trim(),
         description: newRepoDescription.trim() || undefined,
         isPrivate: newRepoVisibility === 'private',
@@ -684,24 +684,20 @@ export function CreateProcessModal({
     setError(undefined);
     try {
       // If user chose to create a new GitHub repo, create it on GitHub if not already created
-      if (repoMode === 'new' && newRepoName.trim() && !createdRepoResult) {
-        const ghToken = localStorage.getItem('nexus:github_token');
-        if (ghToken) {
-          try {
-            const res = await api.processes.githubCreateRepo({
-              token: ghToken,
-              name: newRepoName.trim(),
-              description: newRepoDescription.trim() || undefined,
-              isPrivate: newRepoVisibility === 'private',
-              autoInit: initReadme,
-            });
-            if (res.success && res.repo) {
-              setCreatedRepoResult({ full_name: res.repo.full_name, html_url: res.repo.html_url });
-              setRepoInput(res.repo.full_name);
-            }
-          } catch {
-            // Non-blocking for process launch
+      if (repoMode === 'new' && newRepoName.trim() && !createdRepoResult && isGithubConnected) {
+        try {
+          const res = await api.processes.githubCreateRepo({
+            name: newRepoName.trim(),
+            description: newRepoDescription.trim() || undefined,
+            isPrivate: newRepoVisibility === 'private',
+            autoInit: initReadme,
+          });
+          if (res.success && res.repo) {
+            setCreatedRepoResult({ full_name: res.repo.full_name, html_url: res.repo.html_url });
+            setRepoInput(res.repo.full_name);
           }
+        } catch {
+          // Non-blocking for process launch
         }
       }
 

@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { prisma } from '../lib/prisma.js';
-import { generateApiKey, decryptField } from '../lib/crypto.js';
+import { generateApiKey, decryptField, encryptField } from '../lib/crypto.js';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { logger } from '../lib/logger.js';
 import type { OrgRole } from '@prisma/client';
@@ -220,9 +220,22 @@ export async function getOrganizationIntegrationToken(
     }
   }
 
-  // Fallback to legacy plaintext during transitional period
+  // Fallback to legacy plaintext during transitional period and auto-migrate
   if (typeof settings[legacyKey] === 'string' && settings[legacyKey]) {
-    return settings[legacyKey] as string;
+    const rawVal = settings[legacyKey] as string;
+    try {
+      const encrypted = encryptField(rawVal);
+      const updatedSettings = { ...settings, [encryptedKey]: encrypted };
+      delete updatedSettings[legacyKey];
+      await prisma.organization.update({
+        where: { id: orgId },
+        data: { settings: updatedSettings as any },
+      });
+      logger.info({ orgId, provider }, 'Auto-migrated legacy plaintext integration token to encrypted storage');
+    } catch {
+      /* ignore migration error */
+    }
+    return rawVal;
   }
 
   return undefined;

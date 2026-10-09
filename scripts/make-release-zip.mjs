@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execFileSync } from 'node:child_process';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -130,6 +130,7 @@ const SECRET_PATTERNS = [
   { name: 'OpenAI Live Key', regex: /sk-(?:proj-)?[A-Za-z0-9_-]{48,}/ },
   { name: 'AWS Access Key ID', regex: /(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}/ },
   { name: 'Slack Token', regex: /xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,32}/ },
+  { name: 'SendGrid Key', regex: /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/ },
   { name: 'NVIDIA API Key', regex: /nvapi-[A-Za-z0-9_-]{40,}/ },
   { name: 'Private Key Header', regex: /-----BEGIN (?:RSA|EC|DSA|OPENSSH|PRIVATE) KEY-----/ },
 ];
@@ -165,17 +166,87 @@ if (detectedSecrets > 0) {
 
 console.log(`[Release Builder] Content scan PASSED: 0 active credential patterns detected across all text and test files.`);
 
-// Staging directory
-const stagingBase = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-release-'));
-const stagingDir = path.join(stagingBase, 'nexusqa');
-fs.mkdirSync(stagingDir, { recursive: true });
+// ── Pure Node.js ZIP Builder (Deflate + Standard PK Headers) ─────
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
 
-console.log(`[Release Builder] Staging clean files into: ${stagingDir}`);
-for (const item of filesToPackage) {
-  const destPath = path.join(stagingDir, item.relPath);
-  fs.mkdirSync(path.dirname(destPath), { recursive: true });
-  fs.copyFileSync(item.fullPath, destPath);
+function computeCrc32(buf) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
 }
+
+console.log(`[Release Builder] Packaging ${filesToPackage.length} files into authentic ZIP archive...`);
+
+const locals = [];
+const central = [];
+let offset = 0;
+
+for (const item of filesToPackage) {
+  const content = fs.readFileSync(item.fullPath);
+  const compressed = zlib.deflateRawSync(content);
+  // Prepend top-level directory name "nexusqa/" matching standard release layout
+  const normalizedPath = 'nexusqa/' + item.relPath.split(path.sep).join('/');
+  const nameBuf = Buffer.from(normalizedPath, 'utf8');
+  const crc = computeCrc32(content);
+
+  const localHeader = Buffer.alloc(30);
+  localHeader.writeUInt32LE(0x04034b50, 0);  // local file header signature
+  localHeader.writeUInt16LE(20, 4);          // version needed (2.0)
+  localHeader.writeUInt16LE(0, 6);           // flags
+  localHeader.writeUInt16LE(8, 8);           // method: deflate
+  localHeader.writeUInt16LE(0, 10);          // mod time
+  localHeader.writeUInt16LE(0, 12);          // mod date
+  localHeader.writeUInt32LE(crc, 14);
+  localHeader.writeUInt32LE(compressed.length, 18);
+  localHeader.writeUInt32LE(content.length, 22);
+  localHeader.writeUInt16LE(nameBuf.length, 26);
+  localHeader.writeUInt16LE(0, 28);          // extra length
+
+  locals.push(localHeader, nameBuf, compressed);
+
+  const centralHeader = Buffer.alloc(46);
+  centralHeader.writeUInt32LE(0x02014b50, 0); // central directory signature
+  centralHeader.writeUInt16LE(20, 4);         // version made by
+  centralHeader.writeUInt16LE(20, 6);         // version needed
+  centralHeader.writeUInt16LE(0, 8);          // flags
+  centralHeader.writeUInt16LE(8, 10);         // method: deflate
+  centralHeader.writeUInt16LE(0, 12);         // mod time
+  centralHeader.writeUInt16LE(0, 14);         // mod date
+  centralHeader.writeUInt32LE(crc, 16);
+  centralHeader.writeUInt32LE(compressed.length, 20);
+  centralHeader.writeUInt32LE(content.length, 24);
+  centralHeader.writeUInt16LE(nameBuf.length, 28);
+  centralHeader.writeUInt16LE(0, 30);         // extra length
+  centralHeader.writeUInt16LE(0, 32);         // comment length
+  centralHeader.writeUInt16LE(0, 34);         // disk number start
+  centralHeader.writeUInt16LE(0, 36);         // internal attrs
+  centralHeader.writeUInt32LE(0, 38);         // external attrs
+  centralHeader.writeUInt32LE(offset, 42);    // relative offset of local header
+
+  central.push(centralHeader, nameBuf);
+  offset += localHeader.length + nameBuf.length + compressed.length;
+}
+
+const centralBuf = Buffer.concat(central);
+const end = Buffer.alloc(22);
+end.writeUInt32LE(0x06054b50, 0);            // end of central directory signature
+end.writeUInt16LE(0, 4);                     // disk number
+end.writeUInt16LE(0, 6);                     // central dir disk
+end.writeUInt16LE(filesToPackage.length, 8); // entries on disk
+end.writeUInt16LE(filesToPackage.length, 10);// total entries
+end.writeUInt32LE(centralBuf.length, 12);    // size of central dir
+end.writeUInt32LE(offset, 16);               // offset of start of central dir
+end.writeUInt16LE(0, 20);                    // zip comment length
+
+const finalArchive = Buffer.concat([...locals, centralBuf, end]);
 
 // Remove existing target zip if present
 if (fs.existsSync(targetZip)) {
@@ -185,16 +256,20 @@ if (fs.existsSync(targetZip)) {
 // Ensure parent dir of target exists
 fs.mkdirSync(path.dirname(targetZip), { recursive: true });
 
-console.log(`[Release Builder] Compressing archive...`);
-execFileSync('tar', ['-a', '-c', '-f', targetZip, 'nexusqa'], {
-  cwd: stagingBase,
-  stdio: 'inherit',
-});
+// Write archive buffer atomically
+fs.writeFileSync(targetZip, finalArchive);
 
-// Clean up staging directory
-fs.rmSync(stagingBase, { recursive: true, force: true });
+// Post-archive verification: Check PK magic headers
+const headBytes = finalArchive.subarray(0, 4);
+const tailBytes = finalArchive.subarray(finalArchive.length - 22, finalArchive.length - 18);
+const isPkHeader = headBytes.equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])); // PK\x03\x04
+const isEocdHeader = tailBytes.equals(Buffer.from([0x50, 0x4b, 0x05, 0x06])); // PK\x05\x06
 
-// Post-archive verification
+if (!isPkHeader || !isEocdHeader) {
+  console.error('[INTEGRITY ERROR] Generated file does not conform to genuine PKZIP format.');
+  process.exit(1);
+}
+
 const zipStats = fs.statSync(targetZip);
 console.log(`[Release Builder] Archive created successfully: ${targetZip} (${(zipStats.size / (1024 * 1024)).toFixed(2)} MB)`);
-console.log(`[Release Builder] Archive hygiene check passed: verified absence of local .env files, session artifacts, and tested credential patterns across packaged source files.`);
+console.log(`[Release Builder] Archive hygiene check passed: verified PKZIP standard headers (0x04034b50/0x06054b50), absence of local .env files, session artifacts, and verified 0 secrets across ${filesToPackage.length} files.`);

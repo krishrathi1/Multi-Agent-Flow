@@ -7,7 +7,9 @@ import { prisma } from '../lib/prisma.js';
 import { validate } from '../middleware/validate.js';
 import { config } from '../config.js';
 import { decryptField } from '../lib/crypto.js';
+import { randomBytes } from 'node:crypto';
 import { getOrganizationIntegrationToken } from '../services/org.service.js';
+import { recordAuthorizedPreviewSession } from '../services/insights.service.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from '../services/git-deploy.service.js';
 
 const router = Router();
@@ -191,6 +193,29 @@ router.get('/:id/artifacts.zip', async (req, res) => {
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${safeName}.zip"`);
   res.send(archive);
+});
+
+/**
+ * POST /api/processes/:id/preview-session
+ * Authenticated preview handoff: establishes a process-scoped preview session cookie
+ * allowing authorized organization members to view private previews.
+ */
+router.post('/:id/preview-session', async (req, res) => {
+  const id = paramId(req.params.id);
+  const proc = await processService.getProcessById(id, req.organizationId!);
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+
+  const sessionToken = randomBytes(24).toString('hex');
+  recordAuthorizedPreviewSession(id, sessionToken);
+
+  res.cookie('preview_token', sessionToken, {
+    path: `/preview/${id}`,
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 4 * 60 * 60 * 1000, // 4 hours
+  });
+
+  res.json({ success: true, previewUrl: `/preview/${id}` });
 });
 
 /** Live progress for a run in flight, or the last finished run. */
@@ -483,9 +508,7 @@ router.get('/:id/deployment-logs', async (req, res) => {
   const proc = await processService.getProcessById(paramId(req.params.id), req.organizationId!);
   if (!proc) return res.status(404).json({ error: 'Process not found' });
 
-  const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
-  const orgSettings = (org?.settings as any) || {};
-  const vToken = process.env.VERCEL_TOKEN || process.env.PLATFORM_VERCEL_TOKEN || orgSettings.vercelToken;
+  const vToken = process.env.VERCEL_TOKEN || process.env.PLATFORM_VERCEL_TOKEN || (await getOrganizationIntegrationToken(req.organizationId!, 'vercel'));
 
   if (!vToken) {
     return res.json({
@@ -512,12 +535,8 @@ router.post('/:id/auto-heal', async (req, res) => {
   const workspace = runner.workspaceFor(proc.id);
   const healResult = await autoHealWorkspace(workspace);
 
-  const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
-  const orgSettings = (org?.settings as any) || {};
-  const rawGh = orgSettings.githubTokenEncrypted || orgSettings.githubToken;
-  const ghToken = process.env.GITHUB_TOKEN || (rawGh ? decryptField(rawGh) : undefined);
-  const rawV = orgSettings.vercelTokenEncrypted || orgSettings.vercelToken;
-  const vToken = process.env.VERCEL_TOKEN || (rawV ? decryptField(rawV) : undefined);
+  const ghToken = process.env.GITHUB_TOKEN || (await getOrganizationIntegrationToken(req.organizationId!, 'github'));
+  const vToken = process.env.VERCEL_TOKEN || (await getOrganizationIntegrationToken(req.organizationId!, 'vercel'));
 
   let pushResult: any = null;
   let deployResult: any = null;

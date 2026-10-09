@@ -17,6 +17,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { useAuthStore } from '../../stores/auth-store';
 import { cn } from '../../lib/utils';
 import { formatCompact, formatCurrency } from '../../lib/design';
 import type { CostEstimate, Process, RunStatus, WorkspaceArtifact } from '../../types';
@@ -140,7 +141,13 @@ export function RunPanel({
   const openFileViewer = async (relPath: string) => {
     setReadingFile(true);
     try {
-      const res = await fetch(`/preview/${process.id}/${relPath}`);
+      const token = useAuthStore.getState().accessToken;
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/preview/${process.id}/${relPath}`, {
+        headers,
+        credentials: 'include',
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
       setActiveFile({ path: relPath, content: text });
@@ -161,6 +168,15 @@ export function RunPanel({
 
   const previewUrl = `/preview/${process.id}`;
   const hasPreview = files.some((f) => f.path.endsWith('.html'));
+
+  const handleOpenPreview = async () => {
+    try {
+      await api.processes.preparePreview(process.id);
+    } catch {
+      // Best-effort
+    }
+    window.open(previewUrl, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <>
@@ -192,16 +208,14 @@ export function RunPanel({
               </Button>
             )}
             {hasPreview && (
-              <ButtonLink
+              <Button
                 variant="secondary"
                 size="sm"
-                href={previewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
                 icon={ExternalLink}
+                onClick={handleOpenPreview}
               >
                 Open preview
-              </ButtonLink>
+              </Button>
             )}
             {files.length > 0 && (
               <a

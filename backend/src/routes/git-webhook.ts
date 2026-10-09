@@ -78,11 +78,11 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Repository name ("repository.full_name" or "repo") is required in webhook payload' });
     }
 
-    const githubEvent = req.headers['x-github-event'] as string | undefined;
-    if (githubEvent === 'ping') {
+    const githubEvent = (req.headers['x-github-event'] || req.headers['x-gitlab-event']) as string | undefined;
+    if (githubEvent === 'ping' || githubEvent === 'Ping Hook') {
       return res.status(200).json({ status: 'pong', message: 'Webhook ping received successfully' });
     }
-    if (githubEvent && githubEvent !== 'push') {
+    if (githubEvent && githubEvent !== 'push' && githubEvent !== 'Push Hook') {
       return res.status(200).json({ status: 'ignored', message: `Ignoring non-push event: ${githubEvent}` });
     }
 
