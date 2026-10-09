@@ -556,8 +556,8 @@ export const api = {
   },
   chat: {
     history: (agentId: string) => request<ChatHistory>(`/agents/${agentId}/chat/history`),
-    send: (agentId: string, message: string) =>
-      request<ChatResponse>(`/agents/${agentId}/chat`, { method: 'POST', body: JSON.stringify({ message }) }),
+    send: (agentId: string, message: string, model?: string) =>
+      request<ChatResponse>(`/agents/${agentId}/chat`, { method: 'POST', body: JSON.stringify({ message, model }) }),
     motherHistory: (processId?: string) =>
       request<ChatHistory>(`/agents/mother/history${processId ? `?processId=${encodeURIComponent(processId)}` : ''}`),
     sendToMother: (message: string, processId?: string, model?: string) =>

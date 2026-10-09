@@ -95,7 +95,7 @@ export function RunPanel({
       } catch {
         /* transient — keep polling */
       }
-    }, 5000);
+    }, 3000);
     return () => clearInterval(poll);
   }, [running, process.id]);
 

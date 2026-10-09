@@ -162,7 +162,7 @@ export function Chat() {
         };
         setMessages((prev) => [...prev, assistantMessage]);
       } else if (selectedTarget.agentId) {
-        const response = await api.chat.send(selectedTarget.agentId, text);
+        const response = await api.chat.send(selectedTarget.agentId, text, chatModel || undefined);
         const assistantMessage: ChatMessage = {
           role: 'assistant',
           content: response.result || response.summary || 'No response',

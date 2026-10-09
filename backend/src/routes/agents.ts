@@ -207,6 +207,7 @@ router.post('/:id/chat', async (req, res) => {
         agent.id,
         req.organizationId!,
         req.body.message as string,
+        req.body.model as string | undefined,
       );
       if (!local) {
         return res.status(502).json({ error: 'Local model did not return a response' });

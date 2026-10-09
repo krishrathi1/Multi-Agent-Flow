@@ -362,9 +362,13 @@ export function CreateProcessModal({
     if (isExpandingPrompt) return;
     setIsExpandingPrompt(true);
     try {
+      const effectiveModel = selectedModel && selectedModel !== 'auto'
+        ? selectedModel
+        : (localStorage.getItem('nexus:process_model') || localStorage.getItem('nexus:default_model') || undefined);
+
       const res = await api.processes.expandPrompt({
         prompt: prompt.trim(),
-        model: selectedModel === 'auto' ? undefined : selectedModel,
+        model: effectiveModel,
       });
       if (res?.expandedPrompt) {
         setPrompt(res.expandedPrompt);

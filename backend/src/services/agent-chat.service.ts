@@ -685,6 +685,7 @@ export async function chatLocally(
   agentId: string,
   organizationId: string,
   message: string,
+  requestedModel?: string,
 ): Promise<{ result: string; model: string; sessionKey: string } | null> {
   const agent = await prisma.agent.findFirst({
     where: { id: agentId, organizationId },
@@ -711,6 +712,7 @@ export async function chatLocally(
     organizationId,
     systemPrompt: buildSystemPrompt(agent),
     prompt,
+    preferredModel: requestedModel?.trim() || undefined,
   });
 
   const now = new Date();

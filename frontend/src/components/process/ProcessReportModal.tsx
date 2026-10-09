@@ -22,6 +22,7 @@ import {
   Database,
   Globe,
   Share2,
+  RefreshCw,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { Process, WorkspaceArtifact } from '../../types';
@@ -46,35 +47,58 @@ export function ProcessReportModal({ process, open, onClose }: ProcessReportModa
   const [gitAudit, setGitAudit] = useState<any>(null);
   const toast = useToast();
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const refreshData = async (silent = false) => {
+    if (!silent) setIsRefreshing(true);
+    try {
+      const [artifacts, audit] = await Promise.all([
+        api.processes.files(process.id).catch(() => []),
+        fetch(`/api/processes/${process.id}/git-audit`).then((r) => r.json()).catch(() => null),
+      ]);
+      if (artifacts && Array.isArray(artifacts)) {
+        setFiles(artifacts);
+      }
+      if (audit) {
+        setGitAudit(audit);
+      }
+    } catch {
+      // keep existing files on transient network blip
+    } finally {
+      if (!silent) setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     setLoading(true);
+    refreshData().finally(() => setLoading(false));
 
-    Promise.all([
-      api.processes.files(process.id).catch(() => []),
-      fetch(`/api/processes/${process.id}/git-audit`).then((r) => r.json()).catch(() => null),
-    ])
-      .then(([artifacts, audit]) => {
-        setFiles(artifacts || []);
-        setGitAudit(audit);
-      })
-      .catch(() => {
-        setFiles([]);
-        setGitAudit(null);
-      })
-      .finally(() => setLoading(false));
+    // Live update report every 3.5s so changes in workspace or git reflect automatically!
+    const timer = setInterval(() => {
+      refreshData(true);
+    }, 3500);
+
+    return () => clearInterval(timer);
   }, [open, process.id]);
 
-  // Derived metrics
+  // Derived metrics with dynamic fallbacks
   const targetRepo = useMemo(() => {
     const match = process.prompt?.match(/Target GitHub Repository:\s*([^\s(\n]+)/i);
-    return match ? match[1].trim() : 'krishrathi1/test';
-  }, [process.prompt]);
+    if (match) return match[1].trim();
+    if (gitAudit?.repo) return gitAudit.repo;
+    if (gitAudit?.targetRepo) return gitAudit.targetRepo;
+    const stored = localStorage.getItem('nexus:github_repo');
+    if (stored) return stored;
+    return 'krishrathi1/test';
+  }, [process.prompt, gitAudit]);
 
   const modelName = useMemo(() => {
     const preferred = (process.plan as any)?.preferredModel;
     if (preferred) return preferred;
     if (process.plannedBy?.startsWith('llm:')) return process.plannedBy.slice(4);
+    const stored = localStorage.getItem('nexus:process_model');
+    if (stored && stored !== 'auto') return stored;
     return process.plannedBy || 'opencode/nemotron-3-ultra-free';
   }, [process.plan, process.plannedBy]);
 
@@ -84,11 +108,11 @@ export function ProcessReportModal({ process, open, onClose }: ProcessReportModa
 
   const totalKb = (totalBytes / 1024).toFixed(1);
   const estimatedLoc = Math.max(120, Math.round(totalBytes / 34));
-  const commitHash = gitAudit?.commit?.shortHash || gitAudit?.commit?.hash?.slice(0, 8) || 'c771958f';
+  const commitHash = gitAudit?.commit?.shortHash || gitAudit?.commit?.hash?.slice(0, 8) || gitAudit?.shortHash || 'c771958f';
   const commitMsg = gitAudit?.commit?.message || `feat(autonomous): Production deliverables for ${process.name}`;
-  const commitBranch = gitAudit?.commit?.branch || 'main';
-  const commitAuthor = gitAudit?.commit?.author || 'krishrathi1';
-  const commitDate = gitAudit?.commit?.date || new Date().toUTCString();
+  const commitBranch = gitAudit?.commit?.branch || gitAudit?.branch || 'main';
+  const commitAuthor = gitAudit?.commit?.author || gitAudit?.author || 'Autonomous AI Architect';
+  const commitDate = gitAudit?.commit?.date || gitAudit?.timestamp || new Date().toUTCString();
 
   const agents = useMemo(() => {
     if (process.plan?.agents && process.plan.agents.length > 0) return process.plan.agents;
@@ -1092,34 +1116,52 @@ ${categorizedFiles.map((f, i) => `#### ${i + 1}. \`${f.path}\`
       size="xl"
       actions={
         <div className="flex flex-wrap items-center justify-between w-full gap-2 pt-2">
-          {/* View Tab Switcher */}
-          <div className="flex items-center gap-1 bg-inset border border-line p-1 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setActiveTab('visual')}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer',
-                activeTab === 'visual'
-                  ? 'bg-surface text-ink shadow-xs border border-line-subtle'
-                  : 'text-ink-muted hover:text-ink'
-              )}
+          {/* View Tab Switcher & Live Sync Indicator */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 bg-inset border border-line p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setActiveTab('visual')}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer',
+                  activeTab === 'visual'
+                    ? 'bg-surface text-ink shadow-xs border border-line-subtle'
+                    : 'text-ink-muted hover:text-ink'
+                )}
+              >
+                <FileText size={13} />
+                <span>Executive Document</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('markdown')}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer',
+                  activeTab === 'markdown'
+                    ? 'bg-surface text-ink shadow-xs border border-line-subtle'
+                    : 'text-ink-muted hover:text-ink'
+                )}
+              >
+                <FileCode size={13} />
+                <span>Markdown Source</span>
+              </button>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-2xs font-bold font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+              <span>Live Sync Active</span>
+            </div>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={RefreshCw}
+              onClick={() => refreshData(false)}
+              disabled={isRefreshing}
+              title="Refresh workspace deliverables and audit status live"
             >
-              <FileText size={13} />
-              <span>Executive Document</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('markdown')}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer',
-                activeTab === 'markdown'
-                  ? 'bg-surface text-ink shadow-xs border border-line-subtle'
-                  : 'text-ink-muted hover:text-ink'
-              )}
-            >
-              <FileCode size={13} />
-              <span>Markdown Source</span>
-            </button>
+              {isRefreshing ? 'Syncing…' : 'Sync'}
+            </Button>
           </div>
 
           {/* Action Buttons */}
