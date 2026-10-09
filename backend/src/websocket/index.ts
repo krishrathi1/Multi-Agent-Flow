@@ -45,7 +45,20 @@ export function setupWebSocket(httpServer: HTTPServer) {
     if (!token) return next(new Error('Authentication required'));
     try {
       const payload = verifyAccessToken(token);
-      const member = await prisma.orgMember.findFirst({ where: { userId: payload.userId } });
+      const requestedOrgId = (socket.handshake.auth?.organizationId || socket.handshake.query?.organizationId) as string | undefined;
+
+      let member = null;
+      if (requestedOrgId && typeof requestedOrgId === 'string') {
+        member = await prisma.orgMember.findFirst({
+          where: { userId: payload.userId, organizationId: requestedOrgId },
+        });
+        if (!member) {
+          return next(new Error('Organization access denied'));
+        }
+      } else {
+        member = await prisma.orgMember.findFirst({ where: { userId: payload.userId } });
+      }
+
       if (!member) return next(new Error('No organization'));
       socket.data.userId = payload.userId;
       socket.data.organizationId = member.organizationId;

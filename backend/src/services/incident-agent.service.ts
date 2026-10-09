@@ -56,6 +56,7 @@ export interface IncidentInvestigationResult {
     riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
   };
   approvalId?: string;
+  isSimulated?: boolean;
   postMortemReport: string;
   createdAt: string;
 }
@@ -68,14 +69,36 @@ interface RealGitCommitInfo {
   author: string;
   message: string;
   changedFiles: string[];
+  provenance: 'live_git' | 'unconfigured';
 }
 
 function getLiveGitCommitInfo(): RealGitCommitInfo {
+  try {
+    const raw = execSync('git log -1 --format="%H||%an||%s"', { encoding: 'utf-8' }).trim();
+    if (raw) {
+      const [hash, author, message] = raw.split('||');
+      let changedFiles: string[] = [];
+      try {
+        const diffRaw = execSync('git diff-tree --no-commit-id --name-only -r HEAD', { encoding: 'utf-8' }).trim();
+        if (diffRaw) changedFiles = diffRaw.split('\n').filter(Boolean).slice(0, 5);
+      } catch { /* ignore diff failure */ }
+      return {
+        hash: hash ? hash.slice(0, 8) : 'HEAD',
+        author: author || 'Nexus System',
+        message: message || 'Production deployment commit',
+        changedFiles: changedFiles.length ? changedFiles : ['src/index.ts'],
+        provenance: 'live_git',
+      };
+    }
+  } catch {
+    /* fallback when git binary or repo not available */
+  }
   return {
-    hash: 'main',
-    author: 'Production System',
-    message: 'Baseline operational deployment',
-    changedFiles: ['production/config.json'],
+    hash: 'unconfigured',
+    author: 'Unconfigured / Local Environment',
+    message: 'No live Git repository metadata detected',
+    changedFiles: [],
+    provenance: 'unconfigured',
   };
 }
 
@@ -95,7 +118,7 @@ export async function investigateIncident(
   const investigationId = `inc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
   
   // 1. Gather live organization environment state
-  const [processCount, agents, recentActivities, recentSessions, alertRules] = await Promise.all([
+  const [processCount, agents, recentActivities, recentSessions, alertRules, metricSnapshots] = await Promise.all([
     prisma.process.count({ where: { organizationId } }),
     prisma.agent.findMany({
       where: { organizationId },
@@ -117,6 +140,12 @@ export async function investigateIncident(
       where: { organizationId, enabled: true },
       select: { name: true, condition: true, threshold: true },
     }),
+    prisma.metricSnapshot.findMany({
+      where: { organizationId },
+      take: 50,
+      orderBy: { createdAt: 'desc' },
+      select: { responseTimeMs: true, success: true, toolName: true, errorMessage: true, createdAt: true },
+    }),
   ]);
 
   const liveCommit = getLiveGitCommitInfo();
@@ -125,6 +154,12 @@ export async function investigateIncident(
   const offlineAgents = erroredAgents;
   const errorActivities = recentActivities.filter((a) => a.type === 'ERROR');
   const userSymptom = (input.symptom || input.alertTitle || '').trim();
+  const isSimulated = !!input.scenario;
+
+  const latencies = (metricSnapshots || []).map((m) => m.responseTimeMs).sort((a, b) => a - b);
+  const realP95 = latencies.length ? latencies[Math.floor(latencies.length * 0.95)] : 0;
+  const errorSnapshots = (metricSnapshots || []).filter((m) => !m.success);
+  const realErrorRate = metricSnapshots?.length ? Math.round((errorSnapshots.length / metricSnapshots.length) * 100) : 0;
 
   // If there are no active errors, no errored agents, and no user-supplied symptom, return clean nominal state
   if (!userSymptom && erroredAgents.length === 0 && errorActivities.length === 0) {
@@ -134,6 +169,7 @@ export async function investigateIncident(
       severity: 'INFO',
       status: 'RESOLVED',
       confidence: 1.0,
+      isSimulated: false,
       rootCause: processCount > 0
         ? `All ${agents.length} agents across ${processCount} production process(es) are functioning nominally with zero reported errors.`
         : 'No productions or agents have encountered errors. Fleet telemetry is completely nominal.',
@@ -141,9 +177,9 @@ export async function investigateIncident(
       affectedServices: agents.length > 0 ? agents.slice(0, 3).map((a) => a.name) : ['production-fleet'],
       evidence: {
         metrics: {
-          latencyP95Ms: 120,
-          latencyBaselineMs: 120,
-          errorRatePercent: 0,
+          latencyP95Ms: realP95,
+          latencyBaselineMs: realP95,
+          errorRatePercent: realErrorRate,
           errorRateBaselinePercent: 0,
           cpuUtilizationPercent: 12,
           memoryUtilizationPercent: 24,
@@ -152,12 +188,12 @@ export async function investigateIncident(
         logs: { source: 'Telemetry Collector', sampleErrors: [], topExceptions: [], logVolumeSpikePercent: 0 },
         kubernetes: { cluster: 'nexus-host', namespace: 'production', failingPods: [], recentEvents: ['All agent containers healthy'] },
         deployments: {
-          latestRelease: 'v1.0.0',
+          latestRelease: `v1.0.0-${liveCommit.hash}`,
           deployedAtAgo: 'recently',
-          commitHash: 'main',
-          author: 'Nexus System',
-          commitMessage: 'Production operational state',
-          changedFiles: [],
+          commitHash: liveCommit.hash,
+          author: liveCommit.author,
+          commitMessage: liveCommit.message,
+          changedFiles: liveCommit.changedFiles,
           ciPipelineStatus: 'Passed',
         },
       },
@@ -397,19 +433,26 @@ JSON schema:
     }
   } catch { /* ignore */ }
 
+  const reportPrefix = isSimulated
+    ? '> [!NOTE]\n> **SIMULATED DRILL**: This incident scenario was generated for runbook testing and simulation drills.\n\n'
+    : '';
+
   const result: IncidentInvestigationResult = {
     id: investigationId,
-    title: input.alertTitle || ('Incident [' + investigationId + ']: ' + affectedServices.join(', ')),
+    title: isSimulated
+      ? `[SIMULATED SCENARIO] ${input.alertTitle || 'Drill [' + investigationId + ']'}`
+      : (input.alertTitle || ('Incident [' + investigationId + ']: ' + affectedServices.join(', '))),
     severity,
     status: approvalId ? 'AWAITING_APPROVAL' : 'ROOT_CAUSE_IDENTIFIED',
     confidence,
+    isSimulated,
     rootCause,
-    impactSummary,
+    impactSummary: isSimulated ? `[SIMULATED DATA] ${impactSummary}` : impactSummary,
     affectedServices,
     evidence,
     recommendedAction,
     approvalId,
-    postMortemReport,
+    postMortemReport: reportPrefix + postMortemReport,
     createdAt: new Date().toISOString(),
   };
 

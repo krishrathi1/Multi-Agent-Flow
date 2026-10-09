@@ -2,11 +2,34 @@ import jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
 import { logger } from './logger.js';
 
+const KNOWN_PLACEHOLDERS = [
+  'change_me',
+  'changeme',
+  'super-secret',
+  'supersecret',
+  'your-secret',
+  'your_secret',
+  'example',
+  'placeholder',
+  'default_secret',
+  '123456789',
+];
+
+function isKnownPlaceholder(val: string): boolean {
+  const lower = val.toLowerCase();
+  return KNOWN_PLACEHOLDERS.some((p) => lower.includes(p));
+}
+
 function requireSecret(envVar: string, name: string): string {
   const value = process.env[envVar];
-  if (value && value.length >= 32) return value;
+  if (value && value.length >= 32) {
+    if (process.env.NODE_ENV === 'production' && isKnownPlaceholder(value)) {
+      throw new Error(`FATAL: ${envVar} contains insecure placeholder value in production. Use a cryptographically secure random key.`);
+    }
+    return value;
+  }
   if (process.env.NODE_ENV === 'production') {
-    throw new Error(`FATAL: ${envVar} must be set in production (min 32 chars)`);
+    throw new Error(`FATAL: ${envVar} must be set in production with at least 32 characters of high entropy.`);
   }
   // In development, generate a random secret and warn
   const generated = randomBytes(48).toString('hex');
@@ -16,6 +39,10 @@ function requireSecret(envVar: string, name: string): string {
 
 const ACCESS_SECRET = requireSecret('JWT_SECRET', 'JWT access');
 const REFRESH_SECRET = requireSecret('JWT_REFRESH_SECRET', 'JWT refresh');
+
+if (process.env.NODE_ENV === 'production' && ACCESS_SECRET === REFRESH_SECRET) {
+  throw new Error('FATAL: JWT_SECRET and JWT_REFRESH_SECRET must be separate, distinct keys in production.');
+}
 
 const ACCESS_EXPIRY = '15m';
 const REFRESH_EXPIRY = '7d';

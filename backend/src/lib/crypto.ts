@@ -25,6 +25,12 @@ function getEncryptionKey(): Buffer {
     logger.warn('ENCRYPTION_KEY not set — sensitive data stored as plaintext. Set ENCRYPTION_KEY in .env');
     return Buffer.alloc(0);
   }
+  if (process.env.NODE_ENV === 'production') {
+    const isTrivial = /^([0-9a-f])\1+$/i.test(key) || key.includes('0123456789abcdef');
+    if (isTrivial) {
+      throw new Error('FATAL: ENCRYPTION_KEY contains an insecure repetitive or placeholder pattern in production.');
+    }
+  }
   return Buffer.from(key, 'hex');
 }
 

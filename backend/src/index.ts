@@ -94,13 +94,23 @@ app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 // Disable X-Powered-By (helmet does this, but explicit for clarity)
 app.disable('x-powered-by');
 
-// Health check (public)
+// Health check (public liveness)
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// System Deep Diagnostics (Public Health & Latency Probe)
-app.get('/api/system/diagnostics', async (_req, res) => {
+// Readiness check (public non-leaking probe for Docker / K8s)
+app.get('/api/ready', async (_req, res) => {
+  try {
+    await prisma.$queryRawUnsafe('SELECT 1');
+    res.json({ status: 'ready', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'not_ready', error: 'Database service unavailable' });
+  }
+});
+
+// System Deep Diagnostics (Protected — operators & authenticated admins only)
+app.get('/api/system/diagnostics', requireAuth, async (_req, res) => {
   const start = Date.now();
   let dbStatus = 'DOWN';
   let dbLatencyMs = -1;

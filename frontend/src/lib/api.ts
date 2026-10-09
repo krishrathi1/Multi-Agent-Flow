@@ -4,9 +4,10 @@ import { useAuthStore } from '../stores/auth-store';
 const BASE_URL = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const { accessToken } = useAuthStore.getState();
+  const { accessToken, organization } = useAuthStore.getState();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  if (organization?.id) headers['X-Organization-Id'] = organization.id;
 
   let res = await fetch(`${BASE_URL}${path}`, {
     ...options,

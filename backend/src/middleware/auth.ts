@@ -9,10 +9,24 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   try {
     const payload = verifyAccessToken(header.slice(7));
-    const member = await prisma.orgMember.findFirst({
-      where: { userId: payload.userId },
-      include: { user: { select: { id: true, email: true, name: true } } },
-    });
+    const requestedOrgId = (req.headers['x-organization-id'] as string) || (payload as any).organizationId;
+
+    let member = null;
+    if (requestedOrgId && typeof requestedOrgId === 'string') {
+      member = await prisma.orgMember.findFirst({
+        where: { userId: payload.userId, organizationId: requestedOrgId },
+        include: { user: { select: { id: true, email: true, name: true } } },
+      });
+      if (!member) {
+        return res.status(403).json({ error: 'Organization not found or access denied' });
+      }
+    } else {
+      member = await prisma.orgMember.findFirst({
+        where: { userId: payload.userId },
+        include: { user: { select: { id: true, email: true, name: true } } },
+      });
+    }
+
     if (!member) return res.status(403).json({ error: 'No organization membership' });
 
     req.user = member.user;

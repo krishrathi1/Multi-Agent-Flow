@@ -16,7 +16,7 @@ export function Layout() {
   const { fetchAgents, fetchStats, updateAgent } = useAgentStore();
   const addActivity = useActivityStore((s) => s.addActivity);
   const { setTask, removeTask } = useTaskStore();
-  const { accessToken, isAuthenticated } = useAuthStore();
+  const { accessToken, isAuthenticated, organization } = useAuthStore();
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useUiStore((s) => s.setSidebarCollapsed);
   const setSocketConnected = useUiStore((s) => s.setSocketConnected);
@@ -40,16 +40,16 @@ export function Layout() {
     return () => clearInterval(interval);
   }, [fetchAgents, fetchStats]);
 
-  // Connect socket with auth token
+  // Connect socket with auth token and active organization
   useEffect(() => {
     if (isAuthenticated && accessToken) {
-      connectSocket(accessToken);
+      connectSocket(accessToken, organization?.id);
     }
 
     return () => {
       disconnectSocket();
     };
-  }, [isAuthenticated, accessToken]);
+  }, [isAuthenticated, accessToken, organization?.id]);
 
   useEffect(() => {
     const s = getSocket();

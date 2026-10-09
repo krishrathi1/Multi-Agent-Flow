@@ -1,14 +1,21 @@
-import { randomBytes, createHmac } from 'crypto';
+import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+
+function safeCompare(aStr: string, bStr: string): boolean {
+  const a = Buffer.from(aStr);
+  const b = Buffer.from(bStr);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 function generateSecret(): string {
   return randomBytes(32).toString('hex');
 }
 
 export function verifyWebhookSignature(payload: string, secret: string, signature: string): boolean {
-  const expected = createHmac('sha256', secret).update(payload).digest('hex');
-  return `sha256=${expected}` === signature;
+  const expected = `sha256=${createHmac('sha256', secret).update(payload).digest('hex')}`;
+  return safeCompare(expected, signature);
 }
 
 export async function listWebhooks(boardId: string, organizationId: string) {
@@ -69,17 +76,42 @@ export async function handleInbound(boardId: string, webhookId: string, payload:
   });
   if (!webhook) throw new Error('Webhook not found or disabled');
 
-  // Validate secret if provided in header
+  // Validate secret if configured
   const providedSecret = headers['x-webhook-secret'];
-  if (webhook.secret && providedSecret !== webhook.secret) {
-    throw new Error('Invalid webhook secret');
+  if (webhook.secret) {
+    if (!providedSecret || !safeCompare(providedSecret, webhook.secret)) {
+      throw new Error('Invalid webhook secret');
+    }
+  }
+
+  // Redact sensitive headers before storing in database logs
+  const SENSITIVE_HEADERS = new Set([
+    'authorization',
+    'cookie',
+    'set-cookie',
+    'x-webhook-secret',
+    'x-api-key',
+    'x-hub-signature-256',
+    'x-hub-signature',
+    'proxy-authorization',
+    'token',
+    'x-auth-token',
+  ]);
+
+  const sanitizedHeaders: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (SENSITIVE_HEADERS.has(key.toLowerCase())) {
+      sanitizedHeaders[key] = '[REDACTED]';
+    } else {
+      sanitizedHeaders[key] = value;
+    }
   }
 
   const stored = await prisma.boardWebhookPayload.create({
     data: {
       webhookId,
       payload: payload as any,
-      headers,
+      headers: sanitizedHeaders,
       sourceIp,
       contentType,
     },
