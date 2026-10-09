@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import { config } from '../config.js';
@@ -117,22 +117,53 @@ export async function models() {
   }
 }
 
-export async function run(prompt: string, model?: string, cwd?: string, timeoutMs?: number) {
+export async function run(prompt: string, model?: string, cwd?: string, timeoutMs?: number): Promise<{ result: string; model: string | null }> {
   const args = ['run', prompt];
   if (model?.trim()) args.push('--model', model.trim());
   args.push('--pure');
   const workingDirectory = cwd?.trim() || process.env.OPENCODE_WORKDIR || process.cwd();
   if (!existsSync(workingDirectory)) throw new Error(`OpenCode working directory does not exist: ${workingDirectory}`);
-  const { stdout, stderr } = await execFileAsync(commandName(), args, {
-    cwd: workingDirectory,
-    timeout: timeoutMs || config.opencodeTimeoutMs,
-    windowsHide: true,
-    maxBuffer: 4 * 1024 * 1024,
-    env: process.env,
+
+  const effectiveTimeout = timeoutMs || config.opencodeTimeoutMs;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(commandName(), args, {
+      cwd: workingDirectory,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: process.env,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let isTimedOut = false;
+
+    const timer = setTimeout(() => {
+      isTimedOut = true;
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      reject(new Error(`OpenCode execution timed out after ${effectiveTimeout}ms`));
+    }, effectiveTimeout);
+
+    child.stdout?.on('data', (d) => { stdout += d.toString(); });
+    child.stderr?.on('data', (d) => { stderr += d.toString(); });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      if (!isTimedOut) reject(err);
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (isTimedOut) return;
+      let cleanResult = (stdout || stderr).trim();
+      cleanResult = cleanResult.replace(/^>\s*build\s*·\s*[^\n\r]+\r?\n+/i, '').trim();
+      if (cleanResult.length === 0 && code !== 0) {
+        reject(new Error(`OpenCode exited with code ${code}`));
+      } else {
+        resolve({ result: cleanResult, model: model || config.opencodeModel || null });
+      }
+    });
   });
-  let cleanResult = (stdout || stderr).trim();
-  cleanResult = cleanResult.replace(/^>\s*build\s*·\s*[^\n\r]+\r?\n+/i, '').trim();
-  return { result: cleanResult, model: model || config.opencodeModel || null };
 }
 
 export async function install() {

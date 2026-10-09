@@ -52,6 +52,19 @@ interface ParsedCurl {
   body?: string;
 }
 
+export interface AdditionalApiEndpoint {
+  id: string;
+  name: string;
+  curlInput: string;
+  method: string;
+  url: string;
+  authHeader: string;
+  body: string;
+  testStatus: 'idle' | 'testing' | 'success' | 'failed';
+  testMessage: string;
+  saved: boolean;
+}
+
 const AI_TEMPLATES = [
   {
     title: '🌐 End-to-End Full-Stack Web & App Builder',
@@ -167,7 +180,7 @@ export function CreateProcessModal({
   const [isExpandingPrompt, setIsExpandingPrompt] = useState(false);
 
   // Dynamic API Endpoints list (Add More API feature)
-  const [apiEndpoints, setApiEndpoints] = useState<Array<{ id: string; name: string; url: string; apiKey: string }>>([]);
+  const [apiEndpoints, setApiEndpoints] = useState<AdditionalApiEndpoint[]>([]);
 
   // Available models from Settings and Local hardware
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string; provider: string; source?: string }>>([]);
@@ -366,16 +379,102 @@ export function CreateProcessModal({
   const handleAddApiEndpoint = () => {
     setApiEndpoints((prev) => [
       ...prev,
-      { id: String(Date.now()), name: `API Endpoint #${prev.length + 1}`, url: '', apiKey: '' },
+      {
+        id: String(Date.now() + Math.random()),
+        name: `API #${prev.length + 2}`,
+        curlInput: '',
+        method: 'GET',
+        url: '',
+        authHeader: '',
+        body: '',
+        testStatus: 'idle',
+        testMessage: '',
+        saved: false,
+      },
     ]);
   };
 
-  const handleUpdateApiEndpoint = (id: string, field: 'name' | 'url' | 'apiKey', value: string) => {
+  const handleUpdateApiEndpoint = <K extends keyof AdditionalApiEndpoint>(
+    id: string,
+    field: K,
+    value: AdditionalApiEndpoint[K]
+  ) => {
     setApiEndpoints((prev) => prev.map((ep) => (ep.id === id ? { ...ep, [field]: value } : ep)));
   };
 
   const handleRemoveApiEndpoint = (id: string) => {
     setApiEndpoints((prev) => prev.filter((ep) => ep.id !== id));
+  };
+
+  const handleParseCurlForEndpoint = (id: string, raw: string) => {
+    if (!raw.trim()) return;
+    const parsed = parseCurlCommand(raw);
+    if (parsed) {
+      const auth = Object.entries(parsed.headers).find(([k]) => k.toLowerCase() === 'authorization')?.[1] || '';
+      setApiEndpoints((prev) =>
+        prev.map((ep) =>
+          ep.id === id
+            ? {
+                ...ep,
+                curlInput: raw,
+                method: parsed.method,
+                url: parsed.url,
+                authHeader: auth,
+                body: parsed.body || '',
+                saved: true,
+              }
+            : ep
+        )
+      );
+      setTimeout(() => {
+        setApiEndpoints((prev) =>
+          prev.map((ep) => (ep.id === id ? { ...ep, saved: false } : ep))
+        );
+      }, 3000);
+    }
+  };
+
+  const handleTestApiForEndpoint = async (id: string) => {
+    const ep = apiEndpoints.find((e) => e.id === id);
+    if (!ep || !ep.url.trim()) {
+      handleUpdateApiEndpoint(id, 'testStatus', 'failed');
+      handleUpdateApiEndpoint(id, 'testMessage', 'Please provide a valid endpoint URL first.');
+      return;
+    }
+    try {
+      new URL(ep.url.trim());
+    } catch {
+      handleUpdateApiEndpoint(id, 'testStatus', 'failed');
+      handleUpdateApiEndpoint(id, 'testMessage', 'Invalid URL format.');
+      return;
+    }
+
+    handleUpdateApiEndpoint(id, 'testStatus', 'testing');
+    handleUpdateApiEndpoint(id, 'testMessage', 'Testing connectivity…');
+    try {
+      const authHeader = ep.authHeader.trim();
+      const headers = authHeader
+        ? { [authHeader.includes(':') ? authHeader.split(':', 1)[0].trim() : 'Authorization']: authHeader.includes(':') ? authHeader.split(':').slice(1).join(':').trim() : authHeader }
+        : {};
+      const result = await api.processes.testApi({
+        url: ep.url.trim(),
+        method: ep.method,
+        headers,
+        body: ep.body || undefined,
+      });
+      handleUpdateApiEndpoint(id, 'testStatus', result.ok ? 'success' : 'failed');
+      handleUpdateApiEndpoint(id, 'testMessage', `${result.ok ? '✓' : '✗'} ${result.status || 'Failed'} • ${result.latencyMs}ms`);
+    } catch (err) {
+      handleUpdateApiEndpoint(id, 'testStatus', 'failed');
+      handleUpdateApiEndpoint(id, 'testMessage', (err as Error).message || 'API test failed.');
+    }
+  };
+
+  const handleSaveApiForEndpoint = (id: string) => {
+    handleUpdateApiEndpoint(id, 'saved', true);
+    setTimeout(() => {
+      handleUpdateApiEndpoint(id, 'saved', false);
+    }, 3000);
   };
 
   useEffect(() => {
@@ -411,6 +510,7 @@ export function CreateProcessModal({
     setTestStatus('idle');
     setTestMessage('');
     setApiSaved(false);
+    setApiEndpoints([]);
     setRepoMode('existing');
     setNewRepoName('');
     setRepoGoal('');
@@ -428,15 +528,27 @@ export function CreateProcessModal({
   const getEffectivePrompt = () => {
     let final = `Fleet Primary Goal & Requirements:\n${prompt.trim() || 'Review codebase, build modular full-stack components, and deploy deliverables.'}\n\n`;
 
-    if (curlInput.trim() || apiUrl.trim()) {
-      final += `API & cURL Integrations:\n`;
-      if (curlInput.trim()) final += `Raw cURL: ${curlInput.trim()}\n`;
-      if (apiUrl.trim()) final += `Endpoint: ${apiMethod} ${apiUrl.trim()}\n`;
-      if (apiAuthHeader.trim()) final += `Auth Header: ${apiAuthHeader.trim()}\n`;
-      if (apiBody.trim()) final += `Payload: ${apiBody.trim()}\n`;
-      if (apiEndpoints.length > 1) {
-        final += `Additional APIs:\n` + apiEndpoints.map(e => `- ${e.name}: ${e.url} (Key: ${e.apiKey || 'None'})`).join('\n') + '\n';
+    const hasPrimaryApi = Boolean(curlInput.trim() || apiUrl.trim());
+    const hasAdditionalApis = apiEndpoints.some((e) => Boolean(e.url.trim() || e.curlInput.trim()));
+
+    if (hasPrimaryApi || hasAdditionalApis) {
+      final += `Connected API Endpoints & cURL Specifications:\n`;
+      if (hasPrimaryApi) {
+        final += `[API #1: Primary Service / Model Endpoint]\n`;
+        if (curlInput.trim()) final += `  cURL Command: ${curlInput.trim()}\n`;
+        if (apiUrl.trim()) final += `  Endpoint: ${apiMethod} ${apiUrl.trim()}\n`;
+        if (apiAuthHeader.trim()) final += `  Auth Header: ${apiAuthHeader.trim()}\n`;
+        if (apiBody.trim()) final += `  Request Body: ${apiBody.trim()}\n`;
       }
+      apiEndpoints.forEach((ep, idx) => {
+        if (ep.url.trim() || ep.curlInput.trim()) {
+          final += `[API #${idx + 2}: ${ep.name || 'Additional Service'}]\n`;
+          if (ep.curlInput.trim()) final += `  cURL Command: ${ep.curlInput.trim()}\n`;
+          if (ep.url.trim()) final += `  Endpoint: ${ep.method} ${ep.url.trim()}\n`;
+          if (ep.authHeader.trim()) final += `  Auth Header: ${ep.authHeader.trim()}\n`;
+          if (ep.body.trim()) final += `  Request Body: ${ep.body.trim()}\n`;
+        }
+      });
       final += '\n';
     }
 
@@ -893,14 +1005,60 @@ export function CreateProcessModal({
         {/* ========================================================================= */}
         {step === 'curl' && (
           <div className="space-y-4">
-            {/* cURL input area */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-ink flex items-center gap-1.5">
-                  <Terminal size={13} className="text-brand-500" />
-                  Paste Raw cURL Command
-                </label>
-                <div className="flex items-center gap-1.5">
+            {/* Header bar with Add API button */}
+            <div className="flex items-center justify-between pb-1">
+              <div>
+                <span className="text-xs font-bold text-ink block">API Integrations & cURL Endpoints</span>
+                <span className="text-2xs text-ink-muted block">
+                  Add one or multiple custom APIs & cURL commands for your autonomous agent fleet.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddApiEndpoint}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-brand-500/10 px-3 py-1.5 text-xs font-bold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 active:scale-[0.98] transition-all cursor-pointer shadow-2xs"
+              >
+                <Plus size={13} />
+                <span>+ Add Another API</span>
+              </button>
+            </div>
+
+            {/* ── API #1: PRIMARY ENDPOINT ── */}
+            <div className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-2xs space-y-3.5">
+              <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center h-5 px-1.5 rounded-md bg-brand-500/15 text-brand-600 dark:text-brand-400 font-mono text-2xs font-bold shrink-0">
+                    API #1 (Primary)
+                  </span>
+                  <span className="text-xs font-bold text-ink">Primary API / Model Endpoint</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {testStatus !== 'idle' && (
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono font-bold',
+                        testStatus === 'testing' && 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25',
+                        testStatus === 'success' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25',
+                        testStatus === 'failed' && 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25'
+                      )}
+                    >
+                      {testStatus === 'testing' && <RefreshCw size={10} className="animate-spin" />}
+                      {testStatus === 'success' && <CheckCircle2 size={10} />}
+                      {testStatus === 'failed' && <AlertCircle size={10} />}
+                      {testMessage}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* cURL input area */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-2xs font-bold text-ink flex items-center gap-1.5">
+                    <Terminal size={12} className="text-brand-500" />
+                    Paste Raw cURL Command
+                  </label>
                   <button
                     type="button"
                     onClick={() => handleParseAndSaveCurl()}
@@ -916,11 +1074,9 @@ export function CreateProcessModal({
                     <span>{curlSaved ? '✓ cURL Parsed & Saved' : 'Save & Parse cURL'}</span>
                   </button>
                 </div>
-              </div>
 
-              <div className="relative">
                 <textarea
-                  rows={3}
+                  rows={2.5}
                   value={curlInput}
                   onChange={(e) => {
                     setCurlInput(e.target.value);
@@ -933,41 +1089,14 @@ export function CreateProcessModal({
                   className="w-full rounded-xl border border-line bg-surface p-3 font-mono text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
                 />
               </div>
-            </div>
 
-              {/* Extracted API Endpoint & Test / Save Card */}
-            <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 shadow-2xs space-y-3">
-              <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center">
-                    <Zap size={13} />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-ink block">Extracted API Endpoint & Connection</span>
-                    <span className="text-[10px] text-ink-muted block">Direct endpoint generated from your cURL</span>
-                  </div>
+              {/* Extracted Details */}
+              <div className="rounded-xl border border-line-subtle bg-inset/30 p-3 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-2xs font-bold text-ink">
+                  <Zap size={12} className="text-brand-500" />
+                  <span>Extracted API Endpoint & Connection</span>
                 </div>
 
-                {/* Test status badge */}
-                {testStatus !== 'idle' && (
-                  <span
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono font-bold',
-                      testStatus === 'testing' && 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25',
-                      testStatus === 'success' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25',
-                      testStatus === 'failed' && 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25'
-                    )}
-                  >
-                    {testStatus === 'testing' && <RefreshCw size={10} className="animate-spin" />}
-                    {testStatus === 'success' && <CheckCircle2 size={10} />}
-                    {testStatus === 'failed' && <AlertCircle size={10} />}
-                    {testMessage}
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-2.5">
-                {/* Method & URL */}
                 <div className="flex gap-2">
                   <div className="w-28 shrink-0">
                     <CustomSelect
@@ -991,23 +1120,19 @@ export function CreateProcessModal({
                   />
                 </div>
 
-                {/* Auth / API Key Header */}
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3 top-2.5 text-ink-muted">
-                      <Key size={12} />
-                    </span>
-                    <input
-                      type="text"
-                      value={apiAuthHeader}
-                      onChange={(e) => setApiAuthHeader(e.target.value)}
-                      placeholder="Authorization: Bearer sk-... or API Key"
-                      className="w-full rounded-xl border border-line bg-surface pl-8 pr-3 py-2 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    />
-                  </div>
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-2.5 text-ink-muted">
+                    <Key size={12} />
+                  </span>
+                  <input
+                    type="text"
+                    value={apiAuthHeader}
+                    onChange={(e) => setApiAuthHeader(e.target.value)}
+                    placeholder="Authorization: Bearer sk-... or API Key"
+                    className="w-full rounded-xl border border-line bg-surface pl-8 pr-3 py-2 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  />
                 </div>
 
-                {/* Payload / Body if not GET */}
                 {apiMethod !== 'GET' && (
                   <div>
                     <label className="block text-[10px] font-semibold text-ink-muted mb-1 uppercase tracking-wider">
@@ -1023,13 +1148,12 @@ export function CreateProcessModal({
                   </div>
                 )}
 
-                {/* Test Connection & Save Action Buttons */}
                 <div className="flex items-center justify-between pt-1">
                   <button
                     type="button"
                     onClick={handleTestApi}
                     disabled={testStatus === 'testing' || !apiUrl.trim()}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-inset border border-line px-3 py-1.5 text-xs font-bold text-ink hover:bg-hover hover:border-brand-500 transition-all disabled:opacity-50 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-surface border border-line px-3 py-1.5 text-xs font-bold text-ink hover:bg-hover hover:border-brand-500 transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
                   >
                     <Send size={12} className={testStatus === 'testing' ? 'animate-pulse text-brand-500' : 'text-brand-500'} />
                     <span>{testStatus === 'testing' ? 'Testing Connection…' : 'Test Connection'}</span>
@@ -1052,58 +1176,183 @@ export function CreateProcessModal({
               </div>
             </div>
 
-            {/* Secondary API Endpoints Manager */}
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center justify-between">
-                <span className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
-                  Additional Connected APIs ({apiEndpoints.length})
-                </span>
-                <button
-                  type="button"
-                  onClick={handleAddApiEndpoint}
-                  className="inline-flex items-center gap-1 rounded-md bg-brand-500/10 px-2 py-0.5 text-2xs font-semibold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 transition-all cursor-pointer"
-                >
-                  <Plus size={11} />
-                  <span>+ Add Another API</span>
-                </button>
-              </div>
+            {/* ── ADDITIONAL CONFIGURED APIS ── */}
+            {apiEndpoints.map((ep, idx) => (
+              <div key={ep.id} className="rounded-2xl border border-line-subtle bg-surface p-4 shadow-2xs space-y-3.5 animate-scale-in">
+                <div className="flex items-center justify-between border-b border-line-subtle pb-2.5">
+                  <div className="flex items-center gap-2 flex-1 mr-2">
+                    <span className="inline-flex items-center justify-center h-5 px-1.5 rounded-md bg-purple-500/15 text-purple-600 dark:text-purple-400 font-mono text-2xs font-bold shrink-0">
+                      API #{idx + 2}
+                    </span>
+                    <input
+                      type="text"
+                      value={ep.name}
+                      onChange={(e) => handleUpdateApiEndpoint(ep.id, 'name', e.target.value)}
+                      placeholder="API Name (e.g. Payment Gateway, Vector DB, Search API)"
+                      className="text-xs font-bold text-ink bg-transparent border-b border-dashed border-line hover:border-brand-500 focus:border-brand-500 focus:outline-none px-1 py-0.5 flex-1 max-w-sm"
+                    />
+                  </div>
 
-              {apiEndpoints.map((ep, idx) => (
-                <div key={ep.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line-subtle bg-surface p-2.5 text-xs">
-                  <input
-                    type="text"
-                    value={ep.name}
-                    onChange={(e) => handleUpdateApiEndpoint(ep.id, 'name', e.target.value)}
-                    placeholder="API Name"
-                    className="w-28 sm:w-36 rounded-lg border border-line bg-inset/50 px-2 py-1.5 text-2xs font-bold text-ink"
-                  />
-                  <input
-                    type="text"
-                    value={ep.url}
-                    onChange={(e) => handleUpdateApiEndpoint(ep.id, 'url', e.target.value)}
-                    placeholder="https://api.service.com/v1/..."
-                    className="flex-1 min-w-[140px] rounded-lg border border-line bg-inset/50 px-2.5 py-1.5 font-mono text-2xs text-ink"
-                  />
-                  <input
-                    type="password"
-                    value={ep.apiKey}
-                    onChange={(e) => handleUpdateApiEndpoint(ep.id, 'apiKey', e.target.value)}
-                    placeholder="API Key / Auth"
-                    className="w-28 sm:w-32 rounded-lg border border-line bg-inset/50 px-2.5 py-1.5 font-mono text-2xs text-ink"
-                  />
-                  {idx > 0 && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {ep.testStatus !== 'idle' && (
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono font-bold',
+                          ep.testStatus === 'testing' && 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25',
+                          ep.testStatus === 'success' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25',
+                          ep.testStatus === 'failed' && 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25'
+                        )}
+                      >
+                        {ep.testStatus === 'testing' && <RefreshCw size={10} className="animate-spin" />}
+                        {ep.testStatus === 'success' && <CheckCircle2 size={10} />}
+                        {ep.testStatus === 'failed' && <AlertCircle size={10} />}
+                        {ep.testMessage}
+                      </span>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => handleRemoveApiEndpoint(ep.id)}
-                      className="text-red-400 hover:text-red-300 p-1 transition-colors cursor-pointer"
-                      title="Remove API"
+                      className="p-1 rounded-lg text-ink-muted hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      title="Remove this API"
                     >
                       <Trash2 size={13} />
                     </button>
-                  )}
+                  </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Raw cURL Input for this API */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-2xs font-bold text-ink flex items-center gap-1.5">
+                      <Terminal size={11} className="text-brand-500" />
+                      Paste cURL Command (Optional)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleParseCurlForEndpoint(ep.id, ep.curlInput)}
+                      disabled={!ep.curlInput.trim()}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-bold transition-all cursor-pointer',
+                        ep.saved
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                          : 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20'
+                      )}
+                    >
+                      {ep.saved ? <Check size={10} /> : <Save size={10} />}
+                      <span>{ep.saved ? '✓ Parsed' : 'Save & Parse cURL'}</span>
+                    </button>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={ep.curlInput}
+                    onChange={(e) => {
+                      handleUpdateApiEndpoint(ep.id, 'curlInput', e.target.value);
+                      handleParseCurlForEndpoint(ep.id, e.target.value);
+                    }}
+                    placeholder={`curl -X POST https://api.service.com/v1/endpoint \\\n  -H 'Authorization: Bearer sk-...'`}
+                    className="w-full rounded-xl border border-line bg-surface p-2.5 font-mono text-2xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+                  />
+                </div>
+
+                {/* Extracted Fields */}
+                <div className="rounded-xl border border-line-subtle bg-inset/30 p-3 space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-2xs font-bold text-ink">
+                    <Zap size={12} className="text-brand-500" />
+                    <span>Endpoint & Connection Details</span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="w-28 shrink-0">
+                      <CustomSelect
+                        value={ep.method}
+                        onChange={(val) => handleUpdateApiEndpoint(ep.id, 'method', val)}
+                        options={[
+                          { value: 'GET', label: 'GET' },
+                          { value: 'POST', label: 'POST' },
+                          { value: 'PUT', label: 'PUT' },
+                          { value: 'PATCH', label: 'PATCH' },
+                          { value: 'DELETE', label: 'DELETE' },
+                        ]}
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={ep.url}
+                      onChange={(e) => handleUpdateApiEndpoint(ep.id, 'url', e.target.value)}
+                      placeholder="https://api.service.com/v1/endpoint"
+                      className="flex-1 rounded-xl border border-line bg-surface px-3 py-2 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-2.5 text-ink-muted">
+                      <Key size={12} />
+                    </span>
+                    <input
+                      type="text"
+                      value={ep.authHeader}
+                      onChange={(e) => handleUpdateApiEndpoint(ep.id, 'authHeader', e.target.value)}
+                      placeholder="Authorization: Bearer sk-... or API Key"
+                      className="w-full rounded-xl border border-line bg-surface pl-8 pr-3 py-2 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  {ep.method !== 'GET' && (
+                    <div>
+                      <label className="block text-[10px] font-semibold text-ink-muted mb-1 uppercase tracking-wider">
+                        Request Payload (JSON Body)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={ep.body}
+                        onChange={(e) => handleUpdateApiEndpoint(ep.id, 'body', e.target.value)}
+                        placeholder='{"key": "value"}'
+                        className="w-full rounded-xl border border-line bg-inset/40 p-2.5 font-mono text-2xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleTestApiForEndpoint(ep.id)}
+                      disabled={ep.testStatus === 'testing' || !ep.url.trim()}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-surface border border-line px-3 py-1.5 text-xs font-bold text-ink hover:bg-hover hover:border-brand-500 transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
+                    >
+                      <Send size={12} className={ep.testStatus === 'testing' ? 'animate-pulse text-brand-500' : 'text-brand-500'} />
+                      <span>{ep.testStatus === 'testing' ? 'Testing…' : 'Test Connection'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSaveApiForEndpoint(ep.id)}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer',
+                        ep.saved
+                          ? 'bg-emerald-500 text-white shadow-xs'
+                          : 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20'
+                      )}
+                    >
+                      {ep.saved ? <Check size={12} /> : <Save size={12} />}
+                      <span>{ep.saved ? '✓ Saved' : 'Save Configuration'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Prominent "+ Add Another API" card button */}
+            <button
+              type="button"
+              onClick={handleAddApiEndpoint}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand-500/35 hover:border-brand-500 bg-brand-500/5 hover:bg-brand-500/10 py-3.5 text-xs font-bold text-brand-600 dark:text-brand-400 transition-all cursor-pointer shadow-2xs group"
+            >
+              <div className="w-5 h-5 rounded-full bg-brand-500/15 group-hover:bg-brand-500/25 flex items-center justify-center transition-all">
+                <Plus size={13} />
+              </div>
+              <span>+ Add Another API / cURL Connection ({apiEndpoints.length + 1} Configured)</span>
+            </button>
           </div>
         )}
 
@@ -1561,6 +1810,54 @@ export function CreateProcessModal({
                   </div>
                 );
               })}
+            {/* Connected APIs Summary Card in Review Step */}
+            {(curlInput.trim() || apiUrl.trim() || apiEndpoints.length > 0) && (
+              <div className="rounded-2xl border border-line-subtle bg-surface p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-2xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                    <Zap size={12} className="text-brand-500" />
+                    Configured API Integrations ({Boolean(curlInput.trim() || apiUrl.trim()) ? 1 + apiEndpoints.length : apiEndpoints.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setStep('curl')}
+                    className="text-[10px] font-semibold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+                  >
+                    Edit APIs
+                  </button>
+                </div>
+                <div className="space-y-1.5">
+                  {(curlInput.trim() || apiUrl.trim()) && (
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-inset/40 border border-line-subtle text-xs">
+                      <div className="flex items-center gap-2 truncate flex-1 mr-2">
+                        <span className="font-mono text-2xs font-bold px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-600 dark:text-brand-400 shrink-0">
+                          {apiMethod}
+                        </span>
+                        <span className="font-semibold text-ink shrink-0">API #1 (Primary)</span>
+                        <span className="font-mono text-2xs text-ink-muted truncate">{apiUrl || 'cURL Configured'}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">
+                        ✓ Ready
+                      </span>
+                    </div>
+                  )}
+                  {apiEndpoints.map((ep, idx) => (
+                    <div key={ep.id} className="flex items-center justify-between p-2 rounded-xl bg-inset/40 border border-line-subtle text-xs">
+                      <div className="flex items-center gap-2 truncate flex-1 mr-2">
+                        <span className="font-mono text-2xs font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0">
+                          {ep.method}
+                        </span>
+                        <span className="font-semibold text-ink shrink-0">{ep.name || `API #${idx + 2}`}</span>
+                        <span className="font-mono text-2xs text-ink-muted truncate">{ep.url || 'cURL Configured'}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">
+                        ✓ Ready
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             </div>
           </div>
         )}

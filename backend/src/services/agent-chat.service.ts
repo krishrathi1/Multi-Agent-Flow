@@ -147,7 +147,7 @@ async function callChatLLM(params: {
   // 2. OpenCode CLI Model Selection (Focused timeout & pure execution)
   if (isOpenCode) {
     try {
-      const op = await runOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, preferred, undefined, 18000);
+      const op = await runOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, preferred, undefined, 45000);
       if (op.result && op.result.length > 0) {
         const inputTokens = Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
         const outputTokens = Math.max(50, Math.ceil(op.result.length / 4));
