@@ -417,7 +417,7 @@ export function Approvals() {
           <p className="text-xs text-ink-muted max-w-md mx-auto leading-relaxed mb-4">
             {statusFilter !== 'ALL'
               ? `No ${statusFilter.toLowerCase()} requests found matching the active filter.`
-              : 'All autonomous agent actions have been resolved. Approvals will appear here when agents or Incident Doctor request human sign-off.'}
+              : 'All autonomous agent actions have been resolved. Approvals will appear here when agents pause for human sign-off on sensitive stage gates or production changes.'}
           </p>
           <div className="flex items-center justify-center gap-2.5">
             <Link
@@ -432,7 +432,7 @@ export function Approvals() {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-line bg-inset text-xs font-semibold text-ink hover:text-ink-strong hover:bg-hover transition-colors"
             >
               <Activity size={13} />
-              Open Incident Doctor
+              Alerts & Telemetry
             </Link>
           </div>
         </div>
