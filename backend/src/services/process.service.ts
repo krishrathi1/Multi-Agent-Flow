@@ -20,8 +20,8 @@ const PROCESS_COLORS = [
 ] as const;
 
 /** Ensures the process name is unique inside the org by suffixing a counter. */
-async function uniqueProcessName(organizationId: string, base: string): Promise<string> {
-  const trimmed = base.trim().slice(0, 60) || 'Untitled production';
+async function uniqueProcessName(organizationId: string, base?: string): Promise<string> {
+  const trimmed = (base || 'Untitled production').trim().slice(0, 60) || 'Untitled production';
   let candidate = trimmed;
   for (let i = 2; i < 50; i++) {
     const clash = await prisma.process.findFirst({
@@ -44,10 +44,10 @@ async function uniqueProcessName(organizationId: string, base: string): Promise<
  */
 async function uniqueAgentName(
   organizationId: string,
-  base: string,
+  base?: string,
   claimed: ReadonlySet<string> = new Set(),
 ): Promise<string> {
-  const seed = base.trim() || 'agent';
+  const seed = (base || 'agent').trim() || 'agent';
   let candidate = seed.slice(0, 50);
   for (let i = 2; i < 100; i++) {
     const taken =
@@ -240,21 +240,26 @@ async function createProcessOnce(
         }
       }
 
+      const agentDisplayName = (spec.displayName || spec.name || `Agent ${i + 1}`).trim();
+      const agentRole = (spec.role || (spec as any).processRole || 'Contributor').trim();
+      const agentStage = Number(spec.stage ?? (spec as any).processStage ?? 1) || 1;
+      const agentHeartbeat = Number(spec.heartbeatInterval ?? 30) || 30;
+
       const createdAgent = await tx.agent.create({
         data: {
           organizationId,
           name: resolvedNames[i],
-          displayName: spec.displayName,
-          description: spec.description,
+          displayName: agentDisplayName,
+          description: spec.description || `${agentDisplayName} - ${agentRole}`,
           workspace: `~/processes/${proc.id}/${resolvedNames[i]}/`,
-          soulMd: finalSoulMd,
+          soulMd: finalSoulMd || `# ${agentDisplayName}\nRole: ${agentRole}`,
           soulTemplateId,
-          avatar: spec.avatar,
-          heartbeatInterval: spec.heartbeatInterval,
+          avatar: spec.avatar || null,
+          heartbeatInterval: agentHeartbeat,
           gatewayId: input.gatewayId ?? null,
           processId: proc.id,
-          processRole: spec.role,
-          processStage: spec.stage,
+          processRole: agentRole,
+          processStage: agentStage,
         },
       });
 

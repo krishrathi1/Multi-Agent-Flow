@@ -680,11 +680,14 @@ export async function fetchLiveModels(
 
       models.sort((a, b) => {
         const score = (id: string) => {
-          if (id.includes('2.5-flash')) return 100;
-          if (id.includes('2.5-pro')) return 95;
-          if (id.includes('2.0-flash')) return 90;
-          if (id.includes('1.5-pro')) return 85;
-          if (id.includes('1.5-flash')) return 80;
+          if (id === 'gemini-flash-lite-latest') return 120;
+          if (id === 'gemini-flash-latest') return 115;
+          if (id.includes('3.5-flash-lite')) return 110;
+          if (id.includes('3.5-flash')) return 105;
+          if (id.includes('3.6-flash')) return 100;
+          if (id.includes('2.5-flash')) return 95;
+          if (id.includes('2.5-pro')) return 90;
+          if (id.includes('2.0-flash')) return 85;
           return 10;
         };
         return score(b.id) - score(a.id);

@@ -946,7 +946,7 @@ export async function askCodebase(
         cleanPreferred,
         'gemini-flash-lite-latest',
         'gemini-flash-latest',
-        'gemini-2.5-flash',
+        'gemini-3.5-flash-lite',
         ...config.geminiModels.map(m => m.replace(/^(google|gemini)\//i, '')),
       ].filter(Boolean) as string[];
 

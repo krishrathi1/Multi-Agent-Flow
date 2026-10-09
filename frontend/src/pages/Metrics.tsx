@@ -87,7 +87,7 @@ export function Metrics() {
   const availableModels = useMemo(() => {
     const set = new Set<string>();
     tokens.forEach((t) => { if (t.model) set.add(t.model); });
-    ['gemini-2.5-pro', 'gemini-2.0-flash', 'claude-3-7-sonnet', 'gpt-4o', 'opencode'].forEach((m) => set.add(m));
+    ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'claude-3-7-sonnet', 'gpt-4o', 'opencode'].forEach((m) => set.add(m));
     return Array.from(set).filter(Boolean);
   }, [tokens]);
 
