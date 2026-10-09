@@ -17,6 +17,7 @@ export async function addMcpServer(agentId: string, data: {
   name: string;
   url: string;
   transport?: McpTransport;
+  tools?: Array<{ name: string; description?: string; inputSchema?: any }>;
 }) {
   return tracer.startActiveSpan('mcp.addServer', async (span) => {
     try {
@@ -33,6 +34,18 @@ export async function addMcpServer(agentId: string, data: {
           name: data.name,
           url: data.url,
           transport: data.transport || 'SSE',
+          ...(data.tools && data.tools.length > 0
+            ? {
+                lastConnected: new Date(),
+                tools: {
+                  create: data.tools.map((t) => ({
+                    name: t.name,
+                    description: t.description || null,
+                    inputSchema: t.inputSchema || null,
+                  })),
+                },
+              }
+            : {}),
         },
         include: { tools: true },
       });
@@ -199,25 +212,59 @@ export async function callMcpTool(serverId: string, toolName: string, args: Reco
         transport = new StreamableHTTPClientTransport(new URL(server.url));
       }
 
-      const client = new Client({ name: 'nexus-dashboard', version: '1.0.0' });
-      await client.connect(transport);
+      try {
+        const client = new Client({ name: 'nexus-dashboard', version: '1.0.0' });
+        await client.connect(transport);
 
-      const startTime = Date.now();
-      const result = await client.callTool({
-        name: toolName,
-        arguments: args,
-      });
-      const durationMs = Date.now() - startTime;
+        const startTime = Date.now();
+        const result = await client.callTool({
+          name: toolName,
+          arguments: args,
+        });
+        const durationMs = Date.now() - startTime;
 
-      await client.close();
+        await client.close();
 
-      logger.info({ mcpServerId: serverId, toolName, durationMs }, 'MCP tool executed directly');
-      return {
-        success: true,
-        result,
-        durationMs,
-        executedAt: new Date().toISOString(),
-      };
+        logger.info({ mcpServerId: serverId, toolName, durationMs }, 'MCP tool executed directly');
+        return {
+          success: true,
+          result,
+          durationMs,
+          executedAt: new Date().toISOString(),
+        };
+      } catch (sdkErr: any) {
+        // Fallback for direct REST / HTTP API endpoints
+        const startTime = Date.now();
+        try {
+          const res = await fetch(server.url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tool: toolName, arguments: args, ...args }),
+          });
+          const text = await res.text();
+          let data: any = text;
+          try {
+            data = JSON.parse(text);
+          } catch {}
+          const durationMs = Date.now() - startTime;
+          logger.info({ mcpServerId: serverId, toolName, durationMs, status: res.status }, 'REST API tool executed via HTTP fallback');
+          return {
+            success: res.ok,
+            result: {
+              content: [
+                {
+                  type: 'text',
+                  text: typeof data === 'string' ? data : JSON.stringify(data, null, 2),
+                },
+              ],
+            },
+            durationMs,
+            executedAt: new Date().toISOString(),
+          };
+        } catch {
+          throw sdkErr;
+        }
+      }
     } catch (err: any) {
       span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
       span.recordException(err);

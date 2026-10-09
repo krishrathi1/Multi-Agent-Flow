@@ -80,7 +80,7 @@ orgMcpRouter.get('/', async (req, res) => {
 
 // POST /api/mcp (Standalone / Individual MCP Server creation)
 orgMcpRouter.post('/', async (req, res) => {
-  const { agentId, name, url, transport } = req.body;
+  const { agentId, name, url, transport, tools } = req.body;
   try {
     let targetAgentId = agentId;
     if (!targetAgentId) {
@@ -102,9 +102,65 @@ orgMcpRouter.post('/', async (req, res) => {
         targetAgentId = fallback.id;
       }
     }
-    const server = await mcpService.addMcpServer(targetAgentId, { name, url, transport });
+    const server = await mcpService.addMcpServer(targetAgentId, { name, url, transport, tools });
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:created', server);
     res.status(201).json(server);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/mcp/batch (Batch add multiple MCP servers / API endpoints at once)
+orgMcpRouter.post('/batch', async (req, res) => {
+  const { servers, agentId } = req.body;
+  if (!Array.isArray(servers) || servers.length === 0) {
+    return res.status(400).json({ error: 'servers array is required' });
+  }
+
+  try {
+    let targetAgentId = agentId;
+    if (!targetAgentId) {
+      const defaultAgent = await prisma.agent.findFirst({
+        where: { organizationId: req.organizationId! },
+      });
+      if (defaultAgent) {
+        targetAgentId = defaultAgent.id;
+      } else {
+        const fallback = await prisma.agent.create({
+          data: {
+            organizationId: req.organizationId!,
+            name: 'system-mcp-hub',
+            displayName: 'Standalone MCP Hub',
+            description: 'Host endpoint for standalone and workspace-wide MCP tools',
+            avatar: '⚡',
+          },
+        });
+        targetAgentId = fallback.id;
+      }
+    }
+
+    const results = [];
+    for (const item of servers) {
+      if (!item.name || !item.url) continue;
+      try {
+        const server = await mcpService.addMcpServer(targetAgentId, {
+          name: item.name.trim(),
+          url: item.url.trim(),
+          transport: item.transport || 'SSE',
+          tools: item.tools,
+        });
+        // Non-blocking discover if tools weren't pre-specified
+        if (!item.tools || item.tools.length === 0) {
+          mcpService.refreshMcpTools(server.id, targetAgentId).catch(() => {});
+        }
+        results.push({ success: true, server });
+        req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:created', server);
+      } catch (err: any) {
+        results.push({ success: false, name: item.name, error: err.message });
+      }
+    }
+
+    res.status(201).json({ results });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

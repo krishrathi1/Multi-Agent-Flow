@@ -139,6 +139,13 @@ interface McpServerWithDetails extends McpServer {
   };
 }
 
+interface BatchApiItem {
+  id: string;
+  name: string;
+  url: string;
+  transport: 'SSE' | 'STREAMABLE_HTTP';
+}
+
 export function McpHub() {
   const [servers, setServers] = useState<McpServerWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,13 +153,30 @@ export function McpHub() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Add Standalone Server Form
+  // Add Server / Multi-API Form State
+  const [modalMode, setModalMode] = useState<'single' | 'batch' | 'custom_api'>('single');
   const [serverName, setServerName] = useState('');
   const [serverUrl, setServerUrl] = useState('');
   const [transport, setTransport] = useState<'SSE' | 'STREAMABLE_HTTP'>('SSE');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'DEPLOY' | 'DEV' | 'DATA' | 'SEARCH'>('ALL');
+  const [presetModalCategory, setPresetModalCategory] = useState<'ALL' | 'DEPLOY' | 'DEV' | 'DATA' | 'SEARCH'>('ALL');
+
+  // Batch APIs State (+ Add More APIs)
+  const [batchItems, setBatchItems] = useState<BatchApiItem[]>([
+    { id: '1', name: '', url: '', transport: 'SSE' },
+    { id: '2', name: '', url: '', transport: 'STREAMABLE_HTTP' },
+  ]);
+
+  // Custom REST API Tool State
+  const [customApiName, setCustomApiName] = useState('');
+  const [customApiUrl, setCustomApiUrl] = useState('');
+  const [customApiMethod, setCustomApiMethod] = useState<'GET' | 'POST' | 'PUT' | 'DELETE'>('GET');
+  const [customApiDesc, setCustomApiDesc] = useState('');
+  const [customApiAuth, setCustomApiAuth] = useState('');
+  const [testingApi, setTestingApi] = useState(false);
+  const [testApiResult, setTestApiResult] = useState<{ ok: boolean; status: number; text: string } | null>(null);
 
   // Popular standard MCP Server Presets (including Vercel, GitHub, Postgres, etc.)
   const MCP_PRESETS = config.mcpPresets;
@@ -282,6 +306,173 @@ export function McpHub() {
     } catch (err: any) {
       console.error('Failed to add MCP server:', err);
       setFormError(err?.message || 'Failed to connect MCP server. Please check URL and transport.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddBatchRow = () => {
+    setBatchItems((prev) => [
+      ...prev,
+      { id: String(Date.now() + Math.random()), name: '', url: '', transport: 'SSE' },
+    ]);
+  };
+
+  const handleRemoveBatchRow = (id: string) => {
+    setBatchItems((prev) => (prev.length > 1 ? prev.filter((i) => i.id !== id) : prev));
+  };
+
+  const handleUpdateBatchRow = (id: string, field: keyof BatchApiItem, value: any) => {
+    setBatchItems((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, [field]: value } : i))
+    );
+  };
+
+  const handleAppendPresetToBatch = (preset: (typeof MCP_PRESETS)[0]) => {
+    setBatchItems((prev) => {
+      const emptyIndex = prev.findIndex((i) => !i.name.trim() && !i.url.trim());
+      if (emptyIndex !== -1) {
+        const copy = [...prev];
+        copy[emptyIndex] = {
+          id: copy[emptyIndex].id,
+          name: preset.name,
+          url: preset.url,
+          transport: preset.transport,
+        };
+        return copy;
+      }
+      return [
+        ...prev,
+        {
+          id: String(Date.now() + Math.random()),
+          name: preset.name,
+          url: preset.url,
+          transport: preset.transport,
+        },
+      ];
+    });
+  };
+
+  const handleBatchSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const validItems = batchItems.filter((i) => i.name.trim() && i.url.trim());
+    if (validItems.length === 0) {
+      setFormError('Please configure at least one API server name and URL endpoint.');
+      return;
+    }
+
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      const res = await api.mcp.orgBatchAdd({
+        servers: validItems.map((i) => ({
+          name: i.name.trim(),
+          url: i.url.trim(),
+          transport: i.transport,
+        })),
+      });
+
+      const successful = res.results.filter((r) => r.success).length;
+      const failed = res.results.filter((r) => !r.success).length;
+
+      setShowAddModal(false);
+      setBatchItems([
+        { id: '1', name: '', url: '', transport: 'SSE' },
+        { id: '2', name: '', url: '', transport: 'STREAMABLE_HTTP' },
+      ]);
+
+      if (failed === 0) {
+        setToastMessage({
+          type: 'success',
+          text: `Successfully connected and registered all ${successful} MCP / API endpoints!`,
+        });
+      } else {
+        setToastMessage({
+          type: 'info',
+          text: `Connected ${successful} endpoints (${failed} failed). Check server endpoints below.`,
+        });
+      }
+
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to batch connect MCP servers:', err);
+      setFormError(err?.message || 'Failed to connect batch endpoints.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleTestCustomApi = async () => {
+    if (!customApiUrl.trim()) return;
+    setTestingApi(true);
+    setTestApiResult(null);
+    try {
+      const res = await api.processes.testApi({
+        url: customApiUrl.trim(),
+        method: customApiMethod,
+        headers: customApiAuth.trim() ? { Authorization: customApiAuth.trim() } : undefined,
+      });
+      setTestApiResult({
+        ok: res.ok,
+        status: res.status,
+        text: res.ok ? `HTTP ${res.status} OK (${res.latencyMs}ms)` : `HTTP ${res.status} ${res.statusText}`,
+      });
+    } catch (err: any) {
+      setTestApiResult({
+        ok: false,
+        status: 0,
+        text: err.message || 'Connection test failed',
+      });
+    } finally {
+      setTestingApi(false);
+    }
+  };
+
+  const handleCustomApiSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customApiName.trim() || !customApiUrl.trim()) {
+      setFormError('API Name and URL endpoint are required.');
+      return;
+    }
+
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      const toolName = customApiName.toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/^_+|_+$/g, '');
+      const newServer = (await api.mcp.orgAdd({
+        name: customApiName.trim(),
+        url: customApiUrl.trim(),
+        transport: 'STREAMABLE_HTTP',
+        tools: [
+          {
+            name: toolName || 'execute_api',
+            description: customApiDesc.trim() || `Invoke ${customApiName} endpoint (${customApiMethod})`,
+            inputSchema: {
+              type: 'object',
+              properties: {
+                payload: { type: 'object', description: 'Request parameters or JSON body' },
+              },
+            },
+          },
+        ],
+      })) as McpServerWithDetails;
+
+      setShowAddModal(false);
+      setCustomApiName('');
+      setCustomApiUrl('');
+      setCustomApiDesc('');
+      setCustomApiAuth('');
+      setTestApiResult(null);
+
+      setToastMessage({
+        type: 'success',
+        text: `Connected REST API Tool "${newServer.name}"! Discovered 1 callable tool.`,
+      });
+
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to add custom API tool:', err);
+      setFormError(err?.message || 'Failed to register custom API tool.');
     } finally {
       setSubmitting(false);
     }
@@ -818,119 +1009,488 @@ export function McpHub() {
         </div>
       )}
 
-      {/* ── Connect Standalone MCP Server Modal ── */}
+      {/* ── Connect Standalone MCP Server & Multi-API Modal ── */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setShowAddModal(false)}>
-          <div className="bg-surface border border-line rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface border border-line rounded-3xl p-6 w-full max-w-2xl shadow-2xl space-y-4 animate-scale-in max-h-[90vh] overflow-y-auto no-scrollbar" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
             <div className="flex items-center justify-between border-b border-line-subtle pb-3">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-ink flex items-center gap-2">
-                <Cpu size={16} className="text-brand-500" />
-                <span>Connect Individual MCP Server</span>
-              </h2>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0">
+                  <Cpu size={16} />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-ink flex items-center gap-2">
+                    <span>Connect MCP Servers & APIs</span>
+                  </h2>
+                  <p className="text-[11px] text-ink-muted">
+                    Integrate external Model Context Protocol hosts, batch connect APIs, or bridge custom REST endpoints
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="text-ink-muted hover:text-ink text-xs font-semibold cursor-pointer p-1"
+                className="text-ink-muted hover:text-ink text-xs font-semibold cursor-pointer p-1.5 rounded-lg hover:bg-hover transition-colors"
               >
                 ✕
               </button>
             </div>
 
+            {/* Mode Selector Tabs */}
+            <div className="flex items-center gap-1.5 p-1 bg-inset border border-line rounded-2xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalMode('single');
+                  setFormError(null);
+                }}
+                className={cn(
+                  'flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                  modalMode === 'single'
+                    ? 'bg-surface text-ink shadow-xs border border-line-subtle'
+                    : 'text-ink-muted hover:text-ink'
+                )}
+              >
+                <Server size={13} />
+                <span>Single Server / Preset</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setModalMode('batch');
+                  setFormError(null);
+                }}
+                className={cn(
+                  'flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer relative',
+                  modalMode === 'batch'
+                    ? 'bg-surface text-ink shadow-xs border border-line-subtle'
+                    : 'text-ink-muted hover:text-ink'
+                )}
+              >
+                <Layers size={13} />
+                <span>Batch Add Multiple APIs</span>
+                <span className="px-1.5 py-0.2 bg-brand-500/10 text-brand-600 dark:text-brand-400 rounded-full text-[9px] font-mono font-bold">
+                  {batchItems.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setModalMode('custom_api');
+                  setFormError(null);
+                }}
+                className={cn(
+                  'flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer',
+                  modalMode === 'custom_api'
+                    ? 'bg-surface text-ink shadow-xs border border-line-subtle'
+                    : 'text-ink-muted hover:text-ink'
+                )}
+              >
+                <Zap size={13} />
+                <span>Custom REST Tool</span>
+              </button>
+            </div>
+
             {formError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-600 dark:text-rose-400 text-xs font-medium">
-                {formError}
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-600 dark:text-rose-400 text-xs font-medium flex items-center gap-2">
+                <AlertTriangle size={14} className="shrink-0" />
+                <span>{formError}</span>
               </div>
             )}
 
-            <form onSubmit={handleAddServer} className="space-y-4">
-              {/* Quick preset selector buttons inside modal */}
-              <div>
-                <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">
-                  Or pick a popular preset:
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {MCP_PRESETS.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        setServerName(p.name);
-                        setServerUrl(p.url);
-                        setTransport(p.transport);
-                      }}
-                      className={cn(
-                        'px-2 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors',
-                        serverUrl === p.url
-                          ? 'bg-brand-500/10 border-brand-500 text-brand-600 dark:text-brand-400 font-bold'
-                          : 'bg-inset border-line text-ink-muted hover:text-ink'
-                      )}
+            {/* ── Mode 1: Single Endpoint / Preset Form ── */}
+            {modalMode === 'single' && (
+              <form onSubmit={handleAddServer} className="space-y-4">
+                {/* Preset Selector */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
+                      Or pick a popular preset:
+                    </label>
+                    <div className="flex items-center gap-1">
+                      {(['ALL', 'DEPLOY', 'DEV', 'DATA', 'SEARCH'] as const).map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setPresetModalCategory(cat)}
+                          className={cn(
+                            'px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors',
+                            presetModalCategory === cat
+                              ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-extrabold'
+                              : 'text-ink-muted hover:text-ink'
+                          )}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1 bg-inset/50 rounded-xl border border-line-subtle no-scrollbar">
+                    {MCP_PRESETS.filter((p) => presetModalCategory === 'ALL' || p.category === presetModalCategory).map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setServerName(p.name);
+                          setServerUrl(p.url);
+                          setTransport(p.transport);
+                        }}
+                        className={cn(
+                          'px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors',
+                          serverUrl === p.url
+                            ? 'bg-brand-500/10 border-brand-500 text-brand-600 dark:text-brand-400 font-bold shadow-2xs'
+                            : 'bg-surface border-line text-ink-muted hover:text-ink hover:border-line-strong'
+                        )}
+                      >
+                        <span>{p.icon}</span>
+                        <span>{p.name.replace(/ MCP$/, '').split(' ')[0]}</span>
+                        <span className="text-[9px] text-ink-faint font-mono">({p.badge})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink-muted mb-1.5">Server / API Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={serverName}
+                    onChange={(e) => setServerName(e.target.value)}
+                    placeholder="e.g. Vercel Deployment MCP, filesystem-tools, or postgres-mcp"
+                    className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink-muted mb-1.5">Server URL / SSE Endpoint *</label>
+                  <input
+                    type="text"
+                    required
+                    value={serverUrl}
+                    onChange={(e) => setServerUrl(e.target.value)}
+                    placeholder="http(s)://your-mcp-server/sse"
+                    className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
+                  />
+                  <p className="text-[11px] text-ink-muted mt-1.5 leading-relaxed">
+                    💡 <strong>Local endpoints:</strong> Use <code className="font-mono text-brand-600 dark:text-brand-400 bg-brand-500/10 px-1 py-0.5 rounded">http://localhost:PORT/sse</code> or Docker bridge. For cloud servers, provide the full HTTPS endpoint.
+                  </p>
+                </div>
+
+                <div>
+                  <CustomSelect
+                    label="Transport Protocol"
+                    value={transport}
+                    onChange={(val) => setTransport(val as 'SSE' | 'STREAMABLE_HTTP')}
+                    options={[
+                      { value: 'SSE', label: 'SSE (Server-Sent Events)', sublabel: 'HTTP Streaming connection' },
+                      { value: 'STREAMABLE_HTTP', label: 'Streamable HTTP', sublabel: 'HTTP streaming / JSON-RPC' },
+                    ]}
+                  />
+                </div>
+
+                {/* Quick Switch to Batch Mode helper card */}
+                <div className="p-3 rounded-2xl bg-brand-500/5 border border-brand-500/15 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-ink">Want to connect multiple APIs at once?</p>
+                    <p className="text-[11px] text-ink-muted">Queue multiple endpoints or services and discover callable tools in one click.</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="xs"
+                    icon={Layers}
+                    onClick={() => {
+                      if (serverName.trim() && serverUrl.trim()) {
+                        setBatchItems([
+                          { id: '1', name: serverName, url: serverUrl, transport },
+                          { id: '2', name: '', url: '', transport: 'SSE' },
+                        ]);
+                      }
+                      setModalMode('batch');
+                    }}
+                    className="shrink-0"
+                  >
+                    Switch to Batch
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-line-subtle">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAddModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    loading={submitting}
+                    disabled={!serverName.trim() || !serverUrl.trim()}
+                  >
+                    Connect & Discover
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {/* ── Mode 2: Batch Add Multiple APIs / Servers ── */}
+            {modalMode === 'batch' && (
+              <form onSubmit={handleBatchSubmit} className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <p className="text-xs text-ink-muted">
+                    Configure multiple MCP servers or API endpoints and connect them together:
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">Quick Add:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {MCP_PRESETS.slice(0, 5).map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => handleAppendPresetToBatch(p)}
+                          className="px-2 py-0.5 rounded-lg border border-line bg-inset hover:border-brand-500 text-[10px] font-semibold text-ink-muted hover:text-ink flex items-center gap-1 transition-colors cursor-pointer"
+                          title={`Append ${p.name} to batch list`}
+                        >
+                          <span>{p.icon}</span>
+                          <span>{p.name.split(' ')[0]}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Batch Items List */}
+                <div className="space-y-3 max-h-72 overflow-y-auto p-1 no-scrollbar">
+                  {batchItems.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="p-3.5 bg-inset/70 border border-line rounded-2xl space-y-2.5 transition-all hover:border-line-strong relative group"
                     >
-                      <span>{p.icon}</span>
-                      <span>{p.name.split(' ')[0]}</span>
-                    </button>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 px-2 py-0.5 rounded-md font-mono">
+                            Endpoint #{index + 1}
+                          </span>
+                          {item.name.trim() && (
+                            <span className="text-xs font-semibold text-ink truncate max-w-[200px]">
+                              {item.name}
+                            </span>
+                          )}
+                        </div>
+                        {batchItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBatchRow(item.id)}
+                            className="p-1 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            title="Remove this endpoint"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                        <div className="sm:col-span-4">
+                          <input
+                            type="text"
+                            required
+                            placeholder="Server / API Name *"
+                            value={item.name}
+                            onChange={(e) => handleUpdateBatchRow(item.id, 'name', e.target.value)}
+                            className="w-full h-9 px-3 bg-surface border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none"
+                          />
+                        </div>
+                        <div className="sm:col-span-5">
+                          <input
+                            type="text"
+                            required
+                            placeholder="URL / SSE Endpoint *"
+                            value={item.url}
+                            onChange={(e) => handleUpdateBatchRow(item.id, 'url', e.target.value)}
+                            className="w-full h-9 px-3 bg-surface border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none font-mono"
+                          />
+                        </div>
+                        <div className="sm:col-span-3">
+                          <select
+                            value={item.transport}
+                            onChange={(e) => handleUpdateBatchRow(item.id, 'transport', e.target.value as any)}
+                            className="w-full h-9 px-2 bg-surface border border-line rounded-xl text-xs text-ink focus:border-brand-500 focus:outline-none"
+                          >
+                            <option value="SSE">SSE Streaming</option>
+                            <option value="STREAMABLE_HTTP">Streamable HTTP</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-ink-muted mb-1.5">Server Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={serverName}
-                  onChange={(e) => setServerName(e.target.value)}
-                  placeholder="e.g. Vercel Deployment MCP, filesystem-tools, or postgres-mcp"
-                  className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-ink-muted mb-1.5">Server URL / SSE Endpoint *</label>
-                <input
-                  type="text"
-                  required
-                  value={serverUrl}
-                  onChange={(e) => setServerUrl(e.target.value)}
-                  placeholder="http(s)://your-mcp-server/sse"
-                  className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
-                />
-                <p className="text-[11px] text-ink-muted mt-1.5 leading-relaxed">
-                  💡 <strong>Local servers:</strong> Use <code className="font-mono text-brand-600 dark:text-brand-400 bg-brand-500/10 px-1 py-0.5 rounded">http(s)://your-mcp-server/PORT/sse</code> to connect to servers running on your machine. For remote servers, use their HTTPS URL.
-                </p>
-              </div>
-
-              <div>
-                <CustomSelect
-                  label="Transport Protocol"
-                  value={transport}
-                  onChange={(val) => setTransport(val as 'SSE' | 'STREAMABLE_HTTP')}
-                  options={[
-                    { value: 'SSE', label: 'SSE (Server-Sent Events)', sublabel: 'HTTP Streaming connection' },
-                    { value: 'STREAMABLE_HTTP', label: 'Streamable HTTP', sublabel: 'HTTP streaming / JSON-RPC' },
-                  ]}
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-line-subtle">
-                <Button
+                {/* Add Another API Endpoint Button */}
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={handleAddBatchRow}
+                  className="w-full py-2.5 border-2 border-dashed border-line hover:border-brand-500/50 hover:bg-brand-500/5 text-ink-muted hover:text-brand-600 dark:hover:text-brand-400 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="sm"
-                  loading={submitting}
-                  disabled={!serverName.trim() || !serverUrl.trim()}
-                >
-                  Connect & Discover
-                </Button>
-              </div>
-            </form>
+                  <Plus size={15} />
+                  <span>+ Add Another API / MCP Server</span>
+                </button>
+
+                <div className="flex items-center justify-between pt-3 border-t border-line-subtle">
+                  <span className="text-[11px] text-ink-muted">
+                    Configuring <strong>{batchItems.filter((i) => i.name.trim() && i.url.trim()).length}</strong> valid endpoints
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAddModal(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="sm"
+                      loading={submitting}
+                      disabled={batchItems.filter((i) => i.name.trim() && i.url.trim()).length === 0}
+                    >
+                      Connect & Discover All ({batchItems.filter((i) => i.name.trim() && i.url.trim()).length})
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            )}
+
+            {/* ── Mode 3: Custom REST API Tool Bridge ── */}
+            {modalMode === 'custom_api' && (
+              <form onSubmit={handleCustomApiSubmit} className="space-y-4">
+                <div className="p-3 rounded-2xl bg-brand-500/5 border border-brand-500/15 text-[11px] text-ink-muted leading-relaxed">
+                  Bridge any existing HTTP JSON endpoint (e.g. Weather, Stripe, internal CRM, or custom webhook) directly into the agent ecosystem. Agents can query and execute it as a Model Context Protocol tool.
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink-muted mb-1.5">API Tool Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={customApiName}
+                    onChange={(e) => setCustomApiName(e.target.value)}
+                    placeholder="e.g. Weather Intelligence API, Stripe Customer Lookup, Internal CRM"
+                    className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                  <div className="sm:col-span-1">
+                    <label className="block text-xs font-semibold text-ink-muted mb-1.5">HTTP Method</label>
+                    <select
+                      value={customApiMethod}
+                      onChange={(e) => setCustomApiMethod(e.target.value as any)}
+                      className="w-full h-10 px-3 bg-inset border border-line rounded-xl text-xs text-ink font-bold focus:border-brand-500 focus:outline-none"
+                    >
+                      <option value="GET">GET</option>
+                      <option value="POST">POST</option>
+                      <option value="PUT">PUT</option>
+                      <option value="DELETE">DELETE</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-3">
+                    <label className="block text-xs font-semibold text-ink-muted mb-1.5">Endpoint URL *</label>
+                    <input
+                      type="text"
+                      required
+                      value={customApiUrl}
+                      onChange={(e) => setCustomApiUrl(e.target.value)}
+                      placeholder="https://api.example.com/v1/resource or http://localhost:PORT/api/..."
+                      className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink-muted mb-1.5">Authorization Header / API Key (Optional)</label>
+                  <input
+                    type="text"
+                    value={customApiAuth}
+                    onChange={(e) => setCustomApiAuth(e.target.value)}
+                    placeholder="Bearer sk_live_... or Api-Key xyz123"
+                    className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink-muted mb-1.5">Tool Description (Instructions for AI Agents) *</label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={customApiDesc}
+                    onChange={(e) => setCustomApiDesc(e.target.value)}
+                    placeholder="Describe what this tool does, required arguments, and expected output so AI agents know when to call it..."
+                    className="w-full p-3 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-faint focus:border-brand-500 focus:outline-none shadow-2xs leading-relaxed"
+                  />
+                </div>
+
+                {/* API Connectivity Test */}
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-inset/50 border border-line">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="xs"
+                      icon={Play}
+                      loading={testingApi}
+                      disabled={!customApiUrl.trim()}
+                      onClick={handleTestCustomApi}
+                    >
+                      Test Connection
+                    </Button>
+                    {testApiResult && (
+                      <span
+                        className={cn(
+                          'text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg border',
+                          testApiResult.ok
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25'
+                        )}
+                      >
+                        {testApiResult.text}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-ink-faint font-mono">
+                    Direct REST Execution Bridge
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-line-subtle">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAddModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    loading={submitting}
+                    disabled={!customApiName.trim() || !customApiUrl.trim()}
+                  >
+                    Connect REST API Tool
+                  </Button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

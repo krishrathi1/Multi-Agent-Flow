@@ -388,8 +388,13 @@ export const api = {
     tools: (agentId: string, serverId: string) =>
       request(`/agents/${agentId}/mcp-servers/${serverId}/tools`),
     orgList: () => request<any[]>('/mcp'),
-    orgAdd: (data: { name: string; url: string; transport?: string; agentId?: string }) =>
+    orgAdd: (data: { name: string; url: string; transport?: string; agentId?: string; tools?: any[] }) =>
       request('/mcp', { method: 'POST', body: JSON.stringify(data) }),
+    orgBatchAdd: (data: { servers: Array<{ name: string; url: string; transport?: string; tools?: any[] }>; agentId?: string }) =>
+      request<{ results: Array<{ success: boolean; server?: any; error?: string }> }>('/mcp/batch', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     orgRefresh: (serverId: string) =>
       request(`/mcp/${serverId}/refresh`, { method: 'POST' }),
     refresh: (serverId: string) =>
