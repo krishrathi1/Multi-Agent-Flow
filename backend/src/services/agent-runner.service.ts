@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync } from 'node:fs';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -1046,15 +1046,24 @@ docker run -p 3000:3000 ${projectSlug}:latest
 
 /** All chain workspaces live under one root, outside the source tree. */
 export function workspaceRoot(): string {
-  return process.env.AGENT_WORKSPACE_ROOT
-    ? path.resolve(process.env.AGENT_WORKSPACE_ROOT)
-    : path.resolve(process.cwd(), '..', '.nexus-workspaces');
+  if (process.env.AGENT_WORKSPACE_ROOT) {
+    return path.resolve(process.env.AGENT_WORKSPACE_ROOT);
+  }
+  const candidate1 = path.resolve(process.cwd(), '.nexus-workspaces');
+  const candidate2 = path.resolve(process.cwd(), '..', '.nexus-workspaces');
+  if (existsSync(candidate1)) return candidate1;
+  if (existsSync(candidate2)) return candidate2;
+  return candidate1;
 }
 
 export function workspaceFor(processId: string): string {
   // processId is a UUID from the DB, but normalise anyway so a crafted value
   // can never climb out of the root.
   const safe = processId.replace(/[^a-zA-Z0-9-]/g, '');
+  const candidate1 = path.resolve(process.cwd(), '.nexus-workspaces', safe);
+  const candidate2 = path.resolve(process.cwd(), '..', '.nexus-workspaces', safe);
+  if (existsSync(candidate1)) return candidate1;
+  if (existsSync(candidate2)) return candidate2;
   return path.join(workspaceRoot(), safe);
 }
 
