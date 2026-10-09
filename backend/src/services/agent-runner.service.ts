@@ -29,9 +29,10 @@ async function executeAgentWork(params: {
   onSpawn?: (abort: () => void) => void;
   preferredModel?: string;
 }): Promise<{ text: string; model: string; costUsd: number; inputTokens: number; outputTokens: number } | null> {
-  // Ensure workspace directory exists
+  // Ensure workspace directory exists and foundational production files are synthesized
   try {
     await fs.mkdir(params.workspace, { recursive: true });
+    await synthesizeAgentDeliverables(params.workspace, params.agent, params.goal);
   } catch { /* ignore */ }
 
   // 1. If an OpenCode CLI model is selected (e.g. "anthropic/claude-3-7-sonnet", "openai/gpt-4o", etc.)
@@ -195,16 +196,33 @@ async function executeAgentWork(params: {
  * Extracts code blocks from LLM markdown response and writes them to files in the workspace.
  */
 async function writeCodeBlocksToWorkspace(workspace: string, text: string, agent: { displayName: string; processStage?: number | null }) {
-  const codeBlockRegex = /```(?:[a-zA-Z0-9_-]+:)?([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)?\s*([\s\S]*?)```/g;
+  // Matches ```lang:path, ```lang file="path", ```lang path="path", ```lang filename="path", ```path
+  const codeBlockRegex = /```(?:([a-zA-Z0-9_-]+)[:\s]+)?(?:(?:file(?:name)?|path)=["']?)?([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)?["']?\s*([\s\S]*?)```/g;
   let match;
   let fileCount = 0;
 
   while ((match = codeBlockRegex.exec(text)) !== null) {
-    let filePath = match[1]?.trim();
-    const content = match[2];
+    let filePath = match[2]?.trim();
+    const content = match[3];
+
+    // If filePath was not in fence header, inspect the first line of code block or preceding markdown
+    if (!filePath || filePath.length <= 1) {
+      // 1. Check first line inside code block: // src/file.ts or /* src/file.ts */ or # src/file.py
+      const firstLineMatch = content.match(/^(?:\/\/|#|\/\*|<!--)\s*(?:File(?:path)?:?\s*)?([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)/m);
+      if (firstLineMatch) {
+        filePath = firstLineMatch[1].trim();
+      } else {
+        // 2. Check preceding 160 characters before code block for **path/file.ext** or ### path/file.ext or `path/file.ext`
+        const precedingText = text.slice(Math.max(0, match.index - 160), match.index);
+        const precedingMatch = precedingText.match(/(?:###|\*\*|`|File:\s*`?)([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)(?:\*\*|`|\n|$)/);
+        if (precedingMatch) {
+          filePath = precedingMatch[1].trim();
+        }
+      }
+    }
 
     if (!filePath) {
-      filePath = `stage-${agent.processStage || 1}-${agent.displayName.toLowerCase().replace(/\s+/g, '-')}-${fileCount + 1}.ts`;
+      filePath = `stage-${agent.processStage || 1}-${agent.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${fileCount + 1}.ts`;
     }
 
     filePath = filePath.replace(/^[/\\]+/, '').replace(/\.\.[/\\]/g, '');
@@ -212,14 +230,14 @@ async function writeCodeBlocksToWorkspace(workspace: string, text: string, agent
 
     try {
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      await fs.writeFile(fullPath, content.trim(), 'utf-8');
+      await fs.writeFile(fullPath, content.trim() + '\n', 'utf-8');
       fileCount++;
     } catch { /* ignore */ }
   }
 
   // If no specific code block was parsed, save markdown deliverable
   if (fileCount === 0) {
-    const summaryFile = path.join(workspace, `${agent.displayName.toLowerCase().replace(/\s+/g, '-')}-output.md`);
+    const summaryFile = path.join(workspace, `${agent.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-output.md`);
     try {
       await fs.writeFile(summaryFile, text, 'utf-8');
     } catch { /* ignore */ }
@@ -467,6 +485,32 @@ export default defineConfig({
           2,
         ),
       );
+
+      // .gitignore
+      await writeWorkspaceFile(
+        workspace,
+        '.gitignore',
+        `node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+coverage/
+`,
+      );
+
+      // .env.example
+      await writeWorkspaceFile(
+        workspace,
+        '.env.example',
+        `PORT=${config.port}
+NODE_ENV=production
+PROJECT_NAME="${projectName}"
+DATABASE_URL="${process.env.AGENT_DATABASE_URL ?? ""}"
+API_SECRET_KEY="${process.env.AGENT_API_SECRET_KEY ?? ""}"
+`,
+      );
     }
 
     // ── STAGE 2: DESIGN, FRONTEND UI, COMPONENTS & STATE ──
@@ -709,6 +753,94 @@ export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal,
 `,
       );
 
+      // src/components/Sidebar.tsx
+      await writeWorkspaceFile(
+        workspace,
+        'src/components/Sidebar.tsx',
+        `import React from 'react';
+import { Home, Layers, Settings, Database, Activity, ShieldCheck } from 'lucide-react';
+
+export const Sidebar: React.FC<{ activeNav: string; onNavChange: (k: string) => void }> = ({ activeNav, onNavChange }) => {
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: Home },
+    { id: 'pipeline', label: 'Agents & Pipeline', icon: Layers },
+    { id: 'database', label: 'Schemas & Models', icon: Database },
+    { id: 'metrics', label: 'Live Telemetry', icon: Activity },
+    { id: 'security', label: 'Security & Audit', icon: ShieldCheck },
+    { id: 'settings', label: 'Settings', icon: Settings },
+  ];
+
+  return (
+    <aside className="w-64 border-r border-slate-800/80 bg-slate-950 p-4 space-y-4 hidden md:flex md:flex-col">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-3">
+        Workspace Navigation
+      </div>
+      <nav className="space-y-1 flex-1">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeNav === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onNavChange(item.id)}
+              className={\`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer \${
+                isActive
+                  ? 'bg-indigo-600/15 text-indigo-400 border border-indigo-500/30'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }\`}
+            >
+              <Icon size={16} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400">
+        <p className="font-semibold text-slate-300">Environment</p>
+        <p className="text-[10px] text-slate-500">Autonomous Node Runner</p>
+      </div>
+    </aside>
+  );
+};
+`,
+      );
+
+      // src/components/StatsCard.tsx
+      await writeWorkspaceFile(
+        workspace,
+        'src/components/StatsCard.tsx',
+        `import React from 'react';
+import type { LucideIcon } from 'lucide-react';
+
+interface StatsCardProps {
+  label: string;
+  value: string | number;
+  change?: string;
+  isPositive?: boolean;
+  icon: LucideIcon;
+}
+
+export const StatsCard: React.FC<StatsCardProps> = ({ label, value, change, isPositive = true, icon: Icon }) => {
+  return (
+    <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3 hover:border-slate-700 transition-colors">
+      <div>
+        <p className="text-xs text-slate-400 font-medium">{label}</p>
+        <p className="text-xl font-bold text-white mt-1">{value}</p>
+        {change && (
+          <span className={\`text-[10px] font-semibold \${isPositive ? 'text-emerald-400' : 'text-rose-400'}\`}>
+            {change}
+          </span>
+        )}
+      </div>
+      <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+        <Icon size={20} />
+      </div>
+    </div>
+  );
+};
+`,
+      );
+
       // src/App.tsx
       await writeWorkspaceFile(
         workspace,
@@ -820,6 +952,92 @@ apiRouter.get('/v1/metrics', (req: Request, res: Response) => {
 `,
       );
 
+      // server/routes/health.ts
+      await writeWorkspaceFile(
+        workspace,
+        'server/routes/health.ts',
+        `import { Router, Request, Response } from 'express';
+
+export const healthRouter = Router();
+
+healthRouter.get('/', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'UP',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    service: '${projectName}',
+  });
+});
+`,
+      );
+
+      // server/controllers/task.controller.ts
+      await writeWorkspaceFile(
+        workspace,
+        'server/controllers/task.controller.ts',
+        `import { Request, Response } from 'express';
+
+export class TaskController {
+  static async handleExecute(req: Request, res: Response) {
+    try {
+      const { action, payload } = req.body;
+      return res.status(200).json({
+        success: true,
+        action,
+        timestamp: new Date().toISOString(),
+        data: payload || {},
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  static async getMetrics(req: Request, res: Response) {
+    return res.status(200).json({
+      success: true,
+      data: {
+        memoryMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        activeConnections: 1,
+        status: 'HEALTHY',
+      },
+    });
+  }
+}
+`,
+      );
+
+      // server/db/schema.sql
+      await writeWorkspaceFile(
+        workspace,
+        'server/db/schema.sql',
+        `-- Production Schema for ${projectName}
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS agent_executions (
+    id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id),
+    agent_name TEXT NOT NULL,
+    stage INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'COMPLETED',
+    output_summary TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    details JSON,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+`,
+      );
+
       // server/schemas/validation.ts
       await writeWorkspaceFile(
         workspace,
@@ -877,6 +1095,27 @@ describe('${agent.displayName} Automated Verification Suite', () => {
     };
     const result = ConfigSchema.safeParse(invalidConfig);
     expect(result.success).toBe(false);
+  });
+});
+`,
+      );
+
+      // tests/validation.test.ts
+      await writeWorkspaceFile(
+        workspace,
+        'tests/validation.test.ts',
+        `import { describe, it, expect } from 'vitest';
+import { ConfigSchema } from '../server/schemas/validation';
+
+describe('Configuration & Security Validation', () => {
+  it('enforces required fields on system configuration', () => {
+    const valid = { projectName: '${projectName}', environment: 'production', maxConcurrency: 5 };
+    expect(ConfigSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('fails on negative concurrency values', () => {
+    const invalid = { projectName: '${projectName}', maxConcurrency: -1 };
+    expect(ConfigSchema.safeParse(invalid).success).toBe(false);
   });
 });
 `,
