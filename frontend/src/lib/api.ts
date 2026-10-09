@@ -316,6 +316,8 @@ export const api = {
         deployResult?: any;
         message: string;
       }>(`/processes/${id}/ask-ai-fix`, { method: 'POST', body: JSON.stringify({ instruction }) }),
+    report: (id: string) => request<any>(`/processes/${id}/report`),
+    reportHtmlUrl: (id: string) => `/api/processes/${id}/report/html`,
   },
 
   auth: {

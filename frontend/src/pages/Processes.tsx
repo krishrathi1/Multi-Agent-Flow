@@ -34,6 +34,7 @@ import { ProcessReportModal } from '../components/process/ProcessReportModal';
 import { EditProcessModal } from '../components/process/EditProcessModal';
 import { DeploymentLogsModal } from '../components/process/DeploymentLogsModal';
 import { ProcessMcpGatewaysModal } from '../components/process/ProcessMcpGatewaysModal';
+import { IconReportAnalytics } from '../components/ui/NaturalIcons';
 import { api } from '../lib/api';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button, ButtonLink } from '../components/ui/Button';
@@ -247,7 +248,7 @@ function ProcessCard({
           <Button
             variant="secondary"
             size="xs"
-            icon={FileText}
+            icon={IconReportAnalytics as any}
             onClick={() => onReport(process)}
             aria-label={`View audit report for ${process.name}`}
           >

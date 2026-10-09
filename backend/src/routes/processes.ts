@@ -289,6 +289,32 @@ router.get('/:id/git-audit', async (req, res) => {
   }
 });
 
+/** GET /:id/report — Comprehensive Project Architecture & QA Report (JSON) */
+router.get('/:id/report', async (req, res) => {
+  const id = paramId(req.params.id);
+  try {
+    const { generateProjectReport } = await import('../services/project-report.service.js');
+    const report = await generateProjectReport(id, req.organizationId!);
+    res.json(report);
+  } catch (err: any) {
+    res.status(err.message === 'Process not found' ? 404 : 500).json({ error: err.message });
+  }
+});
+
+/** GET /:id/report/html — Printable Executive PDF / HTML Report */
+router.get('/:id/report/html', async (req, res) => {
+  const id = paramId(req.params.id);
+  try {
+    const { generateProjectReport, renderReportHtml } = await import('../services/project-report.service.js');
+    const report = await generateProjectReport(id, req.organizationId!);
+    const html = renderReportHtml(report);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err: any) {
+    res.status(err.message === 'Process not found' ? 404 : 500).send(`<h1>Error generating report</h1><p>${err.message}</p>`);
+  }
+});
+
 router.patch('/:id', validate(updateSchema), async (req, res) => {
   const proc = await processService.updateProcess(
     paramId(req.params.id),

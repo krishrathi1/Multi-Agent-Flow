@@ -32,6 +32,7 @@ import { HourglassLoader } from '@/components/ui/HourglassLoader';
 import { LiveWaveform } from '@/components/ui/LiveIcon';
 import { UsageDetailSheet } from '@/components/cost/UsageDetailSheet';
 import { CustomSelect } from '@/components/ui/CustomSelect';
+import { IconDownload } from '@/components/ui/NaturalIcons';
 
 interface TokenSummary {
   totalTokens: number;
@@ -163,6 +164,29 @@ export function Metrics() {
       socket.off('disconnect', onDis);
     };
   }, [fetchData]);
+
+  const exportCsv = () => {
+    if (!tokens || tokens.length === 0) return;
+    const headers = ['Timestamp', 'Agent ID', 'Model', 'Input Tokens', 'Output Tokens', 'Total Tokens', 'Cost (USD)'];
+    const rows = tokens.map((t) => [
+      `"${new Date(t.createdAt).toISOString()}"`,
+      `"${t.agentId || 'Unknown'}"`,
+      `"${t.model || 'Unknown'}"`,
+      t.inputTokens || 0,
+      t.outputTokens || 0,
+      t.totalTokens || 0,
+      t.cost || 0,
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `nexus-metrics-${selectedProcessId}-${timeFilter}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Aggregate KPIs
   const kpis = useMemo(() => {
@@ -450,6 +474,16 @@ export function Metrics() {
             aria-label="Refresh telemetry"
           >
             Refresh
+          </Button>
+          <Button
+            variant="secondary"
+            size="xs"
+            icon={IconDownload as any}
+            onClick={exportCsv}
+            disabled={!tokens || tokens.length === 0}
+            aria-label="Export metrics data to CSV"
+          >
+            Export CSV
           </Button>
         </div>
       </div>

@@ -1194,6 +1194,15 @@ ${categorizedFiles.map((f, i) => `#### ${i + 1}. \`${f.path}\`
               .HTML
             </Button>
             <Button
+              variant="secondary"
+              size="sm"
+              icon={ExternalLink}
+              onClick={() => window.open(api.processes.reportHtmlUrl(process.id), '_blank')}
+              title="Open full-screen printable executive report in dedicated browser tab"
+            >
+              Live Report Tab
+            </Button>
+            <Button
               variant="primary"
               size="sm"
               icon={Printer}

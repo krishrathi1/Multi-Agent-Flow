@@ -99,6 +99,69 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// System Deep Diagnostics (Public Health & Latency Probe)
+app.get('/api/system/diagnostics', async (_req, res) => {
+  const start = Date.now();
+  let dbStatus = 'DOWN';
+  let dbLatencyMs = -1;
+  try {
+    const t0 = Date.now();
+    await prisma.$queryRawUnsafe('SELECT 1');
+    dbLatencyMs = Date.now() - t0;
+    dbStatus = 'UP';
+  } catch {
+    dbStatus = 'DOWN';
+  }
+
+  let geminiStatus = 'UNKNOWN';
+  let geminiLatencyMs = -1;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  try {
+    if (geminiKey) {
+      const t0 = Date.now();
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`,
+        { signal: AbortSignal.timeout(4000) }
+      );
+      geminiLatencyMs = Date.now() - t0;
+      geminiStatus = resp.ok ? 'UP' : 'DEGRADED';
+    } else {
+      geminiStatus = 'NOT_CONFIGURED';
+    }
+  } catch {
+    geminiStatus = 'TIMEOUT';
+  }
+
+  let opencodeStatus: any = { installed: false, version: 'N/A' };
+  try {
+    const { status: getOcStatus } = await import('./services/opencode.service.js');
+    opencodeStatus = await getOcStatus();
+  } catch {
+    /* ignore */
+  }
+
+  const mem = process.memoryUsage();
+  const isHealthy = dbStatus === 'UP';
+
+  res.status(isHealthy ? 200 : 503).json({
+    status: isHealthy ? 'HEALTHY' : 'DEGRADED',
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+    durationMs: Date.now() - start,
+    checks: {
+      database: { status: dbStatus, latencyMs: dbLatencyMs, type: 'PostgreSQL' },
+      gemini: { status: geminiStatus, latencyMs: geminiLatencyMs, activeModel: config.geminiModel },
+      opencode: { status: opencodeStatus.installed ? 'UP' : 'ABSENT', ...opencodeStatus },
+      socketIo: { status: 'UP' },
+      memory: {
+        rssMb: Math.round(mem.rss / 1024 / 1024),
+        heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024),
+        heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
+      },
+    },
+  });
+});
+
 // Auth routes (public)
 app.use('/api/auth', authRoutes);
 
