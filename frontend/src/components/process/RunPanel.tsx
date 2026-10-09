@@ -168,14 +168,43 @@ export function RunPanel({
 
   const previewUrl = `/preview/${process.id}`;
   const hasPreview = files.some((f) => f.path.endsWith('.html'));
-
   const handleOpenPreview = async () => {
+    // Open tab synchronously within click handler to prevent popup blocking
+    const newTab = window.open('about:blank', '_blank', 'noopener,noreferrer');
     try {
       await api.processes.preparePreview(process.id);
+      if (newTab) {
+        newTab.location.href = previewUrl;
+      }
     } catch {
-      // Best-effort
+      if (newTab) {
+        newTab.location.href = previewUrl;
+      }
     }
-    window.open(previewUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDownloadFile = async (relPath: string) => {
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/preview/${process.id}/${relPath}?download=true`, {
+        headers,
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = relPath.split('/').pop() || relPath;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error('Download failed', (err as Error).message);
+    }
   };
 
   return (
@@ -372,15 +401,15 @@ export function RunPanel({
                           <Eye size={12} />
                           Read
                         </button>
-                        <a
-                          href={`/preview/${process.id}/${f.path}?download=true`}
-                          download={f.path.split('/').pop() || f.path}
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadFile(f.path)}
                           className="inline-flex items-center gap-1 rounded bg-inset px-2 py-1 text-2xs font-medium text-ink-muted transition-colors hover:bg-hover hover:text-ink"
                           title="Download this file"
                         >
                           <Download size={12} />
                           Download
-                        </a>
+                        </button>
                       </div>
                     </li>
                   );
@@ -409,14 +438,14 @@ export function RunPanel({
               >
                 {copied ? 'Copied' : 'Copy code'}
               </Button>
-              <a
-                href={`/preview/${process.id}/${activeFile.path}?download=true`}
-                download={activeFile.path.split('/').pop() || activeFile.path}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-brand-500 bg-brand-600 px-3 py-1.5 text-xs font-medium text-white shadow transition-colors hover:bg-brand-500"
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Download}
+                onClick={() => handleDownloadFile(activeFile.path)}
               >
-                <Download size={13} />
                 Download file
-              </a>
+              </Button>
             </div>
           }
         >

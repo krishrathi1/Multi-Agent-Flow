@@ -12,6 +12,7 @@ const processedDeliveries = new Map<string, number>();
 function verifyWebhookSignature(req: any): { valid: boolean; reason?: string } {
   const secret = process.env.GIT_WEBHOOK_SECRET;
   const signature = req.headers['x-hub-signature-256'] as string | undefined;
+  const gitlabToken = (req.headers['x-gitlab-token'] || req.headers['webhook-token']) as string | undefined;
   const simpleSecret = req.headers['x-webhook-secret'] as string | undefined;
 
   // Webhook secret MUST be configured; fail closed if missing in any environment
@@ -34,6 +35,16 @@ function verifyWebhookSignature(req: any): { valid: boolean; reason?: string } {
     } catch {
       return { valid: false, reason: 'Signature verification failure' };
     }
+  } else if (gitlabToken) {
+    try {
+      const glBuf = Buffer.from(gitlabToken);
+      const expBuf = Buffer.from(secret);
+      if (glBuf.length !== expBuf.length || !crypto.timingSafeEqual(glBuf, expBuf)) {
+        return { valid: false, reason: 'Invalid X-Gitlab-Token' };
+      }
+    } catch {
+      return { valid: false, reason: 'GitLab token comparison failure' };
+    }
   } else if (simpleSecret) {
     try {
       const secBuf = Buffer.from(simpleSecret);
@@ -45,7 +56,7 @@ function verifyWebhookSignature(req: any): { valid: boolean; reason?: string } {
       return { valid: false, reason: 'Secret comparison failure' };
     }
   } else {
-    return { valid: false, reason: 'Missing webhook signature or secret header' };
+    return { valid: false, reason: 'Missing webhook signature or secret header (X-Hub-Signature-256 or X-Gitlab-Token required)' };
   }
 
   return { valid: true };
@@ -53,7 +64,8 @@ function verifyWebhookSignature(req: any): { valid: boolean; reason?: string } {
 
 /**
  * Public trigger endpoint for Git push / commit events.
- * Enforces raw body HMAC signature verification, idempotency, and exact repository binding.
+ * Enforces raw body HMAC / GitLab token verification, tamper-resistant idempotency,
+ * and canonical repository-to-process binding.
  */
 router.post('/', async (req, res) => {
   try {
@@ -91,59 +103,37 @@ router.post('/', async (req, res) => {
     const rawCommit = body.after || body.head_commit?.id || body.checkout_sha || (typeof body.commit === 'string' ? body.commit : body.commit?.id) || '';
     const commit = (typeof rawCommit === 'string' ? rawCommit : String(rawCommit || '')).trim();
 
-    // Idempotency check via X-GitHub-Delivery or commit SHA
-    const deliveryId = (req.headers['x-github-delivery'] as string) || (commit || null);
-    if (deliveryId) {
-      const existing = processedDeliveries.get(deliveryId);
+    // Idempotency: Canonical key is provider + repository + commit + branch (tamper-resistant against header manipulation)
+    const canonicalDedupeKey = commit
+      ? `${repoName.toLowerCase()}:${parsedBranch.toLowerCase()}:${commit}`
+      : (req.headers['x-github-delivery'] as string || req.headers['x-gitlab-event-uuid'] as string || null);
+
+    if (canonicalDedupeKey) {
+      const existing = processedDeliveries.get(canonicalDedupeKey);
       if (existing && Date.now() - existing < 300_000) {
-        return res.status(200).json({ status: 'duplicate_delivery', message: 'Delivery already processed', deliveryId });
+        return res.status(200).json({ status: 'duplicate_delivery', message: 'Delivery already processed', dedupeKey: canonicalDedupeKey });
       }
     }
 
     logger.info({ commit, branch: parsedBranch, repo: repoName }, 'Received authenticated Git push trigger');
 
-    // Exact process matching: require explicit processId, or exact match on Process name / repo binding
-    const requestedProcessId = (req.query.processId as string) || body.processId;
-    const requestedOrgId = (req.headers['x-organization-id'] as string) || (req.query.orgId as string);
-
-    let proc = null;
-    if (requestedProcessId) {
-      proc = await prisma.process.findFirst({
-        where: {
-          id: requestedProcessId,
-          ...(requestedOrgId ? { organizationId: requestedOrgId } : {}),
-        },
-      });
-
-      if (proc) {
-        // Enforce exact repository binding: process must be associated with the incoming repository
-        const procNameMatches = proc.name.toLowerCase() === repoName.toLowerCase();
-        const procPromptMatches = proc.prompt.toLowerCase().includes(repoName.toLowerCase());
-        const procSummaryMatches = proc.summary ? proc.summary.toLowerCase().includes(repoName.toLowerCase()) : false;
-
-        if (!procNameMatches && !procPromptMatches && !procSummaryMatches) {
-          logger.warn({ repo: repoName, processId: proc.id, processName: proc.name }, 'Webhook repo mismatch for process');
-          return res.status(400).json({
-            error: `Target repository "${repoName}" is not bound to process "${proc.name}" (${proc.id}). Request rejected.`,
-          });
-        }
-      }
-    } else {
-      // Find process whose name equals repoName, or whose prompt specifies this repository
-      proc = await prisma.process.findFirst({
-        where: {
-          ...(requestedOrgId ? { organizationId: requestedOrgId } : {}),
-          OR: [
-            { name: { equals: repoName, mode: 'insensitive' } },
-            { prompt: { contains: repoName, mode: 'insensitive' } },
-          ],
-        },
-        orderBy: { updatedAt: 'desc' },
-      });
-    }
+    // Canonical repository binding: Target must be resolved exclusively from the verified signed repository payload
+    // We strictly match against Process where name equals repoName, or the repo name is explicitly declared
+    const repoShortName = repoName.split('/').pop() || repoName;
+    const proc = await prisma.process.findFirst({
+      where: {
+        OR: [
+          { name: { equals: repoName, mode: 'insensitive' } },
+          { name: { equals: repoShortName, mode: 'insensitive' } },
+          { prompt: { contains: `Repository: ${repoName}`, mode: 'insensitive' } },
+          { prompt: { contains: `Repo: ${repoName}`, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
 
     if (!proc) {
-      logger.warn({ repo: repoName, requestedProcessId }, 'No process bound to target repository');
+      logger.warn({ repo: repoName }, 'No process bound to target repository');
       return res.status(404).json({
         error: `No production process bound to repository "${repoName}". Webhook rejected without fallback.`,
       });
@@ -173,8 +163,8 @@ router.post('/', async (req, res) => {
     const runStatus = runner.startChainRun(proc.id, proc.organizationId, emit);
 
     // Record idempotency only after successful durable scheduling
-    if (deliveryId) {
-      processedDeliveries.set(deliveryId, Date.now());
+    if (canonicalDedupeKey) {
+      processedDeliveries.set(canonicalDedupeKey, Date.now());
     }
 
     logger.info({ processId: proc.id, runId: runStatus.runId }, 'Autonomous pipeline triggered by authenticated git push');

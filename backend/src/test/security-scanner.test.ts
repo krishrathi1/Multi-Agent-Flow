@@ -123,4 +123,14 @@ describe('Preview Access Control & Visibility', () => {
     const allowed = await canViewPreview('proc-deleted');
     expect(allowed).toBe(false);
   });
+
+  it('authorizes authenticated preview session and rejects invalid or mismatched session', async () => {
+    const { recordAuthorizedPreviewSession, isAuthorizedPreviewSession } = await import('../services/insights.service.js');
+    recordAuthorizedPreviewSession('proc-session-test', 'token-valid-session');
+
+    expect(isAuthorizedPreviewSession('proc-session-test', 'token-valid-session')).toBe(true);
+    expect(isAuthorizedPreviewSession('proc-other', 'token-valid-session')).toBe(false);
+    expect(isAuthorizedPreviewSession('proc-session-test', 'wrong-token')).toBe(false);
+    expect(isAuthorizedPreviewSession('proc-session-test', undefined)).toBe(false);
+  });
 });

@@ -248,26 +248,38 @@ end.writeUInt16LE(0, 20);                    // zip comment length
 
 const finalArchive = Buffer.concat([...locals, centralBuf, end]);
 
-// Remove existing target zip if present
-if (fs.existsSync(targetZip)) {
-  fs.unlinkSync(targetZip);
-}
-
 // Ensure parent dir of target exists
 fs.mkdirSync(path.dirname(targetZip), { recursive: true });
 
-// Write archive buffer atomically
-fs.writeFileSync(targetZip, finalArchive);
+// Write archive buffer atomically via temporary sibling file + rename
+const tempTarget = `${targetZip}.${Date.now()}.tmp`;
+const fd = fs.openSync(tempTarget, 'w');
+fs.writeSync(fd, finalArchive, 0, finalArchive.length);
+fs.fsyncSync(fd);
+fs.closeSync(fd);
 
-// Post-archive verification: Check PK magic headers
+// Post-archive verification: Check PK magic headers on buffer
 const headBytes = finalArchive.subarray(0, 4);
 const tailBytes = finalArchive.subarray(finalArchive.length - 22, finalArchive.length - 18);
 const isPkHeader = headBytes.equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])); // PK\x03\x04
 const isEocdHeader = tailBytes.equals(Buffer.from([0x50, 0x4b, 0x05, 0x06])); // PK\x05\x06
 
 if (!isPkHeader || !isEocdHeader) {
+  try { fs.unlinkSync(tempTarget); } catch { /* ignore */ }
   console.error('[INTEGRITY ERROR] Generated file does not conform to genuine PKZIP format.');
   process.exit(1);
+}
+
+// Atomically replace target archive
+try {
+  if (fs.existsSync(targetZip)) {
+    fs.unlinkSync(targetZip);
+  }
+  fs.renameSync(tempTarget, targetZip);
+} catch (err) {
+  // Fallback for Windows cross-device or permission locking
+  fs.copyFileSync(tempTarget, targetZip);
+  fs.unlinkSync(tempTarget);
 }
 
 const zipStats = fs.statSync(targetZip);

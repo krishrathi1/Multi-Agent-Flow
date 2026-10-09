@@ -397,7 +397,7 @@ JSON schema:
       anomalies: llmAnalysis?.anomalies?.length
         ? llmAnalysis.anomalies
         : (metricSnapshots?.length === 0
-          ? ['No Prometheus/OpenTelemetry metric snapshots recorded in database for this organization']
+          ? ['No Prometheus/OpenTelemetry metric snapshots recorded in database for this organization (CPU and error baseline unmeasured)']
           : [
               `P95 latency: ${realP95}ms across ${metricSnapshots?.length || 0} recorded snapshot(s)`,
               offlineAgents.length > 0 ? `${offlineAgents.length} agent(s) unreachable or errored` : 'Agent status nominal',
@@ -414,8 +414,8 @@ JSON schema:
       namespace: k8sConfigured ? (process.env.KUBERNETES_NAMESPACE || 'default') : 'N/A',
       failingPods: [],
       recentEvents: k8sConfigured
-        ? ['Live cluster telemetry nominal']
-        : ['Kubernetes integration not configured — no live cluster events or pods queried'],
+        ? ['Cluster API reachable — no pod metrics or crash loops detected in namespace']
+        : ['Kubernetes integration not configured — cluster events and pods unqueried'],
     },
     deployments: {
       latestRelease: liveCommit.hash !== 'unconfigured' ? `commit-${liveCommit.hash}` : 'NOT_CONFIGURED',

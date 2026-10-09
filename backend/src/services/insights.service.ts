@@ -447,10 +447,16 @@ export async function setPreviewVisibility(
   });
 }
 
-// In-memory cache of authenticated preview session tokens with 4-hour TTL
+// Cache of authenticated preview session tokens with 4-hour TTL (bounded and pruned)
+const MAX_PREVIEW_SESSIONS = 5000;
 const authorizedPreviewSessions = new Map<string, { processId: string; expiresAt: number }>();
 
 export function recordAuthorizedPreviewSession(processId: string, token: string): void {
+  // Prune oldest if capacity is exceeded
+  if (authorizedPreviewSessions.size >= MAX_PREVIEW_SESSIONS) {
+    const oldestKey = authorizedPreviewSessions.keys().next().value;
+    if (oldestKey) authorizedPreviewSessions.delete(oldestKey);
+  }
   authorizedPreviewSessions.set(token, {
     processId,
     expiresAt: Date.now() + 4 * 60 * 60 * 1000,
@@ -467,6 +473,14 @@ export function isAuthorizedPreviewSession(processId: string, token?: string): b
   }
   return session.processId === processId;
 }
+
+// Periodic cleanup of expired preview sessions
+setInterval(() => {
+  const now = Date.now();
+  for (const [t, s] of authorizedPreviewSessions) {
+    if (s.expiresAt < now) authorizedPreviewSessions.delete(t);
+  }
+}, 60_000);
 
 /** Decides whether a preview request may proceed. */
 export async function canViewPreview(

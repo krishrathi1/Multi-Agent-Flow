@@ -220,20 +220,27 @@ export async function getOrganizationIntegrationToken(
     }
   }
 
-  // Fallback to legacy plaintext during transitional period and auto-migrate
+  // Fallback to legacy plaintext during transitional period and auto-migrate safely in transaction
   if (typeof settings[legacyKey] === 'string' && settings[legacyKey]) {
     const rawVal = settings[legacyKey] as string;
     try {
       const encrypted = encryptField(rawVal);
-      const updatedSettings = { ...settings, [encryptedKey]: encrypted };
-      delete updatedSettings[legacyKey];
-      await prisma.organization.update({
-        where: { id: orgId },
-        data: { settings: updatedSettings as any },
+      await prisma.$transaction(async (tx) => {
+        const freshOrg = await tx.organization.findUnique({
+          where: { id: orgId },
+          select: { settings: true },
+        });
+        const currentSettings = (freshOrg?.settings as Record<string, unknown>) || {};
+        const mergedSettings = { ...currentSettings, [encryptedKey]: encrypted };
+        delete mergedSettings[legacyKey];
+        await tx.organization.update({
+          where: { id: orgId },
+          data: { settings: mergedSettings as any },
+        });
       });
       logger.info({ orgId, provider }, 'Auto-migrated legacy plaintext integration token to encrypted storage');
-    } catch {
-      /* ignore migration error */
+    } catch (migErr) {
+      logger.warn({ orgId, provider, err: (migErr as Error).message }, 'Failed to write migrated integration token in transaction');
     }
     return rawVal;
   }
