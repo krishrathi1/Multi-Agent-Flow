@@ -577,8 +577,14 @@ export async function indexCodebase(organizationId: string, workspaceId?: string
 
 // ─── Public API ─────────────────────────────────────────
 
+function isDangerousRegex(pattern: string): boolean {
+  // Reject nested repetition operators that cause catastrophic backtracking
+  return /(\+|\*|\{[0-9]+,[0-9]*\})\s*(\+|\*|\{[0-9]+,[0-9]*\})/.test(pattern) ||
+         /\([^)]*(\+|\*)[^)]*\)\s*(\+|\*|\{[0-9]+,[0-9]*\})/.test(pattern);
+}
+
 /**
- * Performs a semantic search across the selected MyceliumOps repository files.
+ * Performs code search across the selected workspace files with ReDoS guards and timeouts.
  */
 export async function searchCode(
   organizationId: string,
@@ -592,6 +598,11 @@ export async function searchCode(
   const { fileFilter, language, maxResults = 50, isRegex = false } = options;
   const results: SearchResult[] = [];
 
+  if (isRegex && isDangerousRegex(query)) {
+    logger.warn({ query }, 'Rejected dangerous regex pattern to prevent ReDoS');
+    return [];
+  }
+
   let regex: RegExp;
   try {
     regex = isRegex ? new RegExp(query, 'gi') : new RegExp(escapeRegex(query), 'gi');
@@ -599,7 +610,10 @@ export async function searchCode(
     return [];
   }
 
+  const deadline = Date.now() + 3000; // 3-second hard timeout for search traversal
+
   for (const file of files) {
+    if (Date.now() > deadline) break;
     if (language && file.language !== language) continue;
     if (fileFilter && !file.relativePath.includes(fileFilter)) continue;
 
@@ -963,7 +977,7 @@ export async function askCodebase(
       for (const m of uniqueCandidates) {
         try {
           const res = await fetch(
-            `${config.geminiApiBaseUrl}/v1beta/models/${m}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+            `${config.geminiApiBaseUrl}/v1beta/models/${m}:generateContent`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
@@ -1026,34 +1040,16 @@ export async function askCodebase(
     }
   }
 
-  // Grounded structured synthesis fallback
-  const primaryFile = topFiles[0];
-  const secondaryFile = topFiles[1];
-  const tertiaryFile = topFiles[2];
-
+  // Grounded truthful retrieval synthesis (no invented summaries)
   const finalAnswer = aiAnswer || (
-    `### 📘 Comprehensive Codebase & Architecture Breakdown\n\n` +
-    `Here is an in-depth explanation answering: **"${question}"** grounded in the MyceliumOps **${repoName}** codebase.\n\n` +
-    `---\n\n` +
-    `### 1. Primary Component Structure & Architecture\n\n` +
-    `The core implementation is centered in **\`${primaryFile.file.relativePath}\`** (${primaryFile.file.language}, ${primaryFile.file.lineCount} lines):\n\n` +
-    `- **Component Role**: Implements the primary user interface and orchestrates state management, user actions, and downstream presentation.\n` +
-    (primaryFile.file.symbols.length ? `- **Key Symbols & Functions**:\n` + primaryFile.file.symbols.slice(0, 6).map(s => `  - \`${s.kind} ${s.name}\`: Encapsulates dedicated behavior for ${s.name.toLowerCase().includes('handle') ? 'event processing' : s.name.toLowerCase().includes('use') ? 'state/hook integration' : 'component presentation'}.`).join('\n') + `\n` : '') +
-    (primaryFile.snippet ? `\n\`\`\`${primaryFile.file.language.toLowerCase().includes('type') ? 'typescript' : 'javascript'}\n${primaryFile.snippet}\n\`\`\`\n` : '') +
-    `\n---\n\n` +
-    (secondaryFile ? (
-      `### 2. Supporting Modules & Integration Layer\n\n` +
-      `The primary component collaborates with **\`${secondaryFile.file.relativePath}\`** (${secondaryFile.file.language}):\n\n` +
-      `- **Integration Purpose**: Provides auxiliary layout, sub-components, or service utilities.\n` +
-      (secondaryFile.file.symbols.length ? `- **Key Symbols**: \`${secondaryFile.file.symbols.slice(0, 4).map(s => s.name).join('`, `')}\`\n` : '') +
-      (secondaryFile.snippet ? `\n\`\`\`${secondaryFile.file.language.toLowerCase().includes('type') ? 'typescript' : 'javascript'}\n${secondaryFile.snippet}\n\`\`\`\n` : '') +
-      `\n---\n\n`
-    ) : '') +
-    `### 3. Data Flow & Execution Lifecycle\n\n` +
-    `1. **Initialization & Props Ingestion**: The component receives props (e.g. goal, lead agents, configurations) and initializes internal state hooks.\n` +
-    `2. **State Updates & User Interaction**: As tasks or events fire, state handlers update the reactive state and trigger re-renders.\n` +
-    `3. **Sub-Component Coordination**: Views are decomposed into modular sub-elements to maintain clean separation of concerns and maintainability.\n\n` +
-    `*(Tip: You can visually inspect the imports and file dependencies in the **Code Graph** tab, or explore symbol references in **Symbol Explorer**).*`
+    `### 🔍 Direct Retrieval Matches for: "${question}"\n\n` +
+    `No configured LLM was reachable to synthesize an answer. Below are the directly retrieved code passages grounded in the **${repoName}** workspace:\n\n` +
+    topFiles.map((tf, idx) => {
+      const lineStart = tf.file.symbols[0]?.line || 1;
+      const lineEnd = lineStart + (tf.snippet ? tf.snippet.split('\n').length : 1) - 1;
+      return `#### ${idx + 1}. \`${tf.file.relativePath}\` (Lines ${lineStart}–${lineEnd})\n` +
+        (tf.snippet ? `\`\`\`${tf.file.language.toLowerCase().includes('type') ? 'typescript' : 'javascript'}\n${tf.snippet}\n\`\`\`\n` : '');
+    }).join('\n')
   );
 
   return {

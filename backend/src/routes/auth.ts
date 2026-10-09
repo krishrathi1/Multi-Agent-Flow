@@ -162,19 +162,19 @@ router.post('/refresh', refreshLimiter, async (req, res) => {
   }
 });
 
-// POST /logout — clears refresh token cookie
-router.post('/logout', requireAuth, async (req, res) => {
+// POST /logout — revokes refresh token session and clears cookie (does not require valid access token)
+router.post('/logout', async (req, res) => {
   try {
-    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
+    const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refreshToken;
     if (refreshToken) {
       await authService.logout(refreshToken);
     }
-    clearRefreshCookie(res);
-    res.json({ ok: true });
   } catch {
+    // continue to clear cookie regardless of database error
+  } finally {
     clearRefreshCookie(res);
-    return res.status(500).json({ error: 'Logout failed' });
   }
+  res.json({ ok: true });
 });
 
 // GET /me (requires auth)

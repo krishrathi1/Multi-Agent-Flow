@@ -68,21 +68,38 @@ import { decryptField } from '../lib/crypto.js';
 import { runClaudeCli, isClaudeCliEnabled } from '../lib/claude-cli.js';
 
 router.post('/test', async (req: any, res) => {
-  const { templateId, variables, model } = req.body as {
+  const { templateId, variables, model, allowFallback = false } = req.body as {
     templateId: string;
     variables: Record<string, string>;
     model?: string;
+    allowFallback?: boolean;
   };
 
   const template = getPromptById(templateId);
   if (!template) return res.status(404).json({ error: 'Prompt template not found' });
 
+  // Bound variable size to prevent memory exhaustion
+  if (variables && typeof variables === 'object') {
+    for (const [k, v] of Object.entries(variables)) {
+      if (typeof v === 'string' && v.length > 50000) {
+        return res.status(400).json({ error: `Variable "${k}" exceeds maximum allowed length of 50,000 characters.` });
+      }
+    }
+  }
+
   const rendered = renderPrompt(template, variables || {});
   let generatedOutput: string | null = null;
-  let executedModel: string = model || template.models[0] || config.geminiModel;
+  const requestedModel = (model || template.models[0] || config.geminiModel).trim();
+  let executedModel: string = requestedModel;
+  let fallbackUsed = false;
+  let providerError: string | null = null;
 
-  // 1. Try Claude CLI if enabled
-  if (isClaudeCliEnabled()) {
+  const isExplicitClaudeCli = requestedModel.toLowerCase().includes('claude-cli');
+  const isExplicitGemini = requestedModel.toLowerCase().includes('gemini') || requestedModel.toLowerCase().includes('google');
+  const isExplicitLocal = requestedModel.toLowerCase().includes('local') || requestedModel.toLowerCase().includes('ollama') || requestedModel.toLowerCase().includes('qwen');
+
+  // 1. Try Claude CLI if explicitly requested or if fallback is permitted
+  if (isClaudeCliEnabled() && (isExplicitClaudeCli || (!model && allowFallback))) {
     try {
       const cliRes = await runClaudeCli(rendered, {
         timeoutMs: 60000,
@@ -91,11 +108,13 @@ router.post('/test', async (req: any, res) => {
         generatedOutput = cliRes.text;
         executedModel = cliRes.model || 'claude-cli';
       }
-    } catch { /* fallthrough */ }
+    } catch (err: any) {
+      providerError = `Claude CLI error: ${err.message}`;
+    }
   }
 
-  // 2. Query configured organization LLM provider or env keys
-  if (!generatedOutput) {
+  // 2. Query configured Gemini provider
+  if (!generatedOutput && (isExplicitGemini || (!isExplicitClaudeCli && !isExplicitLocal) || allowFallback)) {
     let geminiKey = process.env.GEMINI_API_KEY || process.env.PLATFORM_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
     if (req.organizationId) {
       try {
@@ -110,16 +129,15 @@ router.post('/test', async (req: any, res) => {
     }
 
     if (geminiKey) {
-      const candidateModels = [
-        model || template.models[0] || config.geminiModel,
-        ...config.geminiModels,
-      ];
+      const cleanRequested = requestedModel.replace(/^google\//i, '').replace(/^gemini\//i, '');
+      const modelsToTry = allowFallback
+        ? Array.from(new Set([cleanRequested, config.geminiModel, ...config.geminiModels]))
+        : [cleanRequested];
 
-      for (const m of candidateModels) {
+      for (const m of modelsToTry) {
         try {
-          const cleanModel = m.replace(/^google\//, '').replace(/^gemini\//, '');
           const geminiRes = await fetch(
-            `${config.geminiApiBaseUrl}/v1beta/models/${cleanModel}:generateContent`,
+            `${config.geminiApiBaseUrl}/v1beta/models/${m}:generateContent`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
@@ -138,25 +156,34 @@ router.post('/test', async (req: any, res) => {
             const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (text && typeof text === 'string' && text.trim().length > 0) {
               generatedOutput = text.trim();
-              executedModel = cleanModel;
+              if (m !== cleanRequested) fallbackUsed = true;
+              executedModel = m;
               break;
             }
+          } else {
+            const errBody = await geminiRes.text();
+            providerError = `Gemini API error (${geminiRes.status}): ${errBody.slice(0, 200)}`;
           }
-        } catch { /* continue to next model */ }
+        } catch (err: any) {
+          providerError = `Gemini connection error: ${err.message}`;
+        }
       }
+    } else if (isExplicitGemini && !allowFallback) {
+      providerError = 'No Google Gemini API key configured.';
     }
   }
 
-  // 3. Try Local PC Ollama (localhost / host.docker.internal)
-  if (!generatedOutput) {
+  // 3. Try Local PC Ollama
+  if (!generatedOutput && (isExplicitLocal || allowFallback)) {
     const localEndpoints = config.localLlmEndpoints;
+    const targetLocalModel = isExplicitLocal ? requestedModel.replace(/^local\//i, '') : config.localLlmModel;
     for (const ep of localEndpoints) {
       try {
         const oRes = await fetch(`${ep}/api/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: config.localLlmModel,
+            model: targetLocalModel,
             prompt: rendered,
             stream: false,
           }),
@@ -166,31 +193,39 @@ router.post('/test', async (req: any, res) => {
           const oData = (await oRes.json()) as any;
           if (oData?.response && typeof oData.response === 'string') {
             generatedOutput = oData.response.trim();
-            executedModel = `${config.localLlmModel} (Local Host)`;
+            if (targetLocalModel !== requestedModel) fallbackUsed = true;
+            executedModel = `${targetLocalModel} (Local Host)`;
             break;
           }
         }
-      } catch { /* ignore */ }
+      } catch (err: any) {
+        providerError = `Local Ollama error: ${err.message}`;
+      }
     }
   }
 
-  // 4. If no LLM provider generated an output, fail honestly with an actionable error
+  // 4. If execution failed, fail honestly with an accurate error report
   if (!generatedOutput) {
     return res.status(503).json({
-      error: `No active LLM provider could execute this prompt with model "${executedModel}". Please configure an API key in Settings -> LLM Providers or start a local model runner.`,
+      error: `Could not execute prompt with requested model "${requestedModel}". ${providerError || 'Please configure an API key in Settings -> LLM Providers or start a local model runner.'}`,
       templateId,
       renderedPrompt: rendered,
-      testedModel: executedModel,
+      testedModel: requestedModel,
+      fallbackUsed,
     });
   }
 
   res.json({
     templateId,
     model: executedModel,
+    requestedModel,
+    fallbackUsed,
     renderedPrompt: rendered,
     output: generatedOutput,
     fewShotExamples: template.fewShotExamples,
-    note: `Prompt executed successfully via ${executedModel}.`,
+    note: fallbackUsed
+      ? `Executed via fallback model ${executedModel} (requested: ${requestedModel}).`
+      : `Prompt executed successfully via ${executedModel}.`,
   });
 });
 

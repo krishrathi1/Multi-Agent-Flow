@@ -33,7 +33,7 @@ jobs:
         id: sec_scan
         run: |
           # Check for known secret patterns in diff
-          if grep -E "(AIzaSy[A-Za-z0-9_-]{33}|ghp_[A-Za-z0-9]{36}|sk-ant-|-----BEGIN [A-Z]+ PRIVATE KEY-----)" pr_diff.txt; then
+          if grep -E "(AIzaSy[A-Za-z0-9_-]{33}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82}|sk-ant-[A-Za-z0-9_-]{30,}|sk-[a-zA-Z0-9]{32,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)" pr_diff.txt; then
             echo "secrets_detected=true" >> $GITHUB_OUTPUT
           else
             echo "secrets_detected=false" >> $GITHUB_OUTPUT
@@ -65,3 +65,10 @@ jobs:
               issue_number: context.issue.number,
               body: commentBody
             });
+
+      - name: Enforce Secret Gate
+        if: steps.sec_scan.outputs.secrets_detected == 'true'
+        run: |
+          echo "::error::Credential leak detected in pull request diff! Failing CI security gate."
+          exit 1
+

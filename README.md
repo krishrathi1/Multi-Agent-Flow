@@ -41,19 +41,19 @@
 - **Token Usage & Cost Analytics** — per-agent, per-model cost tracking
 - **Alert System** — configurable rules with severity levels and acknowledgment
 
-### 🧠 Code Intelligence (Sourcegraph-Style)
-- **Semantic Code Search** — regex and text search across the entire codebase
+### 🧠 Code Intelligence
+- **Code Search** — regex and text search across the generated production workspace
 - **Symbol Explorer** — browse functions, classes, interfaces with go-to-definition
 - **Dependency Graph** — interactive file-level import/export visualization
-- **Find References** — locate all imports and usages of any symbol
+- **Find References** — locate imports and usages of any symbol
 - **Codebase Statistics** — lines, files, languages, largest files at a glance
 
 ### 🔧 Prompt Engineering Lab
 - **Structured Prompt Templates** — code review, refactoring, bug detection, completion, explanation
 - **Variable Substitution** — fill in `{{language}}`, `{{code}}`, `{{context}}` placeholders
 - **Few-Shot Examples** — reference input/output pairs for each template
-- **Version History** — track prompt iterations and refinements
-- **Test Playground** — render and test prompts against connected LLMs
+- **Template Changelog** — inspect built-in template version iterations and specifications
+- **Test Playground** — test and benchmark prompts against selected LLM providers
 
 ### 🔐 Enterprise-Ready
 - **JWT + API Key Authentication** — secure multi-tenant access

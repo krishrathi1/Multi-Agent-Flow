@@ -6,6 +6,7 @@ import * as runner from '../services/agent-runner.service.js';
 import { prisma } from '../lib/prisma.js';
 import { validate } from '../middleware/validate.js';
 import { config } from '../config.js';
+import { decryptField } from '../lib/crypto.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from '../services/git-deploy.service.js';
 
 const router = Router();
@@ -74,27 +75,6 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', validate(createSchema), async (req, res) => {
-  const ghToken = req.headers['x-github-token'] || req.body.githubToken;
-  const vToken = req.headers['x-vercel-token'] || req.body.vercelToken;
-
-
-  if (ghToken || vToken) {
-    try {
-      const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
-      const currentSettings = (org?.settings as any) || {};
-      await prisma.organization.update({
-        where: { id: req.organizationId! },
-        data: {
-          settings: {
-            ...currentSettings,
-            ...(ghToken ? { githubToken: ghToken } : {}),
-            ...(vToken ? { vercelToken: vToken } : {}),
-          },
-        },
-      });
-    } catch { /* ignore */ }
-  }
-
   const proc = await processService.createProcess(req.organizationId!, req.body);
   req.app.get('io')?.to(`org:${req.organizationId}`).emit('process:created', proc);
   res.status(201).json(proc);
@@ -387,9 +367,24 @@ router.post('/test-api', async (req, res) => {
   }
 });
 
+async function resolveGithubToken(explicitToken?: string, organizationId?: string): Promise<string | undefined> {
+  if (explicitToken?.trim()) return explicitToken.trim();
+  if (organizationId) {
+    try {
+      const org = await prisma.organization.findUnique({ where: { id: organizationId } });
+      const settings = (org?.settings as Record<string, unknown>) || {};
+      const encrypted = settings.githubTokenEncrypted || settings.githubToken;
+      if (typeof encrypted === 'string' && encrypted) {
+        return decryptField(encrypted);
+      }
+    } catch { /* ignore */ }
+  }
+  return process.env.GITHUB_TOKEN || process.env.PLATFORM_GITHUB_TOKEN || undefined;
+}
+
 /** Fetch GitHub Repositories for selection */
 router.post('/github-repos', async (req, res) => {
-  const { token } = req.body;
+  const token = await resolveGithubToken(req.body?.token, req.organizationId);
   if (!token) {
     return res.json({ repos: [], connected: false });
   }
@@ -423,7 +418,8 @@ router.post('/github-repos', async (req, res) => {
 
 /** Create a new GitHub Repository via Personal Access Token */
 router.post('/github-create-repo', async (req, res) => {
-  const { token, name, description, isPrivate = false, autoInit = true } = req.body;
+  const { name, description, isPrivate = false, autoInit = true } = req.body;
+  const token = await resolveGithubToken(req.body?.token, req.organizationId);
   if (!token) {
     return res.status(400).json({
       success: false,
@@ -438,8 +434,6 @@ router.post('/github-create-repo', async (req, res) => {
   }
 
   const cleanName = name.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
-  process.env.GITHUB_TOKEN = token;
-  process.env.PLATFORM_GITHUB_TOKEN = token;
 
   try {
     const ghRes = await fetch('https://api.github.com/user/repos', {
@@ -523,8 +517,10 @@ router.post('/:id/auto-heal', async (req, res) => {
 
   const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
   const orgSettings = (org?.settings as any) || {};
-  const ghToken = process.env.GITHUB_TOKEN || orgSettings.githubToken;
-  const vToken = process.env.VERCEL_TOKEN || orgSettings.vercelToken;
+  const rawGh = orgSettings.githubTokenEncrypted || orgSettings.githubToken;
+  const ghToken = process.env.GITHUB_TOKEN || (rawGh ? decryptField(rawGh) : undefined);
+  const rawV = orgSettings.vercelTokenEncrypted || orgSettings.vercelToken;
+  const vToken = process.env.VERCEL_TOKEN || (rawV ? decryptField(rawV) : undefined);
 
   let pushResult: any = null;
   let deployResult: any = null;

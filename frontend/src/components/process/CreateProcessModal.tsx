@@ -483,14 +483,13 @@ export function CreateProcessModal({
 
   useEffect(() => {
     if (open) {
-      const vTok = localStorage.getItem('nexus:vercel_token');
-      const hasVercel = !!vTok;
-      setIsVercelConnected(hasVercel);
-      setVercelAutoDeploy(hasVercel);
+      api.organizations.getIntegrations().then((integrations) => {
+        setIsVercelConnected(integrations.vercelConnected);
+        setVercelAutoDeploy(integrations.vercelConnected);
+      }).catch(() => {});
 
-      const ghToken = localStorage.getItem('nexus:github_token') || undefined;
       setLoadingRepos(true);
-      api.processes.githubRepos(ghToken).then((res) => {
+      api.processes.githubRepos().then((res) => {
         if (res && res.repos && res.repos.length > 0) {
           setRepoList(res.repos);
           if (!res.repos.some(r => r.full_name === repoInput)) {
@@ -707,13 +706,9 @@ export function CreateProcessModal({
       }
 
       const effective = getEffectivePrompt();
-      const ghToken = localStorage.getItem('nexus:github_token') || undefined;
-      const vToken = localStorage.getItem('nexus:vercel_token') || undefined;
       const created = await createProcess({
         prompt: effective,
         plan,
-        githubToken: ghToken,
-        vercelToken: vToken,
         model: selectedModel === 'auto' ? undefined : selectedModel,
       });
       onCreated?.(created);

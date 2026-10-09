@@ -1,22 +1,38 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import * as webhookService from '../services/webhook.service.js';
 
 const router = Router();
 
-// PUBLIC endpoint — no auth required
-router.post('/:boardId/:webhookId', async (req, res) => {
+const inboundLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { error: 'Too many webhook requests. Please retry later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// PUBLIC endpoint — rate-limited and secret-authenticated
+router.post('/:boardId/:webhookId', inboundLimiter, async (req, res) => {
   try {
     const payload = req.body;
+    if (payload && JSON.stringify(payload).length > 500_000) {
+      return res.status(413).json({ error: 'Payload exceeds maximum allowed size of 500KB' });
+    }
     const headers: Record<string, string> = {};
     for (const [key, value] of Object.entries(req.headers)) {
       if (typeof value === 'string') headers[key] = value;
     }
     const sourceIp = (req.ip || req.socket.remoteAddress || '') as string;
-    const contentType = req.headers['content-type'] || '';
+    const rawContentType = req.headers['content-type'];
+    const contentType = Array.isArray(rawContentType) ? (rawContentType[0] || '') : (rawContentType || '');
+
+    const boardId = String(req.params.boardId);
+    const webhookId = String(req.params.webhookId);
 
     const stored = await webhookService.handleInbound(
-      req.params.boardId,
-      req.params.webhookId,
+      boardId,
+      webhookId,
       payload,
       headers,
       sourceIp,

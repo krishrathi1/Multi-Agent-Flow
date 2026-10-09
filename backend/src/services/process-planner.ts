@@ -535,7 +535,7 @@ async function planWithLlm(prompt: string, requested?: number, preferredModel?: 
       try {
         const combined = `${PLANNER_SYSTEM}\n\nUser Production Request:\n${ask}\n\nRespond ONLY with the JSON plan.`;
         const res = await fetch(
-          `${config.geminiApiBaseUrl}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          `${config.geminiApiBaseUrl}/v1beta/models/${model}:generateContent`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },

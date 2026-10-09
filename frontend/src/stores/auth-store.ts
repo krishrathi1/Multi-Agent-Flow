@@ -8,6 +8,7 @@ interface AuthState {
   user: AuthUser | null;
   organization: AuthOrg | null;
   orgRole: OrgRole | null;
+  organizations: Array<AuthOrg & { role?: OrgRole; isCurrent?: boolean }>;
   accessToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -19,12 +20,15 @@ interface AuthState {
   initialize: () => Promise<void>;
   setAccessToken: (accessToken: string) => void;
   clearAuth: () => void;
+  switchOrganization: (orgId: string) => Promise<void>;
+  fetchOrganizations: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   organization: null,
   orgRole: null,
+  organizations: [],
   accessToken: null,
   isAuthenticated: false,
   isLoading: true,
@@ -44,7 +48,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw new Error(data.error || 'Login failed');
       }
       const data = await res.json();
-      // Refresh token is in httpOnly cookie (not in response body)
       set({
         user: data.user,
         organization: data.organization,
@@ -53,6 +56,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: true,
         isLoading: false,
       });
+      get().fetchOrganizations().catch(() => {});
     } catch (e: any) {
       set({ error: e.message, isLoading: false });
       throw e;
@@ -72,7 +76,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const data = await res.json();
         throw new Error(data.error || 'Signup failed');
       }
-      // Signup no longer returns tokens — user must verify email first
       set({ isLoading: false });
     } catch (e: any) {
       set({ error: e.message, isLoading: false });
@@ -83,29 +86,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     const { accessToken } = get();
     try {
-      if (accessToken) {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-          credentials: 'include', // send httpOnly cookie so backend can invalidate it
-        });
-      }
-    } catch {} // ignore errors
-    set({ user: null, organization: null, orgRole: null, accessToken: null, isAuthenticated: false, isLoading: false });
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        credentials: 'include',
+      });
+    } catch {}
+    set({
+      user: null,
+      organization: null,
+      orgRole: null,
+      organizations: [],
+      accessToken: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
   },
 
   initialize: async () => {
     try {
-      // Try to refresh using the httpOnly cookie (automatically sent)
       const res = await fetch('/api/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // send httpOnly cookie
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Refresh failed');
       const data = await res.json();
 
-      // Now get user info
       const meRes = await fetch('/api/auth/me', {
         headers: { Authorization: `Bearer ${data.accessToken}` },
         credentials: 'include',
@@ -121,9 +131,63 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: true,
         isLoading: false,
       });
+      get().fetchOrganizations().catch(() => {});
     } catch {
       set({ isLoading: false });
     }
+  },
+
+  switchOrganization: async (orgId: string) => {
+    const { accessToken } = get();
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          'X-Organization-Id': orgId,
+        },
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to switch organization');
+      const meData = await res.json();
+      set({
+        user: meData.user,
+        organization: meData.organization,
+        orgRole: meData.role,
+      });
+      const currentOrgs = get().organizations.map((o) => ({
+        ...o,
+        isCurrent: o.id === orgId,
+      }));
+      set({ organizations: currentOrgs });
+    } catch (err: any) {
+      set({ error: err.message });
+      throw err;
+    }
+  },
+
+  fetchOrganizations: async () => {
+    const { accessToken, organization } = get();
+    if (!accessToken) return;
+    try {
+      const res = await fetch('/api/auth/organizations', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.organizations)) {
+          set({
+            organizations: data.organizations.map((o: any) => ({
+              id: o.id,
+              name: o.name,
+              slug: o.slug,
+              role: o.role,
+              isCurrent: o.id === organization?.id,
+            })),
+          });
+        }
+      }
+    } catch {}
   },
 
   setAccessToken: (accessToken) => {
@@ -131,6 +195,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearAuth: () => {
-    set({ user: null, organization: null, orgRole: null, accessToken: null, isAuthenticated: false });
+    set({ user: null, organization: null, orgRole: null, organizations: [], accessToken: null, isAuthenticated: false });
   },
 }));

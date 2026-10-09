@@ -281,6 +281,7 @@ export async function login(data: { email: string; password: string }) {
   return {
     user: { id: user.id, email: user.email, name: user.name },
     organization: member.organization,
+    role: member.role,
     accessToken,
     refreshToken,
   };

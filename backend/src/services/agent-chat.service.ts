@@ -204,7 +204,7 @@ async function callChatLLM(params: {
       try {
         const combined = `${params.systemPrompt}\n\n${params.prompt}`;
         const res = await fetch(
-          `${config.geminiApiBaseUrl}/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          `${config.geminiApiBaseUrl}/v1beta/models/${cleanModel}:generateContent`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },

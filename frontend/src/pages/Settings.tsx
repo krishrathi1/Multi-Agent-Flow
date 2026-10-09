@@ -2168,45 +2168,74 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
 // ---------------------------------------------------------------------------
 
 function IntegrationsTab({ isAdmin }: { isAdmin: boolean }) {
-  const [githubToken, setGithubToken] = useState(() => localStorage.getItem('nexus:github_token') || '');
-  const [githubConnected, setGithubConnected] = useState(() => !!localStorage.getItem('nexus:github_token'));
+  const [githubToken, setGithubToken] = useState('');
+  const [githubConnected, setGithubConnected] = useState(false);
 
-  const [vercelToken, setVercelToken] = useState(() => localStorage.getItem('nexus:vercel_token') || '');
-  const [vercelConnected, setVercelConnected] = useState(() => !!localStorage.getItem('nexus:vercel_token'));
+  const [vercelToken, setVercelToken] = useState('');
+  const [vercelConnected, setVercelConnected] = useState(false);
 
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const handleSaveGithub = (e: React.FormEvent) => {
+  useEffect(() => {
+    api.organizations.getIntegrations()
+      .then((res) => {
+        setGithubConnected(res.githubConnected);
+        setVercelConnected(res.vercelConnected);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSaveGithub = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!githubToken.trim()) return;
-    localStorage.setItem('nexus:github_token', githubToken.trim());
-    setGithubConnected(true);
-    setMessage({ type: 'success', text: 'GitHub account connected successfully!' });
+    try {
+      await api.organizations.updateIntegrations({ githubToken: githubToken.trim() });
+      setGithubToken('');
+      setGithubConnected(true);
+      setMessage({ type: 'success', text: 'GitHub account connected and encrypted securely!' });
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Failed to connect GitHub account' });
+    }
     setTimeout(() => setMessage(null), 4000);
   };
 
-  const handleDisconnectGithub = () => {
-    localStorage.removeItem('nexus:github_token');
-    setGithubToken('');
-    setGithubConnected(false);
-    setMessage({ type: 'success', text: 'GitHub account disconnected.' });
+  const handleDisconnectGithub = async () => {
+    try {
+      await api.organizations.disconnectIntegration('github');
+      setGithubToken('');
+      setGithubConnected(false);
+      setMessage({ type: 'success', text: 'GitHub account disconnected.' });
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Failed to disconnect GitHub account' });
+    }
     setTimeout(() => setMessage(null), 4000);
   };
 
-  const handleSaveVercel = (e: React.FormEvent) => {
+  const handleSaveVercel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!vercelToken.trim()) return;
-    localStorage.setItem('nexus:vercel_token', vercelToken.trim());
-    setVercelConnected(true);
-    setMessage({ type: 'success', text: 'Vercel account connected successfully!' });
+    try {
+      await api.organizations.updateIntegrations({ vercelToken: vercelToken.trim() });
+      setVercelToken('');
+      setVercelConnected(true);
+      setMessage({ type: 'success', text: 'Vercel account connected and encrypted securely!' });
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Failed to connect Vercel account' });
+    }
     setTimeout(() => setMessage(null), 4000);
   };
 
-  const handleDisconnectVercel = () => {
-    localStorage.removeItem('nexus:vercel_token');
-    setVercelToken('');
-    setVercelConnected(false);
-    setMessage({ type: 'success', text: 'Vercel account disconnected.' });
+  const handleDisconnectVercel = async () => {
+    try {
+      await api.organizations.disconnectIntegration('vercel');
+      setVercelToken('');
+      setVercelConnected(false);
+      setMessage({ type: 'success', text: 'Vercel account disconnected.' });
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Failed to disconnect Vercel account' });
+    }
     setTimeout(() => setMessage(null), 4000);
   };
 

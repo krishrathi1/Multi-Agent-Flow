@@ -58,12 +58,25 @@ async function findIndex(processId: string): Promise<string | null> {
   );
 }
 
-/** Token may arrive as ?t= or an X-Share-Token header. */
-const shareToken = (req: { query: Record<string, unknown>; get: (h: string) => string | undefined }) =>
-  (typeof req.query.t === 'string' ? req.query.t : undefined) ?? req.get('x-share-token');
+/** Token may arrive as ?t=, X-Share-Token header, or preview_token cookie. */
+const shareToken = (req: {
+  query: Record<string, unknown>;
+  get: (h: string) => string | undefined;
+  cookies?: Record<string, string>;
+  headers?: Record<string, unknown>;
+}) => {
+  if (typeof req.query.t === 'string' && req.query.t) return req.query.t;
+  const header = req.get('x-share-token');
+  if (header) return header;
+  if (req.cookies && typeof req.cookies['preview_token'] === 'string') return req.cookies['preview_token'];
+  const rawCookie = typeof req.headers?.cookie === 'string' ? req.headers.cookie : '';
+  const match = rawCookie.match(/(?:^|;\s*)preview_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : undefined;
+};
 
 router.get('/:processId', async (req, res) => {
-  if (!(await canViewPreview(req.params.processId, shareToken(req)))) {
+  const token = shareToken(req);
+  if (!(await canViewPreview(req.params.processId, token))) {
     return res.status(403).type('text/plain').send('This preview is not shared');
   }
   const entry = await findIndex(req.params.processId);
@@ -78,16 +91,24 @@ router.get('/:processId', async (req, res) => {
           '<p>This production has not produced an HTML file. Run the chain first.</p>',
       );
   }
-  // Redirect so relative asset URLs inside the page resolve correctly, and
-  // carry the token forward or the very next request would be refused.
-  const t = shareToken(req);
+  // Set scoped cookie so relative assets (scripts, styles, images) automatically carry preview authorization
+  if (token) {
+    res.cookie('preview_token', token, {
+      path: `/preview/${req.params.processId}`,
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+  }
+  // Redirect so relative asset URLs inside the page resolve correctly
   res.redirect(
-    `/preview/${req.params.processId}/${entry}${t ? `?t=${encodeURIComponent(t)}` : ''}`,
+    `/preview/${req.params.processId}/${entry}${token ? `?t=${encodeURIComponent(token)}` : ''}`,
   );
 });
 
 router.get('/:processId/*splat', async (req, res) => {
-  if (!(await canViewPreview(req.params.processId, shareToken(req)))) {
+  const token = shareToken(req);
+  if (!(await canViewPreview(req.params.processId, token))) {
     return res.status(403).type('text/plain').send('This preview is not shared');
   }
   const rel = (req.params as Record<string, unknown>).splat;
@@ -103,15 +124,24 @@ router.get('/:processId/*splat', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(path.basename(abs))}"`);
   }
 
-  // Generated content is untrusted: never let it run as same-origin script
-  // against the API, and don't allow it to frame-bust.
+  // Ensure scoped cookie is set on nested asset requests if token was provided in query
+  if (token) {
+    res.cookie('preview_token', token, {
+      path: `/preview/${req.params.processId}`,
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+  }
+
+  // Generated content is untrusted: isolate origin via sandbox without allow-same-origin
   res.setHeader('Content-Type', type);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'no-store');
   if (type.startsWith('text/html')) {
     res.setHeader(
       'Content-Security-Policy',
-      "default-src 'self' data: https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: blob:; font-src 'self' https: data:; frame-ancestors 'self'; sandbox allow-scripts allow-forms allow-same-origin;"
+      "default-src 'self' data: https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: blob:; font-src 'self' https: data:; frame-ancestors 'self'; sandbox allow-scripts allow-forms;"
     );
   }
   res.send(body);

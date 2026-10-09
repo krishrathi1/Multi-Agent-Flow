@@ -64,12 +64,15 @@ export function renderInline(text: string): React.ReactNode[] {
     // Link [label](url)
     const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (linkMatch) {
+      const rawHref = (linkMatch[2] || '').trim();
+      const isAllowed = /^https?:\/\//i.test(rawHref) || /^mailto:/i.test(rawHref) || rawHref.startsWith('/');
+      const safeHref = isAllowed ? rawHref : '#';
       return (
         <a
           key={i}
-          href={linkMatch[2]}
+          href={safeHref}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           className="text-brand-600 dark:text-brand-400 font-semibold underline underline-offset-2 hover:text-brand-500"
         >
           {linkMatch[1]}

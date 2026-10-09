@@ -456,8 +456,8 @@ export async function canViewPreview(
     where: { id: processId },
     select: { previewVisibility: true, shareToken: true },
   });
-  // Unknown chain: fall through to the 404 the route already produces.
-  if (!proc) return true;
+  // Unknown or deleted chain: deny access by default (fail closed)
+  if (!proc) return false;
 
   if (proc.previewVisibility === PreviewVisibility.PRIVATE) return false;
   if (proc.previewVisibility === PreviewVisibility.TOKEN) {

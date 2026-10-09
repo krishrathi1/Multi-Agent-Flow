@@ -127,19 +127,23 @@ const SECRET_PATTERNS = [
   { name: 'GitHub Personal Token', regex: /ghp_[A-Za-z0-9]{36}/ },
   { name: 'GitHub Fine-grained PAT', regex: /github_pat_[A-Za-z0-9_]{82}/ },
   { name: 'Anthropic Live Key', regex: /sk-ant-api03-[A-Za-z0-9_-]{80,}/ },
-  { name: 'Private Key Header', regex: /-----BEGIN (RSA|EC|DSA|OPENSSH|PRIVATE) KEY-----/ },
+  { name: 'OpenAI Live Key', regex: /sk-(?:proj-)?[A-Za-z0-9_-]{48,}/ },
+  { name: 'AWS Access Key ID', regex: /(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}/ },
+  { name: 'Slack Token', regex: /xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,32}/ },
+  { name: 'SendGrid Key', regex: /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/ },
+  { name: 'Private Key Header', regex: /-----BEGIN (?:RSA|EC|DSA|OPENSSH|PRIVATE) KEY-----/ },
 ];
 
-const TEXT_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.json', '.mjs', '.cjs', '.md', '.html', '.css', '.yml', '.yaml', '.txt', '.env.example']);
+const TEXT_EXTS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.json', '.mjs', '.cjs',
+  '.md', '.html', '.css', '.yml', '.yaml', '.txt',
+  '.sql', '.prisma', '.sh', '.ps1', '.conf', '.toml', '.env.example'
+]);
 
 let detectedSecrets = 0;
 for (const item of filesToPackage) {
   const ext = path.extname(item.fileName || item.relPath).toLowerCase();
   if (!TEXT_EXTS.has(ext)) continue;
-
-  // Skip test fixture files from token matching if they use intentional placeholders
-  const norm = item.relPath.replace(/\\/g, '/');
-  if (norm.includes('test/') || norm.includes('e2e/fixtures/')) continue;
 
   try {
     const content = fs.readFileSync(item.fullPath, 'utf8');
@@ -159,7 +163,7 @@ if (detectedSecrets > 0) {
   process.exit(1);
 }
 
-console.log(`[Release Builder] Content scan PASSED: 0 active credential patterns detected.`);
+console.log(`[Release Builder] Content scan PASSED: 0 active credential patterns detected across all text and test files.`);
 
 // Staging directory
 const stagingBase = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-release-'));
@@ -193,4 +197,4 @@ fs.rmSync(stagingBase, { recursive: true, force: true });
 // Post-archive verification
 const zipStats = fs.statSync(targetZip);
 console.log(`[Release Builder] Archive created successfully: ${targetZip} (${(zipStats.size / (1024 * 1024)).toFixed(2)} MB)`);
-console.log(`[Release Builder] Verified 100% clean of .env credentials, session state, and secrets.`);
+console.log(`[Release Builder] Archive hygiene check passed: verified absence of local .env files, session artifacts, and tested credential patterns across packaged source files.`);

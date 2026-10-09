@@ -5,6 +5,8 @@ import * as inviteService from '../services/invite.service.js';
 import * as boardAccessService from '../services/board-access.service.js';
 import { requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
+import { prisma } from '../lib/prisma.js';
+import { encryptField } from '../lib/crypto.js';
 
 const router = Router();
 
@@ -37,6 +39,70 @@ router.get('/', async (req, res) => {
 router.patch('/', requireRole('OWNER', 'ADMIN'), validate(updateOrgSchema), async (req, res) => {
   const org = await orgService.updateOrganization(req.organizationId!, req.body);
   res.json(org);
+});
+
+// GET /integrations — check integration status without exposing plaintext credentials
+router.get('/integrations', async (req, res) => {
+  const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
+  const settings = (org?.settings as Record<string, unknown>) || {};
+  const hasGithub = Boolean(settings.githubTokenEncrypted || settings.githubToken || process.env.GITHUB_TOKEN);
+  const hasVercel = Boolean(settings.vercelTokenEncrypted || settings.vercelToken || process.env.VERCEL_TOKEN);
+  res.json({ githubConnected: hasGithub, vercelConnected: hasVercel });
+});
+
+// POST /integrations — configure integration credentials (admin only, encrypted at rest)
+router.post('/integrations', requireRole('OWNER', 'ADMIN'), async (req, res) => {
+  const { githubToken, vercelToken } = req.body as { githubToken?: string; vercelToken?: string };
+  const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
+  if (!org) return res.status(404).json({ error: 'Organization not found' });
+  const current = (org.settings as Record<string, unknown>) || {};
+  const updated = { ...current };
+
+  if (typeof githubToken === 'string' && githubToken.trim()) {
+    updated.githubTokenEncrypted = encryptField(githubToken.trim());
+    delete updated.githubToken;
+  }
+  if (typeof vercelToken === 'string' && vercelToken.trim()) {
+    updated.vercelTokenEncrypted = encryptField(vercelToken.trim());
+    delete updated.vercelToken;
+  }
+
+  await prisma.organization.update({
+    where: { id: req.organizationId! },
+    data: { settings: updated as any },
+  });
+
+  res.json({
+    success: true,
+    githubConnected: Boolean(updated.githubTokenEncrypted),
+    vercelConnected: Boolean(updated.vercelTokenEncrypted),
+  });
+});
+
+// DELETE /integrations/:provider — disconnect integration credentials (admin only)
+router.delete('/integrations/:provider', requireRole('OWNER', 'ADMIN'), async (req, res) => {
+  const { provider } = req.params;
+  const org = await prisma.organization.findUnique({ where: { id: req.organizationId! } });
+  if (!org) return res.status(404).json({ error: 'Organization not found' });
+  const current = (org.settings as Record<string, unknown>) || {};
+  const updated = { ...current };
+
+  if (provider === 'github') {
+    delete updated.githubTokenEncrypted;
+    delete updated.githubToken;
+  } else if (provider === 'vercel') {
+    delete updated.vercelTokenEncrypted;
+    delete updated.vercelToken;
+  } else {
+    return res.status(400).json({ error: 'Invalid provider' });
+  }
+
+  await prisma.organization.update({
+    where: { id: req.organizationId! },
+    data: { settings: updated as any },
+  });
+
+  res.json({ success: true, disconnected: provider });
 });
 
 // GET /members — list members

@@ -195,12 +195,12 @@ export async function testProvider(
       headers: { Authorization: `Bearer ${apiKey}` },
     },
     google: {
-      url: `${config.geminiApiBaseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}`,
-      headers: {},
+      url: `${config.geminiApiBaseUrl}/v1beta/models`,
+      headers: { 'x-goog-api-key': apiKey },
     },
     gemini: {
-      url: `${config.geminiApiBaseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}`,
-      headers: {},
+      url: `${config.geminiApiBaseUrl}/v1beta/models`,
+      headers: { 'x-goog-api-key': apiKey },
     },
     grok: {
       url: 'https://api.x.ai/v1/models',
@@ -643,8 +643,8 @@ export async function fetchLiveModels(
   if (prov === 'google' || prov === 'gemini') {
     try {
       const res = await safeFetch(
-        `${config.geminiApiBaseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}`,
-        { method: 'GET', timeoutMs: 10_000 },
+        `${config.geminiApiBaseUrl}/v1beta/models`,
+        { method: 'GET', headers: { 'x-goog-api-key': apiKey }, timeoutMs: 10_000 },
       );
       if (!res.ok) {
         return {

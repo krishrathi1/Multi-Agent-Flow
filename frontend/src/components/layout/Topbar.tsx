@@ -30,7 +30,7 @@ import { LiveGatewayBadge } from '../ui/LiveIcon';
 export function Topbar() {
   const navigate = useNavigate();
   const stats = useAgentStore((s) => s.stats);
-  const { user, organization, logout } = useAuthStore();
+  const { user, organization, orgRole, organizations, switchOrganization, logout } = useAuthStore();
   const socketConnected = useUiStore((s) => s.socketConnected);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const [query, setQuery] = useState('');
@@ -225,9 +225,45 @@ export function Topbar() {
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-xs font-bold text-ink">{user?.name || 'Admin'}</p>
-                  <p className="truncate text-[11px] text-ink-muted">{user?.email || 'admin@nexus.local'}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <p className="truncate text-[11px] text-ink-muted">{organization?.name}</p>
+                    {orgRole && (
+                      <span className="rounded bg-line-subtle px-1 text-[9px] font-mono font-semibold uppercase text-ink-muted">
+                        {orgRole}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              {/* Multi-Org Switcher */}
+              {organizations && organizations.length > 1 && (
+                <div className="py-1 border-b border-line-subtle/80">
+                  <p className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-ink-muted">Organizations</p>
+                  {organizations.map((org) => (
+                    <button
+                      key={org.id}
+                      type="button"
+                      onClick={async () => {
+                        if (org.id !== organization?.id) {
+                          setMenuOpen(false);
+                          await switchOrganization(org.id);
+                          window.location.reload();
+                        }
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition-colors text-left cursor-pointer",
+                        org.id === organization?.id
+                          ? "bg-brand-500/10 font-bold text-brand-600 dark:text-brand-400"
+                          : "text-ink-muted hover:bg-hover hover:text-ink"
+                      )}
+                    >
+                      <span className="truncate">{org.name}</span>
+                      {org.role && <span className="text-[10px] font-mono uppercase opacity-75">{org.role}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Menu Links */}
               <div className="py-1">

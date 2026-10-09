@@ -160,9 +160,13 @@ export async function investigateIncident(
   const realP95 = latencies.length ? latencies[Math.floor(latencies.length * 0.95)] : 0;
   const errorSnapshots = (metricSnapshots || []).filter((m) => !m.success);
   const realErrorRate = metricSnapshots?.length ? Math.round((errorSnapshots.length / metricSnapshots.length) * 100) : 0;
+  const hasMetricAnomalies = errorSnapshots.length > 0 || realErrorRate > 5 || realP95 > 2500;
 
-  // If there are no active errors, no errored agents, and no user-supplied symptom, return clean nominal state
-  if (!userSymptom && erroredAgents.length === 0 && errorActivities.length === 0) {
+  // If there are no active errors, no errored agents, no metric anomalies, and no user-supplied symptom, return clean nominal state
+  if (!userSymptom && erroredAgents.length === 0 && errorActivities.length === 0 && !hasMetricAnomalies) {
+    const memUsage = process.memoryUsage();
+    const realMemPercent = Math.min(100, Math.round((memUsage.heapUsed / (memUsage.heapTotal || 1)) * 100));
+
     const result: IncidentInvestigationResult = {
       id: investigationId,
       title: processCount > 0 ? 'Fleet Health Nominal — All Systems Operational' : 'Idle Environment — No Active Incident',
@@ -172,7 +176,7 @@ export async function investigateIncident(
       isSimulated: false,
       rootCause: processCount > 0
         ? `All ${agents.length} agents across ${processCount} production process(es) are functioning nominally with zero reported errors.`
-        : 'No productions or agents have encountered errors. Fleet telemetry is completely nominal.',
+        : 'No productions or agents have encountered errors. Telemetry snapshots indicate nominal operation.',
       impactSummary: 'Zero service impact. All active pipelines and agents are healthy.',
       affectedServices: agents.length > 0 ? agents.slice(0, 3).map((a) => a.name) : ['production-fleet'],
       evidence: {
@@ -181,20 +185,25 @@ export async function investigateIncident(
           latencyBaselineMs: realP95,
           errorRatePercent: realErrorRate,
           errorRateBaselinePercent: 0,
-          cpuUtilizationPercent: 12,
-          memoryUtilizationPercent: 24,
-          anomalies: [],
+          cpuUtilizationPercent: 0,
+          memoryUtilizationPercent: realMemPercent,
+          anomalies: metricSnapshots.length === 0 ? ['No external Prometheus telemetry connected; based on tool execution snapshots'] : [],
         },
-        logs: { source: 'Telemetry Collector', sampleErrors: [], topExceptions: [], logVolumeSpikePercent: 0 },
-        kubernetes: { cluster: 'nexus-host', namespace: 'production', failingPods: [], recentEvents: ['All agent containers healthy'] },
+        logs: { source: 'Nexus Event Stream (Database Logs)', sampleErrors: [], topExceptions: [], logVolumeSpikePercent: 0 },
+        kubernetes: {
+          cluster: process.env.KUBERNETES_CLUSTER_NAME || 'Not Configured (Host / Container Process)',
+          namespace: process.env.KUBERNETES_NAMESPACE || 'N/A',
+          failingPods: [],
+          recentEvents: ['Host process nominal; all local agents healthy'],
+        },
         deployments: {
-          latestRelease: `v1.0.0-${liveCommit.hash}`,
-          deployedAtAgo: 'recently',
+          latestRelease: liveCommit.hash !== 'unconfigured' ? `commit-${liveCommit.hash}` : 'Not Configured',
+          deployedAtAgo: liveCommit.hash !== 'unconfigured' ? 'Current Working Tree HEAD' : 'Not Configured',
           commitHash: liveCommit.hash,
           author: liveCommit.author,
           commitMessage: liveCommit.message,
           changedFiles: liveCommit.changedFiles,
-          ciPipelineStatus: 'Passed',
+          ciPipelineStatus: process.env.GITHUB_ACTIONS ? 'GitHub Actions (Active Pipeline)' : 'No CI Webhook Integration Connected',
         },
       },
       recommendedAction: {
@@ -204,7 +213,7 @@ export async function investigateIncident(
         commandOrPayload: { action: 'none' },
         riskLevel: 'LOW',
       },
-      postMortemReport: '# System Nominal\n\nNo active incidents detected across project agents.',
+      postMortemReport: '# System Nominal\n\nNo active incidents or telemetry anomalies detected across project agents.',
       createdAt: new Date().toISOString(),
     };
     return result;
@@ -265,10 +274,10 @@ JSON schema:
 }`;
 
       const res = await fetch(
-        `${config.geminiApiBaseUrl}/v1beta/models/${config.geminiModel}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        `${config.geminiApiBaseUrl}/v1beta/models/${config.geminiModel}:generateContent`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },

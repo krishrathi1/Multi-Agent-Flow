@@ -101,7 +101,7 @@ async function executeAgentWork(params: {
         const promptText = `${params.systemPrompt}\n\nTask Goal: ${params.goal}\nRole: ${params.agent.processRole || params.agent.description}\n\n${params.userPrompt}\n\nPlease generate complete production-ready code files for this task. Format code blocks with filepath as: \`\`\`typescript:src/filename.ts\n...code...\n\`\`\``;
         
         const res = await fetch(
-          `${config.geminiApiBaseUrl}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          `${config.geminiApiBaseUrl}/v1beta/models/${model}:generateContent`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },

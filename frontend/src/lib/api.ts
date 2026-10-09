@@ -211,15 +211,9 @@ export const api = {
       vercelToken?: string;
       model?: string;
     }) => {
-      const ghToken = data.githubToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('nexus:github_token') : null) || undefined;
-      const vToken = data.vercelToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('nexus:vercel_token') : null) || undefined;
       return request<Process>('/processes', {
         method: 'POST',
-        headers: {
-          ...(ghToken ? { 'x-github-token': ghToken } : {}),
-          ...(vToken ? { 'x-vercel-token': vToken } : {}),
-        },
-        body: JSON.stringify({ ...data, githubToken: ghToken, vercelToken: vToken }),
+        body: JSON.stringify(data),
       });
     },
     start: (id: string) => request<Process>(`/processes/${id}/start`, { method: 'POST' }),
@@ -752,6 +746,21 @@ export const api = {
       request<SoulTemplate>(`/soul-templates/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/soul-templates/${id}`, { method: 'DELETE' }),
     search: (q: string) => request<SoulTemplate[]>(`/soul-templates/search?q=${encodeURIComponent(q)}`),
+  },
+  organizations: {
+    get: () => request<any>('/organizations'),
+    update: (data: Record<string, unknown>) => request<any>('/organizations', { method: 'PATCH', body: JSON.stringify(data) }),
+    list: () => request<{ organizations: Array<{ id: string; name: string; slug: string; role: string; isCurrent: boolean }> }>('/auth/organizations'),
+    getIntegrations: () => request<{ githubConnected: boolean; vercelConnected: boolean }>('/organizations/integrations'),
+    updateIntegrations: (data: { githubToken?: string; vercelToken?: string }) =>
+      request<{ success: boolean; githubConnected: boolean; vercelConnected: boolean }>('/organizations/integrations', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    disconnectIntegration: (provider: 'github' | 'vercel') =>
+      request<{ success: boolean; disconnected: string }>(`/organizations/integrations/${provider}`, {
+        method: 'DELETE',
+      }),
   },
   invites: {
     list: () => request<OrgInvite[]>('/org/invites'),
