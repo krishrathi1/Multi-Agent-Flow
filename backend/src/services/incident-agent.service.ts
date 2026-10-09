@@ -86,7 +86,7 @@ function getLiveGitCommitInfo(): RealGitCommitInfo {
         hash: hash ? hash.slice(0, 8) : 'HEAD',
         author: author || 'Nexus System',
         message: message || 'Production deployment commit',
-        changedFiles: changedFiles.length ? changedFiles : ['src/index.ts'],
+        changedFiles,
         provenance: 'live_git',
       };
     }
@@ -296,7 +296,9 @@ JSON schema:
     : agentNames.slice(0, 3).map((n) => n.toLowerCase().replace(/\s+/g, '-'));
 
   const severity: 'CRITICAL' | 'WARNING' | 'INFO' = llmAnalysis?.severity || (userSymptom.toLowerCase().includes('critical') || userSymptom.toLowerCase().includes('fail') || offlineAgents.length > 0 ? 'CRITICAL' : 'WARNING');
-  const confidence = llmAnalysis?.confidence || 0.95;
+  const confidence = isSimulated
+    ? (llmAnalysis?.confidence || 0.95)
+    : (metricSnapshots?.length > 0 || errorActivities.length > 0 ? Math.min(llmAnalysis?.confidence || 0.85, 0.90) : 0.50);
 
   const rootCause = llmAnalysis?.rootCause || (
     userSymptom
@@ -323,7 +325,11 @@ JSON schema:
     riskLevel: 'LOW',
   };
 
-  const evidence: IncidentEvidence = {
+  const k8sConfigured = !!(process.env.KUBERNETES_SERVICE_HOST || process.env.KUBECONFIG);
+  const memUsage = process.memoryUsage();
+  const realMemPercent = Math.min(100, Math.round((memUsage.heapUsed / (memUsage.heapTotal || 1)) * 100));
+
+  const evidence: IncidentEvidence = isSimulated ? {
     metrics: {
       latencyP95Ms: severity === 'CRITICAL' ? 6420 : 1850,
       latencyBaselineMs: 120,
@@ -331,53 +337,90 @@ JSON schema:
       errorRateBaselinePercent: 0.05,
       cpuUtilizationPercent: severity === 'CRITICAL' ? 88 : 54,
       memoryUtilizationPercent: severity === 'CRITICAL' ? 82 : 61,
-      anomalies: llmAnalysis?.anomalies?.length
-        ? llmAnalysis.anomalies
-        : [
-            `P95 latency elevated above SLA baseline for ${affectedServices[0] || 'primary service'}`,
-            `${recentActivities.length} operational log anomalies reported in past 30 minutes`,
-            offlineAgents.length > 0 ? `${offlineAgents.length} agent(s) unreachable or missing heartbeats` : 'Inter-agent socket telemetry fluctuating',
-          ],
+      anomalies: [
+        `[SIMULATED DRILL] P95 latency elevated above SLA baseline for ${affectedServices[0] || 'primary service'}`,
+        `[SIMULATED DRILL] Drill scenario active: ${input.scenario}`,
+      ],
     },
     logs: {
-      source: 'Loki / OpenTelemetry Log Collector',
-      sampleErrors: recentActivities.length > 0
-        ? recentActivities.slice(0, 3).map((a) => `[${a.type}] ${a.message}`)
-        : [
-            `WARN [NexusGateway] Elevated latency detected on active pipeline channels`,
-            `ERROR [AgentRunner] Connection queue threshold exceeded for ${agentNames[0] || 'main agent'}`,
-          ],
+      source: 'Simulated Log Stream (DevOps Drill Scenario)',
+      sampleErrors: [
+        `[SIMULATED] WARN [NexusGateway] Elevated latency detected on active pipeline channels`,
+        `[SIMULATED] ERROR [AgentRunner] Connection queue threshold exceeded for ${agentNames[0] || 'main agent'}`,
+      ],
       topExceptions: [
-        'FleetLatencyExceededException',
-        'AgentHeartbeatTimeoutWarning',
-        'PipelineStageDegradation',
+        'SimulatedFleetLatencyExceededException',
+        'SimulatedHeartbeatTimeoutWarning',
       ],
       logVolumeSpikePercent: severity === 'CRITICAL' ? 280 : 140,
     },
     kubernetes: {
-      cluster: 'nexus-production-cluster-01',
+      cluster: 'simulated-k8s-cluster-01',
       namespace: 'production',
       failingPods: offlineAgents.map((a) => ({
         name: `${a.name.toLowerCase()}-pod-${liveCommit.hash}`,
-        status: 'Unhealthy',
+        status: 'Unhealthy (Simulated)',
         restarts: 3,
-        message: 'Heartbeat signal lost; pod readiness check failed',
+        message: 'Heartbeat signal lost; pod readiness check failed (drill)',
       })),
       recentEvents: [
-        `Normal DeploymentSynced Commit ${liveCommit.hash} (${liveCommit.author})`,
-        offlineAgents.length > 0
-          ? `Warning AgentOffline ${offlineAgents.map((a) => a.displayName).join(', ')} failed health check`
-          : `Normal FleetSteady State validated across ${agentNames.length} agents`,
+        `Normal DeploymentSynced Commit ${liveCommit.hash} (simulated drill)`,
       ],
     },
     deployments: {
       latestRelease: `v${new Date().toISOString().slice(2, 10).replace(/-/g, '.')}-${liveCommit.hash}`,
-      deployedAtAgo: 'Just now',
+      deployedAtAgo: 'Just now (simulated)',
+      commitHash: liveCommit.hash,
+      author: liveCommit.author,
+      commitMessage: liveCommit.message,
+      changedFiles: liveCommit.changedFiles.length ? liveCommit.changedFiles : ['src/index.ts'],
+      ciPipelineStatus: 'Passed (Automated CI - Simulated Drill)',
+    },
+  } : {
+    // Truthful, uninvented evidence from live system & telemetry snapshots
+    metrics: {
+      latencyP95Ms: realP95,
+      latencyBaselineMs: latencies.length > 5 ? latencies[Math.floor(latencies.length * 0.5)] : 0,
+      errorRatePercent: realErrorRate,
+      errorRateBaselinePercent: 0,
+      cpuUtilizationPercent: 0,
+      memoryUtilizationPercent: realMemPercent,
+      anomalies: llmAnalysis?.anomalies?.length
+        ? llmAnalysis.anomalies
+        : (metricSnapshots?.length === 0
+          ? ['No Prometheus/OpenTelemetry metric snapshots recorded in database for this organization']
+          : [
+              `P95 latency: ${realP95}ms across ${metricSnapshots?.length || 0} recorded snapshot(s)`,
+              offlineAgents.length > 0 ? `${offlineAgents.length} agent(s) unreachable or errored` : 'Agent status nominal',
+            ]),
+    },
+    logs: {
+      source: errorActivities.length > 0 ? 'Nexus Event Stream (Database Activity Logs)' : 'Nexus Event Stream (No anomalies recorded)',
+      sampleErrors: errorActivities.slice(0, 3).map((a) => `[${a.type}] ${a.message}`),
+      topExceptions: [...new Set(errorActivities.map((a) => a.message.slice(0, 60)))],
+      logVolumeSpikePercent: errorActivities.length > 0 ? Math.min(errorActivities.length * 25, 200) : 0,
+    },
+    kubernetes: {
+      cluster: k8sConfigured ? (process.env.KUBERNETES_CLUSTER_NAME || 'kubernetes-cluster') : 'Not Configured (Host / Container Process)',
+      namespace: k8sConfigured ? (process.env.KUBERNETES_NAMESPACE || 'default') : 'N/A',
+      failingPods: offlineAgents.map((a) => ({
+        name: a.name.toLowerCase(),
+        status: 'Unhealthy',
+        restarts: 0,
+        message: 'Heartbeat signal lost or agent status is ERROR',
+      })),
+      recentEvents: offlineAgents.length > 0
+        ? offlineAgents.map((a) => `Warning AgentOffline ${a.displayName || a.name} failed health check`)
+        : ['Nominal operational status; no failing pods detected'],
+    },
+    deployments: {
+      latestRelease: liveCommit.hash !== 'unconfigured' ? `commit-${liveCommit.hash}` : 'Not Configured',
+      deployedAtAgo: liveCommit.hash !== 'unconfigured' ? 'Current Working Tree HEAD' : 'Not Configured',
       commitHash: liveCommit.hash,
       author: liveCommit.author,
       commitMessage: liveCommit.message,
       changedFiles: liveCommit.changedFiles,
-      ciPipelineStatus: 'Passed (Automated CI)',
+      ciPipelineStatus: process.env.GITHUB_ACTIONS ? 'GitHub Actions (Active Pipeline)' : 'No CI Webhook Integration Connected',
     },
   };
 

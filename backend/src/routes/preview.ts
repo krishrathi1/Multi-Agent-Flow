@@ -108,6 +108,12 @@ router.get('/:processId/*splat', async (req, res) => {
   res.setHeader('Content-Type', type);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'no-store');
+  if (type.startsWith('text/html')) {
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self' data: https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: blob:; font-src 'self' https: data:; frame-ancestors 'self'; sandbox allow-scripts allow-forms allow-same-origin;"
+    );
+  }
   res.send(body);
 });
 

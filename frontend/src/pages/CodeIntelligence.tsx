@@ -155,7 +155,7 @@ const codeIntelApi = {
 /* ──────────────────────── Tabs ──────────────────────── */
 
 const tabs: { id: TabId; label: string; icon: typeof Search }[] = [
-  { id: 'search', label: 'Semantic Search', icon: Search },
+  { id: 'search', label: 'Code Search', icon: Search },
   { id: 'graph', label: 'Code Graph', icon: GitBranch },
   { id: 'symbols', label: 'Symbol Explorer', icon: Code2 },
   { id: 'overview', label: 'Codebase Overview', icon: BarChart3 },
@@ -323,7 +323,7 @@ export function CodeIntelligence() {
             Code Intelligence
           </h1>
           <p className="text-ink-muted mt-1 text-sm">
-            Semantic code search, dependency graph, and symbol navigation for repositories created by MyceliumOps
+            Code search, dependency graph, and symbol navigation for repositories created by MyceliumOps
           </p>
         </div>
 

@@ -1085,7 +1085,7 @@ model Process {
   /// Human-in-the-loop gating between stages.
   approvalMode   ApprovalMode @default(NONE)
   /// Controls who can open the generated artifacts.
-  previewVisibility PreviewVisibility @default(PUBLIC)
+  previewVisibility PreviewVisibility @default(PRIVATE)
   /// Secret for TOKEN visibility; rotated by regenerating.
   shareToken     String?           @unique
   /// Operator guidance injected into the next run's prompts.

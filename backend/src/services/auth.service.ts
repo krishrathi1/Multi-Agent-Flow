@@ -369,26 +369,38 @@ export async function logout(refreshTokenValue: string) {
   });
 }
 
-export async function getMe(userId: string) {
+export async function getMe(userId: string, organizationId?: string) {
   return tracer.startActiveSpan('auth.getMe', async (span) => {
     try {
       span.setAttribute('auth.userId', userId);
-  const member = await prisma.orgMember.findFirst({
-    where: { userId },
-    include: {
-      user: { select: { id: true, email: true, name: true } },
-      organization: { select: { id: true, name: true, slug: true } },
-    },
-  });
-  if (!member) {
-    throw new Error('No organization membership found');
-  }
+      let member = null;
+      if (organizationId) {
+        member = await prisma.orgMember.findFirst({
+          where: { userId, organizationId },
+          include: {
+            user: { select: { id: true, email: true, name: true } },
+            organization: { select: { id: true, name: true, slug: true } },
+          },
+        });
+      }
+      if (!member) {
+        member = await prisma.orgMember.findFirst({
+          where: { userId },
+          include: {
+            user: { select: { id: true, email: true, name: true } },
+            organization: { select: { id: true, name: true, slug: true } },
+          },
+        });
+      }
+      if (!member) {
+        throw new Error('No organization membership found');
+      }
 
-  return {
-    user: member.user,
-    organization: member.organization,
-    role: member.role,
-  };
+      return {
+        user: member.user,
+        organization: member.organization,
+        role: member.role,
+      };
     } catch (err) {
       span.setStatus({ code: SpanStatusCode.ERROR, message: (err as Error).message });
       span.recordException(err as Error);

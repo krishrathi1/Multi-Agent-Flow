@@ -252,25 +252,28 @@ export async function listWorkspaces(organizationId?: string): Promise<Workspace
 
 /**
  * Resolves the target workspace root directory.
- * Guaranteed to only return directories inside .nexus-workspaces.
+ * Guaranteed to only return directories inside .nexus-workspaces belonging to the organization.
  */
-export async function resolveWorkspace(workspaceId?: string): Promise<{ id: string; root: string; name: string } | null> {
+export async function resolveWorkspace(organizationId: string, workspaceId?: string): Promise<{ id: string; root: string; name: string } | null> {
+  if (!organizationId) return null;
   const workspacesRoot = getNexusWorkspacesRoot();
   if (!existsSync(workspacesRoot)) return null;
 
-  const all = await listWorkspaces();
-  if (all.length === 0) return null;
+  const orgWorkspaces = await listWorkspaces(organizationId);
+  if (orgWorkspaces.length === 0) return null;
 
   if (workspaceId) {
     const safeId = workspaceId.replace(/[^a-zA-Z0-9-_]/g, '');
-    const found = all.find(w => w.id === safeId);
+    const found = orgWorkspaces.find(w => w.id === safeId);
     if (found) {
       return { id: found.id, root: join(workspacesRoot, found.id), name: found.name };
     }
+    // Return null if workspaceId is not owned by this organization
+    return null;
   }
 
-  // Default to first / latest workspace
-  const first = all[0];
+  // Default to first / latest workspace belonging to this organization
+  const first = orgWorkspaces[0];
   return { id: first.id, root: join(workspacesRoot, first.id), name: first.name };
 }
 
@@ -464,12 +467,13 @@ function extractExports(content: string): string[] {
 /**
  * Indexes a specific MyceliumOps workspace. Thread-safe via TTL guard per workspace.
  */
-export async function indexCodebase(workspaceId?: string): Promise<{ ws: { id: string; root: string; name: string }; cache: WorkspaceCache } | null> {
-  const ws = await resolveWorkspace(workspaceId);
+export async function indexCodebase(organizationId: string, workspaceId?: string): Promise<{ ws: { id: string; root: string; name: string }; cache: WorkspaceCache } | null> {
+  const ws = await resolveWorkspace(organizationId, workspaceId);
   if (!ws) return null;
 
+  const cacheKey = `${organizationId}:${ws.id}`;
   const now = Date.now();
-  const existing = workspaceCaches.get(ws.id);
+  const existing = workspaceCaches.get(cacheKey);
   if (existing && now - existing.lastIndexTime < CACHE_TTL_MS && existing.files.length > 0) {
     return { ws, cache: existing };
   }
@@ -561,7 +565,7 @@ export async function indexCodebase(workspaceId?: string): Promise<{ ws: { id: s
     lastIndexTime: now,
   };
 
-  workspaceCaches.set(ws.id, newCache);
+  workspaceCaches.set(cacheKey, newCache);
 
   logger.info(
     { workspaceId: ws.id, files: files.length, symbols: symbols.length, edges: edges.length },
@@ -577,10 +581,11 @@ export async function indexCodebase(workspaceId?: string): Promise<{ ws: { id: s
  * Performs a semantic search across the selected MyceliumOps repository files.
  */
 export async function searchCode(
+  organizationId: string,
   query: string,
   options: { fileFilter?: string; language?: string; maxResults?: number; isRegex?: boolean; workspaceId?: string } = {},
 ): Promise<SearchResult[]> {
-  const indexed = await indexCodebase(options.workspaceId);
+  const indexed = await indexCodebase(organizationId, options.workspaceId);
   if (!indexed) return [];
 
   const { files } = indexed.cache;
@@ -636,9 +641,10 @@ export async function searchCode(
  * Lists all extracted symbols for the selected MyceliumOps repository.
  */
 export async function getSymbols(
+  organizationId: string,
   options: { kind?: string; query?: string; fileFilter?: string; limit?: number; workspaceId?: string } = {},
 ): Promise<CodeSymbol[]> {
-  const indexed = await indexCodebase(options.workspaceId);
+  const indexed = await indexCodebase(organizationId, options.workspaceId);
   if (!indexed) return [];
 
   let result = [...indexed.cache.symbols];
@@ -661,10 +667,11 @@ export async function getSymbols(
  * Reads a file's content from the selected MyceliumOps repository.
  */
 export async function getFileContent(
+  organizationId: string,
   filePath: string,
   workspaceId?: string,
 ): Promise<{ relativePath: string; language: string; content: string; lineCount: number; symbols: CodeSymbol[] } | null> {
-  const indexed = await indexCodebase(workspaceId);
+  const indexed = await indexCodebase(organizationId, workspaceId);
   if (!indexed) return null;
 
   const file = indexed.cache.files.find(f => f.relativePath === filePath);
@@ -687,8 +694,8 @@ export async function getFileContent(
 /**
  * Finds all references to a symbol in the selected MyceliumOps repository.
  */
-export async function findReferences(symbolName: string, workspaceId?: string): Promise<SymbolReference[]> {
-  const indexed = await indexCodebase(workspaceId);
+export async function findReferences(organizationId: string, symbolName: string, workspaceId?: string): Promise<SymbolReference[]> {
+  const indexed = await indexCodebase(organizationId, workspaceId);
   if (!indexed) return [];
 
   const refs: SymbolReference[] = [];
@@ -734,11 +741,11 @@ export async function findReferences(symbolName: string, workspaceId?: string): 
 /**
  * Returns the dependency graph for the selected MyceliumOps repository.
  */
-export async function getDependencyGraph(workspaceId?: string): Promise<{
+export async function getDependencyGraph(organizationId: string, workspaceId?: string): Promise<{
   nodes: { id: string; group: string; lineCount: number; symbolCount: number }[];
   edges: DependencyEdge[];
 }> {
-  const indexed = await indexCodebase(workspaceId);
+  const indexed = await indexCodebase(organizationId, workspaceId);
   if (!indexed) return { nodes: [], edges: [] };
 
   const { files, edges } = indexed.cache;
@@ -765,8 +772,8 @@ export async function getDependencyGraph(workspaceId?: string): Promise<{
 /**
  * Returns aggregate statistics for the selected MyceliumOps repository.
  */
-export async function getStats(workspaceId?: string): Promise<CodebaseStats> {
-  const indexed = await indexCodebase(workspaceId);
+export async function getStats(organizationId: string, workspaceId?: string): Promise<CodebaseStats> {
+  const indexed = await indexCodebase(organizationId, workspaceId);
   if (!indexed) {
     return {
       totalFiles: 0,
@@ -784,8 +791,8 @@ export async function getStats(workspaceId?: string): Promise<CodebaseStats> {
 /**
  * Lists all files in the selected MyceliumOps repository with metadata.
  */
-export async function listFiles(workspaceId?: string): Promise<Omit<FileInfo, 'path'>[]> {
-  const indexed = await indexCodebase(workspaceId);
+export async function listFiles(organizationId: string, workspaceId?: string): Promise<Omit<FileInfo, 'path'>[]> {
+  const indexed = await indexCodebase(organizationId, workspaceId);
   if (!indexed) return [];
   return indexed.cache.files.map(({ path: _p, ...rest }) => rest);
 }
@@ -794,8 +801,8 @@ export async function listFiles(workspaceId?: string): Promise<Omit<FileInfo, 'p
  * Answers questions grounded in the selected MyceliumOps repository.
  */
 export async function askCodebase(
+  organizationId: string,
   question: string,
-  organizationId?: string,
   preferredModel?: string,
   workspaceId?: string,
 ): Promise<{
@@ -804,11 +811,11 @@ export async function askCodebase(
   citations: { file: string; line?: number; reason: string }[];
   relatedSymbols: CodeSymbol[];
 }> {
-  const indexed = await indexCodebase(workspaceId);
+  const indexed = await indexCodebase(organizationId, workspaceId);
   if (!indexed) {
     return {
       question,
-      answer: 'No MyceliumOps repository found to analyze. Please run a production chain in Mission Control to generate code.',
+      answer: 'No MyceliumOps repository found to analyze for this organization. Please run a production chain in Mission Control to generate code.',
       citations: [],
       relatedSymbols: [],
     };
@@ -1060,9 +1067,16 @@ export async function askCodebase(
 /**
  * Forces a re-index of a workspace on the next request.
  */
-export function invalidateCache(workspaceId?: string): void {
-  if (workspaceId) {
-    workspaceCaches.delete(workspaceId);
+export function invalidateCache(organizationId?: string, workspaceId?: string): void {
+  if (organizationId && workspaceId) {
+    workspaceCaches.delete(`${organizationId}:${workspaceId}`);
+  } else if (organizationId) {
+    const prefix = `${organizationId}:`;
+    for (const key of workspaceCaches.keys()) {
+      if (key.startsWith(prefix)) {
+        workspaceCaches.delete(key);
+      }
+    }
   } else {
     workspaceCaches.clear();
   }

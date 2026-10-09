@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import * as authService from '../services/auth.service.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
+import { prisma } from '../lib/prisma.js';
 import type { CookieOptions } from 'express';
 
 const router = Router();
@@ -179,10 +180,43 @@ router.post('/logout', requireAuth, async (req, res) => {
 // GET /me (requires auth)
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    const result = await authService.getMe(req.user!.id);
+    const result = await authService.getMe(req.user!.id, req.organizationId);
     res.json(result);
   } catch {
     return res.status(500).json({ error: 'Failed to get user info' });
+  }
+});
+
+// GET /organizations (requires auth)
+router.get('/organizations', requireAuth, async (req, res) => {
+  try {
+    const memberships = await prisma.orgMember.findMany({
+      where: { userId: req.user!.id },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const orgs = memberships.map((m) => ({
+      id: m.organization.id,
+      name: m.organization.name,
+      slug: m.organization.slug,
+      role: m.role,
+      joinedAt: m.createdAt,
+      isCurrent: m.organizationId === req.organizationId,
+    }));
+
+    res.json({ organizations: orgs, currentOrganizationId: req.organizationId });
+  } catch {
+    return res.status(500).json({ error: 'Failed to list organizations' });
   }
 });
 

@@ -9,7 +9,7 @@ import { createServer } from 'http';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { setupWebSocket } from './websocket/index.js';
-import { requireAuth } from './middleware/auth.js';
+import { requireAuth, requireRole } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import orgRoutes from './routes/organizations.js';
 import agentRoutes from './routes/agents.js';
@@ -73,7 +73,7 @@ app.use(cors({
   origin: corsOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Agent-Token', 'X-Api-Key'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Agent-Token', 'X-Api-Key', 'X-Organization-Id', 'X-Webhook-Secret', 'X-Hub-Signature-256'],
 }));
 
 // Cookie parser (for httpOnly refresh token cookies)
@@ -87,8 +87,13 @@ app.use(pinoHttp({
   },
 }));
 
-// Request size limits
-app.use(express.json({ limit: '1mb' }));
+// Request size limits & raw buffer capture for webhook HMAC validation
+app.use(express.json({
+  limit: '1mb',
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
 // Disable X-Powered-By (helmet does this, but explicit for clarity)
@@ -109,8 +114,16 @@ app.get('/api/ready', async (_req, res) => {
   }
 });
 
+// Diagnostics cache to prevent excessive provider probing
+let cachedDiagnostics: { data: any; expiresAt: number } | null = null;
+
 // System Deep Diagnostics (Protected — operators & authenticated admins only)
-app.get('/api/system/diagnostics', requireAuth, async (_req, res) => {
+app.get('/api/system/diagnostics', requireAuth, requireRole('OWNER', 'ADMIN'), async (_req, res) => {
+  const now = Date.now();
+  if (cachedDiagnostics && now < cachedDiagnostics.expiresAt) {
+    return res.json(cachedDiagnostics.data);
+  }
+
   const start = Date.now();
   let dbStatus = 'DOWN';
   let dbLatencyMs = -1;
@@ -130,8 +143,11 @@ app.get('/api/system/diagnostics', requireAuth, async (_req, res) => {
     if (geminiKey) {
       const t0 = Date.now();
       const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`,
-        { signal: AbortSignal.timeout(4000) }
+        'https://generativelanguage.googleapis.com/v1beta/models',
+        {
+          headers: { 'x-goog-api-key': geminiKey },
+          signal: AbortSignal.timeout(4000),
+        }
       );
       geminiLatencyMs = Date.now() - t0;
       geminiStatus = resp.ok ? 'UP' : 'DEGRADED';
@@ -153,7 +169,7 @@ app.get('/api/system/diagnostics', requireAuth, async (_req, res) => {
   const mem = process.memoryUsage();
   const isHealthy = dbStatus === 'UP';
 
-  res.status(isHealthy ? 200 : 503).json({
+  const payload = {
     status: isHealthy ? 'HEALTHY' : 'DEGRADED',
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime()),
@@ -169,7 +185,10 @@ app.get('/api/system/diagnostics', requireAuth, async (_req, res) => {
         heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024),
       },
     },
-  });
+  };
+
+  cachedDiagnostics = { data: payload, expiresAt: Date.now() + 15_000 };
+  res.status(isHealthy ? 200 : 503).json(payload);
 });
 
 // Auth routes (public)

@@ -6,43 +6,46 @@ import { logger } from '../lib/logger.js';
 
 const router = Router();
 
+// In-memory cache for webhook delivery deduplication (5-minute TTL)
+const processedDeliveries = new Map<string, number>();
+
 function verifyWebhookSignature(req: any): { valid: boolean; reason?: string } {
   const secret = process.env.GIT_WEBHOOK_SECRET;
   const signature = req.headers['x-hub-signature-256'] as string | undefined;
   const simpleSecret = req.headers['x-webhook-secret'] as string | undefined;
 
-  // In production, a webhook secret must be configured
-  if (process.env.NODE_ENV === 'production' && !secret) {
+  // Webhook secret MUST be configured; fail closed if missing in any environment
+  if (!secret) {
     return { valid: false, reason: 'GIT_WEBHOOK_SECRET not configured on server' };
   }
 
-  // If a secret is configured, require either HMAC signature or header match
-  if (secret) {
-    if (signature && signature.startsWith('sha256=')) {
-      const rawBody = typeof req.rawBody === 'string' ? req.rawBody : JSON.stringify(req.body || {});
-      const expectedSig = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-      try {
-        const sigBuf = Buffer.from(signature);
-        const expBuf = Buffer.from(expectedSig);
-        if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
-          return { valid: false, reason: 'Invalid X-Hub-Signature-256' };
-        }
-      } catch {
-        return { valid: false, reason: 'Signature verification failure' };
-      }
-    } else if (simpleSecret) {
-      try {
-        const secBuf = Buffer.from(simpleSecret);
-        const expBuf = Buffer.from(secret);
-        if (secBuf.length !== expBuf.length || !crypto.timingSafeEqual(secBuf, expBuf)) {
-          return { valid: false, reason: 'Invalid X-Webhook-Secret' };
-        }
-      } catch {
-        return { valid: false, reason: 'Secret comparison failure' };
-      }
-    } else {
-      return { valid: false, reason: 'Missing webhook signature or secret header' };
+  if (signature && signature.startsWith('sha256=')) {
+    if (!req.rawBody) {
+      return { valid: false, reason: 'Raw request body not available for signature verification' };
     }
+    const rawBuf = Buffer.isBuffer(req.rawBody) ? req.rawBody : Buffer.from(req.rawBody);
+    const expectedSig = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBuf).digest('hex');
+    try {
+      const sigBuf = Buffer.from(signature);
+      const expBuf = Buffer.from(expectedSig);
+      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+        return { valid: false, reason: 'Invalid X-Hub-Signature-256' };
+      }
+    } catch {
+      return { valid: false, reason: 'Signature verification failure' };
+    }
+  } else if (simpleSecret) {
+    try {
+      const secBuf = Buffer.from(simpleSecret);
+      const expBuf = Buffer.from(secret);
+      if (secBuf.length !== expBuf.length || !crypto.timingSafeEqual(secBuf, expBuf)) {
+        return { valid: false, reason: 'Invalid X-Webhook-Secret' };
+      }
+    } catch {
+      return { valid: false, reason: 'Secret comparison failure' };
+    }
+  } else {
+    return { valid: false, reason: 'Missing webhook signature or secret header' };
   }
 
   return { valid: true };
@@ -50,7 +53,7 @@ function verifyWebhookSignature(req: any): { valid: boolean; reason?: string } {
 
 /**
  * Public trigger endpoint for Git push / commit events.
- * Enforces HMAC signature verification and strict repository binding.
+ * Enforces raw body HMAC signature verification, idempotency, and exact repository binding.
  */
 router.post('/', async (req, res) => {
   try {
@@ -67,18 +70,42 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Repository name ("repo") is required in webhook payload' });
     }
 
+    // Idempotency check via X-GitHub-Delivery or commit SHA
+    const deliveryId = (req.headers['x-github-delivery'] as string) || (typeof commit === 'string' ? commit : null);
+    if (deliveryId) {
+      const existing = processedDeliveries.get(deliveryId);
+      if (existing && Date.now() - existing < 300_000) {
+        return res.status(200).json({ status: 'duplicate_delivery', message: 'Delivery already processed', deliveryId });
+      }
+      processedDeliveries.set(deliveryId, Date.now());
+    }
+
     logger.info({ commit, branch, repo: repoName }, 'Received authenticated Git push trigger');
 
-    // Strict repository matching: only bind to processes explicitly targeting this repository
-    const proc = await prisma.process.findFirst({
-      where: {
-        prompt: { contains: repoName, mode: 'insensitive' },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+    // Exact process matching: require explicit processId, or exact match on Process name
+    const requestedProcessId = (req.query.processId as string) || req.body?.processId;
+    const requestedOrgId = (req.headers['x-organization-id'] as string) || (req.query.orgId as string);
+
+    let proc = null;
+    if (requestedProcessId) {
+      proc = await prisma.process.findFirst({
+        where: {
+          id: requestedProcessId,
+          ...(requestedOrgId ? { organizationId: requestedOrgId } : {}),
+        },
+      });
+    } else {
+      proc = await prisma.process.findFirst({
+        where: {
+          name: { equals: repoName, mode: 'insensitive' },
+          ...(requestedOrgId ? { organizationId: requestedOrgId } : {}),
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+    }
 
     if (!proc) {
-      logger.warn({ repo: repoName }, 'No process bound to target repository');
+      logger.warn({ repo: repoName, requestedProcessId }, 'No process bound to target repository');
       return res.status(404).json({
         error: `No production process bound to repository "${repoName}". Webhook rejected without fallback.`,
       });
@@ -99,7 +126,7 @@ router.post('/', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Autonomous review triggered for commit ${commit || 'HEAD'} on process ${proc.name}`,
+      message: `Autonomous pipeline triggered for commit ${commit || 'HEAD'} on process ${proc.name}`,
       processId: proc.id,
       runStatus,
     });
@@ -108,5 +135,13 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Clean up stale idempotency entries periodically
+setInterval(() => {
+  const cutoff = Date.now() - 300_000;
+  for (const [key, timestamp] of processedDeliveries) {
+    if (timestamp < cutoff) processedDeliveries.delete(key);
+  }
+}, 60_000);
 
 export default router;

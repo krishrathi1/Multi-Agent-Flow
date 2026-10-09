@@ -56,7 +56,12 @@ function shouldExcludeFile(relPath, fileName) {
   }
 
   // Exclude auth credentials/cookies
-  if (relPath.includes('.auth') || fileName === 'user.json' && relPath.includes('e2e')) {
+  if (relPath.includes('.auth') || (fileName === 'user.json' && relPath.includes('e2e'))) {
+    return true;
+  }
+
+  // Exclude generated build/bundle config files ignored by git
+  if (fileName === 'vite.config.js' || fileName === 'vite.config.d.ts') {
     return true;
   }
 
@@ -103,7 +108,9 @@ const illegalEntries = filesToPackage.filter(f => {
     (norm.includes('.env') && !norm.endsWith('.env.example')) ||
     norm.includes('.auth/') ||
     norm.includes('node_modules/') ||
-    norm.includes('.git/')
+    norm.includes('.git/') ||
+    norm.endsWith('vite.config.js') ||
+    norm.endsWith('vite.config.d.ts')
   );
 });
 
@@ -111,6 +118,48 @@ if (illegalEntries.length > 0) {
   console.error('[SECURITY ERROR] Archive contains forbidden secret/system files:', illegalEntries);
   process.exit(1);
 }
+
+// ── Content-level Secret Scanner ─────────────────────────────
+console.log(`[Release Builder] Running deep content secret scan over ${filesToPackage.length} files...`);
+
+const SECRET_PATTERNS = [
+  { name: 'Google API Key', regex: /AIzaSy[A-Za-z0-9_-]{33}/ },
+  { name: 'GitHub Personal Token', regex: /ghp_[A-Za-z0-9]{36}/ },
+  { name: 'GitHub Fine-grained PAT', regex: /github_pat_[A-Za-z0-9_]{82}/ },
+  { name: 'Anthropic Live Key', regex: /sk-ant-api03-[A-Za-z0-9_-]{80,}/ },
+  { name: 'Private Key Header', regex: /-----BEGIN (RSA|EC|DSA|OPENSSH|PRIVATE) KEY-----/ },
+];
+
+const TEXT_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.json', '.mjs', '.cjs', '.md', '.html', '.css', '.yml', '.yaml', '.txt', '.env.example']);
+
+let detectedSecrets = 0;
+for (const item of filesToPackage) {
+  const ext = path.extname(item.fileName || item.relPath).toLowerCase();
+  if (!TEXT_EXTS.has(ext)) continue;
+
+  // Skip test fixture files from token matching if they use intentional placeholders
+  const norm = item.relPath.replace(/\\/g, '/');
+  if (norm.includes('test/') || norm.includes('e2e/fixtures/')) continue;
+
+  try {
+    const content = fs.readFileSync(item.fullPath, 'utf8');
+    for (const pat of SECRET_PATTERNS) {
+      if (pat.regex.test(content)) {
+        console.error(`[SECURITY LEAK DETECTED] ${pat.name} matched in file: ${item.relPath}`);
+        detectedSecrets++;
+      }
+    }
+  } catch {
+    /* binary or unreadable file */
+  }
+}
+
+if (detectedSecrets > 0) {
+  console.error(`[CRITICAL SECURITY HALT] Detected ${detectedSecrets} real secret token pattern(s) in source code.`);
+  process.exit(1);
+}
+
+console.log(`[Release Builder] Content scan PASSED: 0 active credential patterns detected.`);
 
 // Staging directory
 const stagingBase = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-release-'));
@@ -133,18 +182,10 @@ if (fs.existsSync(targetZip)) {
 fs.mkdirSync(path.dirname(targetZip), { recursive: true });
 
 console.log(`[Release Builder] Compressing archive...`);
-if (process.platform === 'win32') {
-  // Use powershell Compress-Archive or tar
-  execFileSync('tar', ['-a', '-c', '-f', targetZip, 'nexusqa'], {
-    cwd: stagingBase,
-    stdio: 'inherit',
-  });
-} else {
-  execFileSync('tar', ['-a', '-c', '-f', targetZip, 'nexusqa'], {
-    cwd: stagingBase,
-    stdio: 'inherit',
-  });
-}
+execFileSync('tar', ['-a', '-c', '-f', targetZip, 'nexusqa'], {
+  cwd: stagingBase,
+  stdio: 'inherit',
+});
 
 // Clean up staging directory
 fs.rmSync(stagingBase, { recursive: true, force: true });
@@ -152,4 +193,4 @@ fs.rmSync(stagingBase, { recursive: true, force: true });
 // Post-archive verification
 const zipStats = fs.statSync(targetZip);
 console.log(`[Release Builder] Archive created successfully: ${targetZip} (${(zipStats.size / (1024 * 1024)).toFixed(2)} MB)`);
-console.log(`[Release Builder] Verified 100% free of .env, tokens, and storage state.`);
+console.log(`[Release Builder] Verified 100% clean of .env credentials, session state, and secrets.`);

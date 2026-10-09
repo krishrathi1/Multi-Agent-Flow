@@ -167,10 +167,8 @@ nexus-ai/
 │   └── Dockerfile
 ├── docker-compose.yml   # Full stack deployment
 ├── SETUP_GUIDE.md       # Detailed setup instructions
-├── TOOLING.md           # Tool configuration reference
-├── PROMPT_ENGINEERING.md # Prompt engineering documentation
-├── SOURCEGRAPH_SETUP.md # Sourcegraph OSS setup guide
-└── PROJECT_SYNOPSIS.md  # Project charter & scope
+├── backend/ARCHITECTURE.md # Backend architecture deep dive
+└── frontend/ARCHITECTURE.md # Frontend architecture deep dive
 ```
 
 ---
@@ -180,13 +178,6 @@ nexus-ai/
 | Document | Description |
 |----------|-------------|
 | [SETUP_GUIDE.md](./SETUP_GUIDE.md) | Complete development environment setup |
-| [TOOLING.md](./TOOLING.md) | Tool configurations (Vite, Prisma, Docker, etc.) |
-| [PROJECT_SYNOPSIS.md](./PROJECT_SYNOPSIS.md) | Project charter and scope definition |
-| [PROJECT_TIMELINE.md](./PROJECT_TIMELINE.md) | Milestone timeline and evaluation schedule |
-| [TEAM_MATRIX.md](./TEAM_MATRIX.md) | Team roles and responsibility matrix |
-| [PROMPT_ENGINEERING.md](./PROMPT_ENGINEERING.md) | Prompt engineering patterns and templates |
-| [SOURCEGRAPH_SETUP.md](./SOURCEGRAPH_SETUP.md) | Sourcegraph OSS integration guide |
-| [DESIGN_BLUEPRINT.md](./DESIGN_BLUEPRINT.md) | UI/UX design system and wireframes |
 | [backend/ARCHITECTURE.md](./backend/ARCHITECTURE.md) | Backend architecture deep dive |
 | [frontend/ARCHITECTURE.md](./frontend/ARCHITECTURE.md) | Frontend architecture deep dive |
 

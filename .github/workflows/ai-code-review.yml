@@ -1,12 +1,12 @@
-name: AI Automated Code Review
+name: Automated PR Quality & Security Review
 
 on:
   pull_request:
     types: [opened, synchronize]
 
 jobs:
-  ai-review:
-    name: AI Security & Quality Review
+  pr-review:
+    name: Security & Quality Verification
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,25 +29,35 @@ jobs:
           git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
           echo "diff_size=$(wc -l < pr_diff.txt)" >> $GITHUB_OUTPUT
 
-      - name: Generate AI Code Review Comment
+      - name: Run Deterministic Security & Secret Scan
+        id: sec_scan
+        run: |
+          # Check for known secret patterns in diff
+          if grep -E "(AIzaSy[A-Za-z0-9_-]{33}|ghp_[A-Za-z0-9]{36}|sk-ant-|-----BEGIN [A-Z]+ PRIVATE KEY-----)" pr_diff.txt; then
+            echo "secrets_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "secrets_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate PR Review Verification Comment
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const diffSize = parseInt('${{ steps.pr_diff.outputs.diff_size }}', 10);
+            const secretsDetected = '${{ steps.sec_scan.outputs.secrets_detected }}' === 'true';
             
-            const commentBody = `### 🤖 Nexus AI Automated Code Review
+            const commentBody = `### 🔍 Automated PR Quality & Security Summary
             
             **Scan Summary:** Analyzed **${diffSize}** changed lines across this pull request.
             
-            | Category | Status | Evaluation Note |
+            | Inspection | Status | Result Detail |
             |---|---|---|
-            | 🛡️ **Security** | ✅ Clean | No exposed API keys, unescaped SQL queries, or unauthorized routes detected. |
-            | ⚡ **Performance** | ✅ Optimized | Query indices verified for multi-tenant schema accesses. |
-            | 📐 **Type Safety** | ✅ Strict | Full TypeScript conformance verified with zero implicit \`any\`. |
-            | 🏛️ **Design System** | ✅ Approved | Adheres to Nexus 7-hub Groww-style visual design blueprint. |
+            | 🛡️ **Secret & Token Scan** | ${secretsDetected ? '❌ FAILED' : '✅ PASSED'} | ${secretsDetected ? 'Potential secret or API credential detected in diff.' : 'Zero credential or secret token patterns found in changed files.'} |
+            | 📐 **Type Safety** | ℹ️ Enforced | Monitored by CI build step (\`tsc --noEmit\`). |
+            | 🧪 **Test Suite** | ℹ️ Enforced | Monitored by CI build step (\`vitest run\` & \`backend tests\`). |
             
-            *Reviewed automatically via Nexus AI Prompt Engineering & Code Intelligence Pipeline.*`;
+            *Automated CI quality gate.*`;
             
             await github.rest.issues.createComment({
               owner: context.repo.owner,

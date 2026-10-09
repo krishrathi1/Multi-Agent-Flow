@@ -23,12 +23,14 @@ router.post('/:boardId/:webhookId', async (req, res) => {
       contentType
     );
 
-    // Emit event if io is available
-    req.app.get('io')?.emit('webhook:received', {
-      boardId: req.params.boardId,
-      webhookId: req.params.webhookId,
-      payloadId: stored.id,
-    });
+    // Emit event scoped to organization room
+    if (stored.organizationId) {
+      req.app.get('io')?.to(`org:${stored.organizationId}`).emit('webhook:received', {
+        boardId: req.params.boardId,
+        webhookId: req.params.webhookId,
+        payloadId: stored.id,
+      });
+    }
 
     res.json({ received: true, id: stored.id });
   } catch (err) {

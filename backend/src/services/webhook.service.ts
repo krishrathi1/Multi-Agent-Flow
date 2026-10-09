@@ -73,6 +73,7 @@ export async function deleteWebhook(webhookId: string, boardId: string) {
 export async function handleInbound(boardId: string, webhookId: string, payload: unknown, headers: Record<string, string>, sourceIp: string, contentType: string) {
   const webhook = await prisma.boardWebhook.findFirst({
     where: { id: webhookId, boardId, enabled: true },
+    include: { board: { select: { organizationId: true } } },
   });
   if (!webhook) throw new Error('Webhook not found or disabled');
 
@@ -117,8 +118,8 @@ export async function handleInbound(boardId: string, webhookId: string, payload:
     },
   });
 
-  logger.info({ webhookId, payloadId: stored.id, boardId }, 'Webhook payload received');
-  return stored;
+  logger.info({ webhookId, payloadId: stored.id, boardId, orgId: webhook.board.organizationId }, 'Webhook payload received');
+  return { ...stored, organizationId: webhook.board.organizationId };
 }
 
 export async function listPayloads(

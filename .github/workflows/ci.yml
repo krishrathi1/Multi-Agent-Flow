@@ -59,3 +59,9 @@ jobs:
           cd backend
           npx prisma db push --skip-generate
           npm test
+
+      - name: Run Frontend Unit Tests
+        run: |
+          cd frontend
+          npm test
+
