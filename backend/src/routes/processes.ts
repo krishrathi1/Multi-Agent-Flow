@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma.js';
 import { validate } from '../middleware/validate.js';
 import { config } from '../config.js';
 import { decryptField } from '../lib/crypto.js';
+import { getOrganizationIntegrationToken } from '../services/org.service.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from '../services/git-deploy.service.js';
 
 const router = Router();
@@ -371,12 +372,8 @@ async function resolveGithubToken(explicitToken?: string, organizationId?: strin
   if (explicitToken?.trim()) return explicitToken.trim();
   if (organizationId) {
     try {
-      const org = await prisma.organization.findUnique({ where: { id: organizationId } });
-      const settings = (org?.settings as Record<string, unknown>) || {};
-      const encrypted = settings.githubTokenEncrypted || settings.githubToken;
-      if (typeof encrypted === 'string' && encrypted) {
-        return decryptField(encrypted);
-      }
+      const token = await getOrganizationIntegrationToken(organizationId, 'github');
+      if (token) return token;
     } catch { /* ignore */ }
   }
   return process.env.GITHUB_TOKEN || process.env.PLATFORM_GITHUB_TOKEN || undefined;

@@ -3,6 +3,8 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { resolveWorkspaceFile, listWorkspaceFiles } from '../services/agent-runner.service.js';
 import { canViewPreview } from '../services/insights.service.js';
+import { prisma } from '../lib/prisma.js';
+import { verifyAccessToken } from '../lib/jwt.js';
 
 /**
  * Serves what a production chain built, so a generated site is viewable at a
@@ -74,9 +76,36 @@ const shareToken = (req: {
   return match ? decodeURIComponent(match[1]) : undefined;
 };
 
+async function resolveUserOrgIds(req: {
+  headers?: Record<string, unknown>;
+  get: (h: string) => string | undefined;
+}): Promise<string[]> {
+  try {
+    const authHeader = req.get('authorization');
+    const rawCookie = typeof req.headers?.cookie === 'string' ? req.headers.cookie : '';
+    const cookieTokenMatch = rawCookie.match(/(?:^|;\s*)(?:nexus_token|access_token|token)=([^;]+)/);
+    const jwtToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : (cookieTokenMatch ? decodeURIComponent(cookieTokenMatch[1]) : undefined);
+
+    if (jwtToken) {
+      const payload = verifyAccessToken(jwtToken);
+      if (payload?.userId) {
+        const memberships = await prisma.orgMember.findMany({
+          where: { userId: payload.userId },
+          select: { organizationId: true },
+        });
+        return memberships.map((m) => m.organizationId);
+      }
+    }
+  } catch {
+    /* unauthenticated */
+  }
+  return [];
+}
+
 router.get('/:processId', async (req, res) => {
   const token = shareToken(req);
-  if (!(await canViewPreview(req.params.processId, token))) {
+  const userOrgIds = await resolveUserOrgIds(req);
+  if (!(await canViewPreview(req.params.processId, token, userOrgIds))) {
     return res.status(403).type('text/plain').send('This preview is not shared');
   }
   const entry = await findIndex(req.params.processId);
@@ -108,7 +137,8 @@ router.get('/:processId', async (req, res) => {
 
 router.get('/:processId/*splat', async (req, res) => {
   const token = shareToken(req);
-  if (!(await canViewPreview(req.params.processId, token))) {
+  const userOrgIds = await resolveUserOrgIds(req);
+  if (!(await canViewPreview(req.params.processId, token, userOrgIds))) {
     return res.status(403).type('text/plain').send('This preview is not shared');
   }
   const rel = (req.params as Record<string, unknown>).splat;
@@ -138,6 +168,7 @@ router.get('/:processId/*splat', async (req, res) => {
   res.setHeader('Content-Type', type);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
   if (type.startsWith('text/html')) {
     res.setHeader(
       'Content-Security-Policy',

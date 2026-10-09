@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { config } from './config.js';
+import { config, validateConfig } from './config.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -51,6 +51,19 @@ import { startScheduler } from './services/scheduler.js';
 import { startGitWatcher } from './services/git-watcher.service.js';
 import { recoverOrphanedRuns } from './services/agent-runner.service.js';
 import { connectAllGateways, setSocketIO } from './services/gateway.service.js';
+
+// Boot-time configuration validation
+const configValidation = validateConfig();
+if (!configValidation.valid) {
+  logger.error({ missing: configValidation.missing }, 'Configuration validation failure: missing required environment variables');
+  if (process.env.NODE_ENV === 'production') {
+    logger.fatal('Aborting startup: missing required production configuration variables');
+    process.exit(1);
+  }
+}
+for (const warning of configValidation.warnings) {
+  logger.warn(warning);
+}
 
 const app = express();
 const httpServer = createServer(app);

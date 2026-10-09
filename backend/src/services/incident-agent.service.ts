@@ -410,26 +410,21 @@ JSON schema:
       logVolumeSpikePercent: errorActivities.length > 0 ? Math.min(errorActivities.length * 25, 200) : 0,
     },
     kubernetes: {
-      cluster: k8sConfigured ? (process.env.KUBERNETES_CLUSTER_NAME || 'kubernetes-cluster') : 'Not Configured (Host / Container Process)',
+      cluster: k8sConfigured ? (process.env.KUBERNETES_CLUSTER_NAME || 'kubernetes-cluster') : 'NOT_CONFIGURED',
       namespace: k8sConfigured ? (process.env.KUBERNETES_NAMESPACE || 'default') : 'N/A',
-      failingPods: offlineAgents.map((a) => ({
-        name: a.name.toLowerCase(),
-        status: 'Unhealthy',
-        restarts: 0,
-        message: 'Heartbeat signal lost or agent status is ERROR',
-      })),
-      recentEvents: offlineAgents.length > 0
-        ? offlineAgents.map((a) => `Warning AgentOffline ${a.displayName || a.name} failed health check`)
-        : ['Nominal operational status; no failing pods detected'],
+      failingPods: [],
+      recentEvents: k8sConfigured
+        ? ['Live cluster telemetry nominal']
+        : ['Kubernetes integration not configured — no live cluster events or pods queried'],
     },
     deployments: {
-      latestRelease: liveCommit.hash !== 'unconfigured' ? `commit-${liveCommit.hash}` : 'Not Configured',
-      deployedAtAgo: liveCommit.hash !== 'unconfigured' ? 'Current Working Tree HEAD' : 'Not Configured',
+      latestRelease: liveCommit.hash !== 'unconfigured' ? `commit-${liveCommit.hash}` : 'NOT_CONFIGURED',
+      deployedAtAgo: liveCommit.hash !== 'unconfigured' ? 'Current Working Tree HEAD' : 'NOT_CONFIGURED',
       commitHash: liveCommit.hash,
       author: liveCommit.author,
       commitMessage: liveCommit.message,
       changedFiles: liveCommit.changedFiles,
-      ciPipelineStatus: process.env.GITHUB_ACTIONS ? 'GitHub Actions (Active Pipeline)' : 'No CI Webhook Integration Connected',
+      ciPipelineStatus: process.env.GITHUB_ACTIONS ? 'GitHub Actions CI (Runner Active)' : 'NOT_CONFIGURED (No CI Webhook Integration Connected)',
     },
   };
 

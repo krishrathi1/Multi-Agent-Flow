@@ -97,6 +97,18 @@ router.post('/test', async (req: any, res) => {
   const isExplicitClaudeCli = requestedModel.toLowerCase().includes('claude-cli');
   const isExplicitGemini = requestedModel.toLowerCase().includes('gemini') || requestedModel.toLowerCase().includes('google');
   const isExplicitLocal = requestedModel.toLowerCase().includes('local') || requestedModel.toLowerCase().includes('ollama') || requestedModel.toLowerCase().includes('qwen');
+  const isExplicitOpenAI = requestedModel.toLowerCase().startsWith('openai/') || requestedModel.toLowerCase().startsWith('gpt-') || requestedModel.toLowerCase().startsWith('o1') || requestedModel.toLowerCase().startsWith('o3');
+  const isExplicitAnthropic = requestedModel.toLowerCase().startsWith('anthropic/') || (requestedModel.toLowerCase().startsWith('claude-') && !isExplicitClaudeCli);
+  const isExplicitNvidia = requestedModel.toLowerCase().startsWith('nvidia/');
+  const isExplicitOpencode = requestedModel.toLowerCase().startsWith('opencode/');
+  const isOtherExplicitProvider = isExplicitOpenAI || isExplicitAnthropic || isExplicitNvidia || isExplicitOpencode;
+
+  if (isOtherExplicitProvider && !allowFallback) {
+    return res.status(400).json({
+      error: `Model "${requestedModel}" is not supported directly in Prompt Lab without an active provider integration. Set allowFallback: true to test against default available models.`,
+      requestedModel,
+    });
+  }
 
   // 1. Try Claude CLI if explicitly requested or if fallback is permitted
   if (isClaudeCliEnabled() && (isExplicitClaudeCli || (!model && allowFallback))) {
@@ -114,7 +126,7 @@ router.post('/test', async (req: any, res) => {
   }
 
   // 2. Query configured Gemini provider
-  if (!generatedOutput && (isExplicitGemini || (!isExplicitClaudeCli && !isExplicitLocal) || allowFallback)) {
+  if (!generatedOutput && (isExplicitGemini || (!isExplicitClaudeCli && !isExplicitLocal && !isOtherExplicitProvider) || allowFallback)) {
     let geminiKey = process.env.GEMINI_API_KEY || process.env.PLATFORM_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
     if (req.organizationId) {
       try {

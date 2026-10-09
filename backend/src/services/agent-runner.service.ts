@@ -12,6 +12,7 @@ import { fireWebhooks } from './process-extras.service.js';
 import { notify } from './insights.service.js';
 import { pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
 import { run as runOpenCode } from './opencode.service.js';
+import { getOrganizationIntegrationToken } from './org.service.js';
 
 import { config } from '../config.js';
 /**
@@ -2807,14 +2808,11 @@ export async function runProcessChain(
       targetRepo = `${config.defaultGithubOwner}/${targetRepo}`;
     }
 
-    const org = await prisma.organization.findUnique({ where: { id: organizationId } });
-    const orgSettings = (org?.settings as any) || {};
-
     const ghToken =
       process.env.GITHUB_TOKEN ||
       process.env.PLATFORM_GITHUB_TOKEN ||
       process.env.GITHUB_PAT ||
-      orgSettings.githubToken;
+      (await getOrganizationIntegrationToken(organizationId, 'github'));
 
     if (targetRepo && ghToken) {
       try {
@@ -2849,7 +2847,7 @@ export async function runProcessChain(
       process.env.VERCEL_TOKEN ||
       process.env.PLATFORM_VERCEL_TOKEN ||
       process.env.VERCEL_API_TOKEN ||
-      orgSettings.vercelToken;
+      (await getOrganizationIntegrationToken(organizationId, 'vercel'));
 
     if (isVercelEnabled && vToken) {
       try {

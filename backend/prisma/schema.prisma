@@ -1110,11 +1110,11 @@ model Process {
 
 /// Who may open a chain's generated artifacts.
 enum PreviewVisibility {
-  /// Anyone with the chain id (the default, and how demo links work).
+  /// Anyone with the link.
   PUBLIC
-  /// Only requests carrying the chain's share token.
+  /// Requests carrying the chain's secret share token.
   TOKEN
-  /// Nobody — the preview route is closed.
+  /// Restricted to authenticated members of the owning organization (default).
   PRIVATE
 }
 

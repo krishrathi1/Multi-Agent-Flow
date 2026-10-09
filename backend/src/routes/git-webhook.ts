@@ -78,9 +78,18 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Repository name ("repository.full_name" or "repo") is required in webhook payload' });
     }
 
+    const githubEvent = req.headers['x-github-event'] as string | undefined;
+    if (githubEvent === 'ping') {
+      return res.status(200).json({ status: 'pong', message: 'Webhook ping received successfully' });
+    }
+    if (githubEvent && githubEvent !== 'push') {
+      return res.status(200).json({ status: 'ignored', message: `Ignoring non-push event: ${githubEvent}` });
+    }
+
     const rawRef = body.ref || body.branch || '';
     const parsedBranch = (typeof rawRef === 'string' ? rawRef.replace(/^refs\/heads\//, '') : '').trim();
-    const commit = (body.after || body.head_commit?.id || body.checkout_sha || body.commit || '').trim();
+    const rawCommit = body.after || body.head_commit?.id || body.checkout_sha || (typeof body.commit === 'string' ? body.commit : body.commit?.id) || '';
+    const commit = (typeof rawCommit === 'string' ? rawCommit : String(rawCommit || '')).trim();
 
     // Idempotency check via X-GitHub-Delivery or commit SHA
     const deliveryId = (req.headers['x-github-delivery'] as string) || (commit || null);

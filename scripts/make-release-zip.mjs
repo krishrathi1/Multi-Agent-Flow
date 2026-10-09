@@ -130,7 +130,7 @@ const SECRET_PATTERNS = [
   { name: 'OpenAI Live Key', regex: /sk-(?:proj-)?[A-Za-z0-9_-]{48,}/ },
   { name: 'AWS Access Key ID', regex: /(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}/ },
   { name: 'Slack Token', regex: /xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,32}/ },
-  { name: 'SendGrid Key', regex: /SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/ },
+  { name: 'NVIDIA API Key', regex: /nvapi-[A-Za-z0-9_-]{40,}/ },
   { name: 'Private Key Header', regex: /-----BEGIN (?:RSA|EC|DSA|OPENSSH|PRIVATE) KEY-----/ },
 ];
 

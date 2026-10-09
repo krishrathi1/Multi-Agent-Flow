@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { prisma } from '../lib/prisma.js';
-import { generateApiKey } from '../lib/crypto.js';
+import { generateApiKey, decryptField } from '../lib/crypto.js';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { logger } from '../lib/logger.js';
 import type { OrgRole } from '@prisma/client';
@@ -194,4 +194,36 @@ export async function revokeApiKey(keyId: string, orgId: string) {
   if (!key) throw new Error('API key not found in this organization');
 
   return prisma.orgApiKey.delete({ where: { id: keyId } });
+}
+
+/** Centralized helper to securely retrieve and decrypt organization integration credentials */
+export async function getOrganizationIntegrationToken(
+  orgId: string,
+  provider: 'github' | 'vercel',
+): Promise<string | undefined> {
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { settings: true },
+  });
+  if (!org?.settings) return undefined;
+  const settings = org.settings as Record<string, unknown>;
+
+  const encryptedKey = provider === 'github' ? 'githubTokenEncrypted' : 'vercelTokenEncrypted';
+  const legacyKey = provider === 'github' ? 'githubToken' : 'vercelToken';
+
+  if (typeof settings[encryptedKey] === 'string' && settings[encryptedKey]) {
+    try {
+      return decryptField(settings[encryptedKey] as string);
+    } catch (err) {
+      logger.error({ orgId, provider, err }, 'Failed to decrypt organization integration credential');
+      throw new Error(`Failed to decrypt ${provider} integration credentials. Please reconnect the integration in Settings.`);
+    }
+  }
+
+  // Fallback to legacy plaintext during transitional period
+  if (typeof settings[legacyKey] === 'string' && settings[legacyKey]) {
+    return settings[legacyKey] as string;
+  }
+
+  return undefined;
 }

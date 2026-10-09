@@ -56,7 +56,7 @@ export function ChainSettingsModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [visibility, setVisibility] = useState<PreviewVisibility>(
-    process.previewVisibility ?? 'PUBLIC',
+    process.previewVisibility ?? 'PRIVATE',
   );
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -178,9 +178,9 @@ export function ChainSettingsModal({
           </p>
           <div className="flex flex-wrap gap-1.5">
             {([
-              { v: 'PUBLIC' as const, label: 'Anyone with the link', icon: Globe },
-              { v: 'TOKEN' as const, label: 'Link + token', icon: KeyRound },
-              { v: 'PRIVATE' as const, label: 'Nobody', icon: Lock },
+              { v: 'PRIVATE' as const, label: 'Organization members only (Private)', icon: Lock },
+              { v: 'TOKEN' as const, label: 'Secret link with token', icon: KeyRound },
+              { v: 'PUBLIC' as const, label: 'Anyone with link (Public)', icon: Globe },
             ]).map((o) => (
               <button
                 key={o.v}

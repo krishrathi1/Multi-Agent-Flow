@@ -9,6 +9,7 @@ import { listWorkspaceFiles, workspaceFor } from './agent-runner.service.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
 import { askAiAndSpawnFixerAgent } from './process.service.js';
 import { run as runOpenCode } from './opencode.service.js';
+import { getOrganizationIntegrationToken } from './org.service.js';
 
 const HISTORY_LIMIT = 30;
 
@@ -99,7 +100,7 @@ async function callChatLLM(params: {
 
   // 1. Nvidia API Direct Execution (Sub-second response)
   if (isNvidia) {
-    const nvidiaKey = process.env.NVIDIA_API_KEY || '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';
+    const nvidiaKey = process.env.NVIDIA_API_KEY;
     if (nvidiaKey) {
       try {
         const cleanModel = preferred.replace(/^nvidia\//i, '');
@@ -483,9 +484,7 @@ export async function chatWithMother(
       // Gather live cloud deployment telemetry
       let deploymentInfo = 'Not deployed to Vercel yet.';
       try {
-        const org = await prisma.organization.findUnique({ where: { id: organizationId } });
-        const orgSettings = (org?.settings as any) || {};
-        const vToken = process.env.VERCEL_TOKEN || orgSettings.vercelToken;
+        const vToken = process.env.VERCEL_TOKEN || (await getOrganizationIntegrationToken(organizationId, 'vercel'));
         if (vToken) {
           const deployLogs = await getVercelDeploymentLogs({ projectName: proc.name, vercelToken: vToken });
           deploymentInfo = `Cloud State: ${deployLogs.state} | URL: ${deployLogs.previewUrl || 'None'} | AI Diagnosis: ${deployLogs.diagnosis || 'None'} | Recent Logs: ${deployLogs.logs.slice(-3).map((l) => l.text).join('; ') || 'None'}`;

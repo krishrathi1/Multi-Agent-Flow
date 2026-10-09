@@ -578,9 +578,16 @@ export async function indexCodebase(organizationId: string, workspaceId?: string
 // ─── Public API ─────────────────────────────────────────
 
 function isDangerousRegex(pattern: string): boolean {
-  // Reject nested repetition operators that cause catastrophic backtracking
-  return /(\+|\*|\{[0-9]+,[0-9]*\})\s*(\+|\*|\{[0-9]+,[0-9]*\})/.test(pattern) ||
-         /\([^)]*(\+|\*)[^)]*\)\s*(\+|\*|\{[0-9]+,[0-9]*\})/.test(pattern);
+  // Bound pattern length
+  if (pattern.length > 250) return true;
+  // Reject nested repetition operators: (a+)+, (a*)*, etc.
+  if (/(\+|\*|\{[0-9]+,[0-9]*\})\s*(\+|\*|\{[0-9]+,[0-9]*\})/.test(pattern)) return true;
+  if (/\([^)]*(\+|\*)[^)]*\)\s*(\+|\*|\{[0-9]+,[0-9]*\})/.test(pattern)) return true;
+  // Reject ambiguous alternation inside repetition: (a|aa)+, (a|a)+
+  if (/\([^)]*\|[^)]*\)\s*(\+|\*|\{[0-9]+,[0-9]*\})/.test(pattern)) return true;
+  // Reject overlapping wildcards
+  if (/(\.\*|\.\+)\s*(\.\*|\.\+)/.test(pattern)) return true;
+  return false;
 }
 
 /**
@@ -622,10 +629,13 @@ export async function searchCode(
       const lines = content.split('\n');
 
       for (let i = 0; i < lines.length; i++) {
+        if (i % 50 === 0 && Date.now() > deadline) break;
         const line = lines[i];
+        // Clamp single line length to prevent engine lockup on minified or adversarial lines
+        const targetLine = line.length > 2000 ? line.slice(0, 2000) : line;
         let match;
         regex.lastIndex = 0;
-        while ((match = regex.exec(line)) !== null) {
+        while ((match = regex.exec(targetLine)) !== null) {
           results.push({
             file: file.relativePath,
             line: i + 1,

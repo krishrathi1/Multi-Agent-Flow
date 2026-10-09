@@ -8,6 +8,7 @@ import { workspaceFor } from './agent-runner.service.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
 import { decryptField } from '../lib/crypto.js';
 import { run as runOpenCode } from './opencode.service.js';
+import { getOrganizationIntegrationToken } from './org.service.js';
 
 /** Palette used to tint a production so it's identifiable across screens. */
 const PROCESS_COLORS = [
@@ -552,10 +553,8 @@ export async function askAiAndSpawnFixerAgent(params: {
   });
   if (!proc) throw new Error('Process not found');
 
-  const org = await prisma.organization.findUnique({ where: { id: organizationId } });
-  const orgSettings = (org?.settings as any) || {};
-  const vToken = process.env.VERCEL_TOKEN || orgSettings.vercelToken;
-  const ghToken = process.env.GITHUB_TOKEN || orgSettings.githubToken;
+  const vToken = process.env.VERCEL_TOKEN || (await getOrganizationIntegrationToken(organizationId, 'vercel'));
+  const ghToken = process.env.GITHUB_TOKEN || (await getOrganizationIntegrationToken(organizationId, 'github'));
 
   // 1. Fetch live Vercel error logs for accurate diagnosis
   let errorSummary = '';
@@ -722,7 +721,7 @@ Guidelines:
 
   // 1. Try Nvidia API if an nvidia model is selected
   if (isNvidia) {
-    const nvidiaKey = process.env.NVIDIA_API_KEY || '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';
+    const nvidiaKey = process.env.NVIDIA_API_KEY;
     if (nvidiaKey) {
       try {
         const cleanModel = preferred.replace(/^nvidia\//i, '');

@@ -451,21 +451,34 @@ export async function setPreviewVisibility(
 export async function canViewPreview(
   processId: string,
   token?: string,
+  userOrgIds?: string[] | string,
 ): Promise<boolean> {
   const proc = await prisma.process.findUnique({
     where: { id: processId },
-    select: { previewVisibility: true, shareToken: true },
+    select: { organizationId: true, previewVisibility: true, shareToken: true },
   });
   // Unknown or deleted chain: deny access by default (fail closed)
   if (!proc) return false;
 
-  if (proc.previewVisibility === PreviewVisibility.PRIVATE) return false;
-  if (proc.previewVisibility === PreviewVisibility.TOKEN) {
-    if (!proc.shareToken || !token) return false;
-    // Constant-time compare so the token can't be guessed by timing.
+  // 1. If user is authenticated and belongs to the owning organization, allow preview
+  if (userOrgIds) {
+    const orgs = Array.isArray(userOrgIds) ? userOrgIds : [userOrgIds];
+    if (orgs.includes(proc.organizationId)) return true;
+  }
+
+  // 2. If token is provided and matches shareToken, allow preview
+  if (proc.shareToken && token) {
     const a = Buffer.from(proc.shareToken);
     const b = Buffer.from(token);
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+      return true;
+    }
   }
-  return true;
+
+  // 3. PRIVATE or TOKEN without matching org or valid token: deny
+  if (proc.previewVisibility === PreviewVisibility.PRIVATE || proc.previewVisibility === PreviewVisibility.TOKEN) {
+    return false;
+  }
+
+  return proc.previewVisibility === PreviewVisibility.PUBLIC;
 }
