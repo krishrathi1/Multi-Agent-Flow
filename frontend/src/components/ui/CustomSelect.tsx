@@ -14,12 +14,15 @@ export interface CustomSelectProps<T extends string = string> {
   onChange: (value: T) => void;
   options: Option<T>[];
   placeholder?: string;
+  prefix?: string;
   className?: string;
   buttonClassName?: string;
+  menuClassName?: string;
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   /** When true the dropdown opens upward (above the trigger). Use near bottom of modal. */
   upward?: boolean;
+  align?: 'left' | 'right';
 }
 
 export function CustomSelect<T extends string = string>({
@@ -27,11 +30,14 @@ export function CustomSelect<T extends string = string>({
   onChange,
   options,
   placeholder = 'Select option...',
+  prefix,
   className,
   buttonClassName,
+  menuClassName,
   size = 'md',
   disabled = false,
   upward = false,
+  align = 'left',
 }: CustomSelectProps<T>) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -70,9 +76,12 @@ export function CustomSelect<T extends string = string>({
           buttonClassName
         )}
       >
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {selectedOption?.icon && (
             <selectedOption.icon size={size === 'sm' ? 12 : 14} className="shrink-0 text-brand-500" />
+          )}
+          {prefix && (
+            <span className="font-semibold text-ink-faint shrink-0 text-2xs uppercase tracking-wider">{prefix}</span>
           )}
           <span className="truncate">{selectedOption?.label || placeholder}</span>
         </div>
@@ -88,8 +97,10 @@ export function CustomSelect<T extends string = string>({
       {open && (
         <div
           className={cn(
-            'absolute left-0 right-0 z-50 max-h-60 overflow-y-auto rounded-2xl border border-line bg-surface p-1.5 shadow-2xl space-y-1 animate-scale-in no-scrollbar',
-            upward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+            'absolute min-w-full w-max max-w-[min(90vw,360px)] z-50 max-h-64 overflow-y-auto rounded-2xl border border-line bg-surface p-1.5 shadow-2xl space-y-1 animate-scale-in no-scrollbar',
+            align === 'right' ? 'right-0' : 'left-0',
+            upward ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
+            menuClassName
           )}
         >
           {options.map((opt) => {

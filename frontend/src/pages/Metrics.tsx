@@ -31,6 +31,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
 import { LiveWaveform } from '@/components/ui/LiveIcon';
 import { UsageDetailSheet } from '@/components/cost/UsageDetailSheet';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 interface TokenSummary {
   totalTokens: number;
@@ -480,41 +481,42 @@ export function Metrics() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Project / Production Filter */}
-          <div className="flex items-center gap-1.5 text-xs text-ink-muted bg-surface border border-line rounded-lg px-2.5 py-1 shadow-2xs">
-            <Layers size={13} className="text-brand-500 shrink-0" />
-            <span className="font-medium text-ink-faint hidden sm:inline">Project:</span>
-            <select
+          <div className="w-52 sm:w-60">
+            <CustomSelect
               value={selectedProcessId}
-              onChange={(e) => setSelectedProcessId(e.target.value)}
-              className="bg-transparent border-none text-xs text-ink font-medium focus:outline-none cursor-pointer pr-1"
-            >
-              <option value="ALL">All Projects ({processes.length})</option>
-              {processes.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedProcessId}
+              prefix="Project:"
+              size="sm"
+              options={[
+                { value: 'ALL', label: `All Projects (${processes.length})`, icon: Layers },
+                ...processes.map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                  icon: Layers,
+                })),
+              ]}
+            />
           </div>
 
           {/* Model Filter */}
-          <div className="flex items-center gap-1.5 text-xs text-ink-muted bg-surface border border-line rounded-lg px-2.5 py-1 shadow-2xs">
-            <Bot size={13} className="text-brand-500 shrink-0" />
-            <span className="font-medium text-ink-faint hidden sm:inline">Model:</span>
-            <select
+          <div className="w-48 sm:w-56">
+            <CustomSelect
               value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="bg-transparent border-none text-xs text-ink font-medium focus:outline-none cursor-pointer pr-1"
-            >
-              <option value="ALL">All Models</option>
-              {availableModels.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedModel}
+              prefix="Model:"
+              align="right"
+              size="sm"
+              options={[
+                { value: 'ALL', label: 'All Models', icon: Bot },
+                ...availableModels.map((m) => ({
+                  value: m,
+                  label: m,
+                  icon: Bot,
+                })),
+              ]}
+            />
           </div>
         </div>
       </div>
