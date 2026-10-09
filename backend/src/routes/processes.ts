@@ -53,6 +53,17 @@ router.post('/plan', validate(planSchema), async (req, res) => {
   res.json(plan);
 });
 
+/** Expands plain-language goal with the default/chosen AI model. */
+router.post('/expand-prompt', async (req, res) => {
+  const { prompt, model } = req.body;
+  const result = await processService.expandPromptWithAi(
+    req.organizationId!,
+    prompt || '',
+    model,
+  );
+  res.json(result);
+});
+
 /** Express 5 types `req.params.id` as `string | string[]`; routes take one id. */
 const paramId = (v: string | string[]): string => (Array.isArray(v) ? v[0] : v);
 

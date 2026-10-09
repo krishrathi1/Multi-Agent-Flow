@@ -82,27 +82,94 @@ async function callChatLLM(params: {
     latestSteps?: string[];
   };
 }): Promise<{ text: string; model: string; inputTokens: number; outputTokens: number; costUsd: number }> {
-  // 1. Explicit OpenCode model selection. OpenCode accepts provider/model IDs
-  // and becomes the unified execution path for providers configured there.
-  if (params.preferredModel?.includes('/') && !params.preferredModel.startsWith('local/')) {
-    try {
-      const op = await runOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, params.preferredModel);
-      if (op.result) {
-        const inputTokens = Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
-        const outputTokens = Math.max(50, Math.ceil(op.result.length / 4));
-        return { text: op.result, model: op.model || params.preferredModel, inputTokens, outputTokens, costUsd: calcCost(op.model || params.preferredModel, inputTokens, outputTokens) };
+  // Resolve Active LLM Providers
+  const providers = await prisma.llmProvider.findMany({
+    where: { organizationId: params.organizationId, isActive: true },
+  });
+
+  const preferred = (params.preferredModel || '').trim();
+  const preferredLower = preferred.toLowerCase();
+
+  const isGoogle = preferredLower.startsWith('google/') || preferredLower.startsWith('gemini/') || (preferredLower.includes('gemini') && !preferredLower.startsWith('opencode/'));
+  const isNvidia = preferredLower.startsWith('nvidia/');
+  const isOpenCode = preferredLower.startsWith('opencode/');
+  const isOpenAI = preferredLower.startsWith('openai/') || (!preferredLower.includes('/') && (preferredLower.startsWith('gpt-') || preferredLower.startsWith('o1') || preferredLower.startsWith('o3')));
+  const isAnthropic = preferredLower.startsWith('anthropic/') || (!preferredLower.includes('/') && preferredLower.startsWith('claude-'));
+  const isLocal = preferredLower.startsWith('local/') || preferredLower.startsWith('ollama/');
+
+  // 1. Nvidia API Direct Execution (Sub-second response)
+  if (isNvidia) {
+    const nvidiaKey = process.env.NVIDIA_API_KEY || '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';
+    if (nvidiaKey) {
+      try {
+        const cleanModel = preferred.replace(/^nvidia\//i, '');
+        const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${nvidiaKey}`,
+          },
+          body: JSON.stringify({
+            model: cleanModel,
+            messages: [
+              { role: 'system', content: params.systemPrompt },
+              { role: 'user', content: params.prompt },
+            ],
+            temperature: 0.3,
+            max_tokens: 2048,
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          const text = data?.choices?.[0]?.message?.content;
+          if (text && typeof text === 'string' && text.trim().length > 0) {
+            const inputTokens = data?.usage?.prompt_tokens ?? Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
+            const outputTokens = data?.usage?.completion_tokens ?? Math.max(50, Math.ceil(text.length / 4));
+            return {
+              text: text.trim(),
+              model: `nvidia/${cleanModel}`,
+              inputTokens,
+              outputTokens,
+              costUsd: calcCost(cleanModel, inputTokens, outputTokens),
+            };
+          }
+        } else {
+          logger.warn({ status: res.status, model: cleanModel }, 'Nvidia API returned non-OK status; falling back');
+        }
+      } catch (err) {
+        logger.warn({ err, model: preferred }, 'Nvidia API call failed or timed out; falling back');
       }
-    } catch (err) {
-      logger.warn({ err, model: params.preferredModel }, 'OpenCode model execution failed; continuing through configured fallbacks');
     }
   }
 
-  // 2. Try Claude CLI if enabled and requested
-  if (isClaudeCliEnabled()) {
+  // 2. OpenCode CLI Model Selection (Focused timeout & pure execution)
+  if (isOpenCode) {
+    try {
+      const op = await runOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, preferred, undefined, 18000);
+      if (op.result && op.result.length > 0) {
+        const inputTokens = Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
+        const outputTokens = Math.max(50, Math.ceil(op.result.length / 4));
+        return {
+          text: op.result,
+          model: op.model || preferred,
+          inputTokens,
+          outputTokens,
+          costUsd: calcCost(op.model || preferred, inputTokens, outputTokens),
+        };
+      }
+    } catch (err) {
+      logger.warn({ err, model: preferred }, 'OpenCode model execution timed out or failed; falling back to ultra-fast cloud model');
+    }
+  }
+
+  // 3. Claude CLI / Anthropic
+  if (isAnthropic && isClaudeCliEnabled()) {
     try {
       const cliRes = await runClaudeCli(params.prompt, {
         systemPrompt: params.systemPrompt,
-        timeoutMs: 90000,
+        timeoutMs: 30000,
       });
       if (cliRes) return cliRes;
     } catch {
@@ -110,25 +177,7 @@ async function callChatLLM(params: {
     }
   }
 
-  // 2. Resolve Active LLM Providers
-  const providers = await prisma.llmProvider.findMany({
-    where: { organizationId: params.organizationId, isActive: true },
-  });
-
-  // Prepare preferred candidate models list
-  const preferred = params.preferredModel?.toLowerCase().trim();
-  const candidateModels: string[] = [];
-
-  if (preferred && preferred.length > 0) {
-    candidateModels.push(preferred);
-  }
-  // Default cloud fallbacks in order of speed and capability
-  for (const m of config.geminiModels) {
-    if (!candidateModels.includes(m)) {
-      candidateModels.push(m);
-    }
-  }
-
+  // 4. Google Gemini Direct REST Execution (Blazing fast, 300-500ms)
   let geminiKey: string | undefined;
   const geminiProv = providers.find((p) => p.provider.toLowerCase() === 'google' || p.provider.toLowerCase() === 'gemini');
   if (geminiProv && geminiProv.apiKey) {
@@ -140,11 +189,19 @@ async function callChatLLM(params: {
   if (!geminiKey && process.env.GOOGLE_API_KEY) geminiKey = process.env.GOOGLE_API_KEY;
   if (!geminiKey && process.env.PLATFORM_GOOGLE_API_KEY) geminiKey = process.env.PLATFORM_GOOGLE_API_KEY;
 
-  // Try Google Gemini models
   if (geminiKey) {
-    for (const model of candidateModels.filter(m => m.includes('gemini') || !m.includes('/'))) {
+    const geminiCandidates: string[] = [];
+    if (isGoogle && preferred) {
+      const reqClean = preferred.replace(/^google\//i, '').replace(/^gemini\//i, '');
+      geminiCandidates.push(reqClean);
+    }
+    // Reliable fast fallbacks
+    for (const m of ['gemini-flash-lite-latest', 'gemini-3.5-flash-lite', 'gemini-flash-latest']) {
+      if (!geminiCandidates.includes(m)) geminiCandidates.push(m);
+    }
+
+    for (const cleanModel of geminiCandidates) {
       try {
-        const cleanModel = model.replace(/^google\//, '').replace(/^gemini\//, '');
         const combined = `${params.systemPrompt}\n\n${params.prompt}`;
         const res = await fetch(
           `${config.geminiApiBaseUrl}/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(geminiKey)}`,
@@ -155,7 +212,7 @@ async function callChatLLM(params: {
               contents: [{ parts: [{ text: combined }] }],
               generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
             }),
-            signal: AbortSignal.timeout(30000),
+            signal: AbortSignal.timeout(15000),
           },
         );
 
@@ -163,7 +220,6 @@ async function callChatLLM(params: {
           const data = (await res.json()) as any;
           const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text && typeof text === 'string' && text.trim().length > 0) {
-            // Read real token counts from Gemini usageMetadata
             const inputTokens: number = data?.usageMetadata?.promptTokenCount ?? Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
             const outputTokens: number = data?.usageMetadata?.candidatesTokenCount ?? Math.max(50, Math.ceil(text.length / 4));
             return {
@@ -174,49 +230,47 @@ async function callChatLLM(params: {
               costUsd: calcCost(cleanModel, inputTokens, outputTokens),
             };
           }
-        } else if (res.status === 429) {
-          logger.warn({ status: 429, model: cleanModel }, 'Rate limit exceeded on selected model, attempting fallback');
         }
       } catch (err) {
-        logger.warn({ err, model }, 'Cloud chat model failed or rate-limited, continuing to local fallback');
+        logger.warn({ err, model: cleanModel }, 'Gemini model failed, trying next candidate');
       }
     }
   }
 
-  // 3. Try Local PC Ollama on Windows Host (configured local model)
-  const candidateEndpoints = config.localLlmEndpoints;
+  // 5. Local PC Ollama on Windows Host
+  if (isLocal || !geminiKey) {
+    const candidateEndpoints = config.localLlmEndpoints;
+    for (const ep of candidateEndpoints) {
+      try {
+        const ollamaRes = await fetch(`${ep}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: preferredLower.includes('ollama') ? preferred.replace(/^ollama\//i, '') : config.localLlmModel,
+            prompt: `${params.systemPrompt}\n\n${params.prompt}`,
+            stream: false,
+          }),
+          signal: AbortSignal.timeout(10000),
+        });
 
-  for (const ep of candidateEndpoints) {
-    try {
-      const ollamaRes = await fetch(`${ep}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: preferred?.includes('ollama') ? preferred.replace(/^ollama\//, '') : config.localLlmModel,
-          prompt: `${params.systemPrompt}\n\n${params.prompt}`,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(30000),
-      });
-
-      if (ollamaRes.ok) {
-        const data = (await ollamaRes.json()) as any;
-        const text = data?.response;
-        if (text && typeof text === 'string' && text.trim().length > 0) {
-          // Ollama returns prompt_eval_count and eval_count for real token counts
-          const inputTokens: number = data?.prompt_eval_count ?? Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
-          const outputTokens: number = data?.eval_count ?? Math.max(50, Math.ceil(text.length / 4));
-          return {
-            text: text.trim(),
-            model: `${config.localLlmModel} (Local Host)`,
-            inputTokens,
-            outputTokens,
-            costUsd: 0, // Local model — no API cost
-          };
+        if (ollamaRes.ok) {
+          const data = (await ollamaRes.json()) as any;
+          const text = data?.response;
+          if (text && typeof text === 'string' && text.trim().length > 0) {
+            const inputTokens: number = data?.prompt_eval_count ?? Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
+            const outputTokens: number = data?.eval_count ?? Math.max(50, Math.ceil(text.length / 4));
+            return {
+              text: text.trim(),
+              model: `${config.localLlmModel} (Local Host)`,
+              inputTokens,
+              outputTokens,
+              costUsd: 0,
+            };
+          }
         }
+      } catch {
+        // Continue to fallback
       }
-    } catch {
-      // Continue to next endpoint or fallback synthesizer
     }
   }
 
@@ -403,7 +457,7 @@ export async function chatWithMother(
 
     if (proc) {
       activeProcessId = proc.id;
-      if (proc.plannedBy && proc.plannedBy.startsWith('llm:')) {
+      if (!preferredModel && proc.plannedBy && proc.plannedBy.startsWith('llm:')) {
         preferredModel = proc.plannedBy.replace(/^llm:/, '');
       }
 
@@ -482,12 +536,11 @@ ${allAgents.map((a) => `- ${a.displayName} (${a.processRole || 'Agent'}, Status:
   }
 
   const isAgentBuildIntent =
-    /(make|create|build|add|spawn|bna|bnao|update)\s+(a\s+|an\s+)?(new\s+)?agent/i.test(message) ||
-    /(agent\s+(bna|add|create|make|update))/i.test(message) ||
-    /(new agent|naye agent)/i.test(message);
+    /^(please\s+)?(make|create|build|add|spawn|bna|bnao)\s+(a\s+|an\s+)?(new\s+)?agent\b/i.test(message) ||
+    /^(please\s+)?(agent\s+(bna|add|create|make))\b/i.test(message);
 
   const isFixOrDeployIntent =
-    /(fix|solve|theek|sahi|error|deploy|problem|fail|issue|kya karu|kuch kr|repair|heal|zero error)/i.test(message);
+    /^(please\s+)?(auto-heal|fix this|fix the build|repair workspace|heal now|deploy now)\b/i.test(message.trim());
 
   let autoHealReport = '';
   if (isAgentBuildIntent || isFixOrDeployIntent) {

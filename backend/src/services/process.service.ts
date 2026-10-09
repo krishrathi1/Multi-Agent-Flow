@@ -6,6 +6,8 @@ import { logger } from '../lib/logger.js';
 import { planProcess, type ProcessPlan } from './process-planner.js';
 import { workspaceFor } from './agent-runner.service.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
+import { decryptField } from '../lib/crypto.js';
+import { run as runOpenCode } from './opencode.service.js';
 
 /** Palette used to tint a production so it's identifiable across screens. */
 const PROCESS_COLORS = [
@@ -679,5 +681,203 @@ export async function askAiAndSpawnFixerAgent(params: {
     pushResult,
     deployResult,
     message: `AI Analysis Complete: ${diagnosis} Specialized remediation applied with zero errors.`,
+  };
+}
+
+/**
+ * Dynamically expands and enriches the user's objective into a structured, production-grade
+ * autonomous multi-agent specification using the organization's chosen default LLM engine.
+ */
+export async function expandPromptWithAi(
+  organizationId: string,
+  userPrompt: string,
+  preferredModel?: string,
+): Promise<{ expandedPrompt: string; model: string }> {
+  const prompt = userPrompt.trim() || 'Review codebase, build modular full-stack features, test and deploy.';
+
+  // 1. Fetch organization LLM providers
+  const providers = await prisma.llmProvider.findMany({
+    where: { organizationId, isActive: true },
+  });
+
+  const systemInstruction = `You are an expert Autonomous Multi-Agent Systems Architect and Principal Engineer.
+Your task is to expand and enhance the user's initial objective into a comprehensive, highly-structured, actionable prompt for an autonomous team of software engineering agents.
+
+Guidelines:
+- Decompose the goal into clear stages: Architecture & Setup, Modular Implementation, Testing & Verification, and Production Deployment.
+- Specify technology standards (TypeScript, modular architecture, strict validation, zero regressions).
+- Keep the tone direct, professional, and clear. Do NOT output conversational greetings or meta-commentary.
+- Output ONLY the enhanced prompt content directly.`;
+
+  const preferred = (preferredModel || '').trim();
+  const preferredLower = preferred.toLowerCase();
+  const isGoogle = preferredLower.startsWith('google/') || preferredLower.startsWith('gemini/') || (preferredLower.includes('gemini') && !preferredLower.startsWith('opencode/'));
+  const isNvidia = preferredLower.startsWith('nvidia/');
+  const isOpenCode = preferredLower.startsWith('opencode/');
+
+  // 1. Try Nvidia API if an nvidia model is selected
+  if (isNvidia) {
+    const nvidiaKey = process.env.NVIDIA_API_KEY || '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';
+    if (nvidiaKey) {
+      try {
+        const cleanModel = preferred.replace(/^nvidia\//i, '');
+        const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${nvidiaKey}`,
+          },
+          body: JSON.stringify({
+            model: cleanModel,
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: `User Objective:\n${prompt}\n\nEnhanced Production Prompt:` },
+            ],
+            temperature: 0.3,
+            max_tokens: 2048,
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          const text = data?.choices?.[0]?.message?.content?.trim();
+          if (text && text.length > 30) {
+            return { expandedPrompt: text, model: `nvidia/${cleanModel}` };
+          }
+        }
+      } catch (err) {
+        logger.warn({ err, preferred }, 'Nvidia prompt expansion failed');
+      }
+    }
+  }
+
+  // 2. Try OpenCode if an opencode/ model is explicitly requested
+  if (isOpenCode) {
+    try {
+      const combined = `${systemInstruction}\n\nUser Objective:\n${prompt}\n\nEnhanced Production Prompt:`;
+      const op = await runOpenCode(combined, preferred, undefined, 18000);
+      if (op.result && op.result.trim().length > 30) {
+        return {
+          expandedPrompt: op.result.trim(),
+          model: preferred,
+        };
+      }
+    } catch (err) {
+      logger.warn({ err, preferred }, 'OpenCode prompt expansion failed');
+    }
+  }
+
+  // 3. Try Google Gemini models
+  let geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.PLATFORM_GOOGLE_API_KEY;
+  const geminiProv = providers.find((p) => p.provider.toLowerCase() === 'google' || p.provider.toLowerCase() === 'gemini');
+  if (geminiProv && geminiProv.apiKey) {
+    try { geminiKey = decryptField(geminiProv.apiKey); } catch { /* ignore */ }
+  }
+
+  if (geminiKey) {
+    const candidateModels: string[] = [];
+    if (isGoogle && preferred) {
+      candidateModels.push(preferred.replace(/^google\//i, '').replace(/^gemini\//i, ''));
+    }
+    for (const m of ['gemini-flash-lite-latest', 'gemini-3.5-flash-lite', 'gemini-flash-latest']) {
+      if (!candidateModels.includes(m)) candidateModels.push(m);
+    }
+
+    for (const m of candidateModels) {
+      try {
+        const res = await fetch(
+          `${config.geminiApiBaseUrl}/v1beta/models/${m}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `${systemInstruction}\n\nUser Objective:\n${prompt}` }] }],
+              generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
+            }),
+            signal: AbortSignal.timeout(15000),
+          },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text && typeof text === 'string' && text.trim().length > 30) {
+            return {
+              expandedPrompt: text.trim(),
+              model: m,
+            };
+          }
+        }
+      } catch (err) {
+        logger.warn({ err, m }, 'Gemini prompt expansion failed');
+      }
+    }
+  }
+
+  // 4. Try Anthropic Claude
+  let anthropicKey = process.env.PLATFORM_ANTHROPIC_API_KEY;
+  const anthropicProv = providers.find((p) => p.provider.toLowerCase() === 'anthropic');
+  if (anthropicProv && anthropicProv.apiKey) {
+    try { anthropicKey = decryptField(anthropicProv.apiKey); } catch { /* ignore */ }
+  }
+
+  if (anthropicKey) {
+    const claudeModel = preferredModel && preferredModel.includes('claude')
+      ? preferredModel.replace(/^anthropic\//, '')
+      : 'claude-3-5-sonnet-latest';
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: claudeModel,
+          max_tokens: 2048,
+          system: systemInstruction,
+          messages: [{ role: 'user', content: `User Objective: ${prompt}` }],
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as any;
+        const text = data.content?.find((c: any) => c.type === 'text')?.text?.trim();
+        if (text && text.length > 30) {
+          return { expandedPrompt: text, model: claudeModel };
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Claude prompt expansion failed');
+    }
+  }
+
+  // 5. Try Local Ollama host
+  for (const ep of config.localLlmEndpoints) {
+    try {
+      const ollamaRes = await fetch(`${ep}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: preferredModel?.includes('ollama') ? preferredModel.replace(/^ollama\//, '') : config.localLlmModel,
+          prompt: `${systemInstruction}\n\nUser Objective:\n${prompt}`,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (ollamaRes.ok) {
+        const data = (await ollamaRes.json()) as any;
+        const text = data?.response?.trim();
+        if (text && text.length > 30) {
+          return { expandedPrompt: text, model: `local:${config.localLlmModel}` };
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Fallback: structured expansion
+  return {
+    expandedPrompt: `Objective: ${prompt}\n\nExecution Scope:\n- Architecture & Dependencies: Analyze requirements and scaffold modular components.\n- Implementation: Develop clean, verified features with strict type safety.\n- Quality Assurance: Run regression tests and continuous integration checks.\n- Deployment & Verification: Build deliverables and ensure zero errors.`,
+    model: 'heuristic-engine',
   };
 }

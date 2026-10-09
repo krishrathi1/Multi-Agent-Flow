@@ -195,6 +195,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ prompt, ...(agentCount ? { agentCount } : {}), ...(model ? { model } : {}) }),
       }),
+    expandPrompt: (data: { prompt: string; model?: string }) =>
+      request<{ expandedPrompt: string; model: string }>('/processes/expand-prompt', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     create: (data: {
       prompt: string;
       name?: string;

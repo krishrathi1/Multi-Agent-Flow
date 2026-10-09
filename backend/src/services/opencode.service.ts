@@ -117,19 +117,22 @@ export async function models() {
   }
 }
 
-export async function run(prompt: string, model?: string, cwd?: string) {
+export async function run(prompt: string, model?: string, cwd?: string, timeoutMs?: number) {
   const args = ['run', prompt];
   if (model?.trim()) args.push('--model', model.trim());
+  args.push('--pure');
   const workingDirectory = cwd?.trim() || process.env.OPENCODE_WORKDIR || process.cwd();
   if (!existsSync(workingDirectory)) throw new Error(`OpenCode working directory does not exist: ${workingDirectory}`);
   const { stdout, stderr } = await execFileAsync(commandName(), args, {
     cwd: workingDirectory,
-    timeout: config.opencodeTimeoutMs,
+    timeout: timeoutMs || config.opencodeTimeoutMs,
     windowsHide: true,
     maxBuffer: 4 * 1024 * 1024,
     env: process.env,
   });
-  return { result: (stdout || stderr).trim(), model: model || config.opencodeModel || null };
+  let cleanResult = (stdout || stderr).trim();
+  cleanResult = cleanResult.replace(/^>\s*build\s*·\s*[^\n\r]+\r?\n+/i, '').trim();
+  return { result: cleanResult, model: model || config.opencodeModel || null };
 }
 
 export async function install() {

@@ -4,6 +4,7 @@ import {
   Sparkles,
   Bot,
   Wand2,
+  Loader2,
   Workflow,
   ArrowLeft,
   ArrowRight,
@@ -344,14 +345,22 @@ export function CreateProcessModal({
   };
 
 
-  const handleExpandPromptWithAI = () => {
+  const handleExpandPromptWithAI = async () => {
+    if (isExpandingPrompt) return;
     setIsExpandingPrompt(true);
-    setTimeout(() => {
-      const current = prompt.trim() || 'Review codebase, perform security audit, and build production deliverables.';
-      const expanded = `Objective: ${current}\n\nDetailed Agent Execution Scope:\n1. Architecture & Setup: Analyze project dependencies, define strict TypeScript interfaces, and configure database models.\n2. Core Implementation: Build modular full-stack components, REST API endpoints, and validation schemas.\n3. Testing & Quality Assurance: Execute unit test suites, regression checks, and error log reviews.\n4. Security & Deployment: Run OWASP Top 10 security audits, secret validation, and Vercel/Cloud build verification.`;
-      setPrompt(expanded);
+    try {
+      const res = await api.processes.expandPrompt({
+        prompt: prompt.trim(),
+        model: selectedModel === 'auto' ? undefined : selectedModel,
+      });
+      if (res?.expandedPrompt) {
+        setPrompt(res.expandedPrompt);
+      }
+    } catch (err) {
+      console.error('Failed to expand prompt with AI:', err);
+    } finally {
       setIsExpandingPrompt(false);
-    }, 400);
+    }
   };
 
   const handleAddApiEndpoint = () => {
@@ -784,10 +793,15 @@ export function CreateProcessModal({
                   type="button"
                   onClick={handleExpandPromptWithAI}
                   disabled={isExpandingPrompt}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-0.5 text-2xs font-bold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-1 text-2xs font-semibold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
+                  title="Enhance objective using default configured AI model"
                 >
-                  <Wand2 size={11} className={isExpandingPrompt ? 'animate-spin' : ''} />
-                  <span>{isExpandingPrompt ? 'Expanding Prompt…' : '✨ Expand Prompt with AI'}</span>
+                  {isExpandingPrompt ? (
+                    <Loader2 size={12} className="animate-spin text-brand-600 dark:text-brand-400 shrink-0" />
+                  ) : (
+                    <Sparkles size={12} className="text-amber-500 shrink-0" />
+                  )}
+                  <span>{isExpandingPrompt ? 'Enhancing with AI…' : 'Expand Prompt with AI'}</span>
                 </button>
               </div>
               <textarea
