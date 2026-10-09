@@ -40,7 +40,7 @@ import { CustomSelect } from '../ui/CustomSelect';
 import { useProcessStore } from '../../stores/process-store';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
-import type { Process, ProcessPlan } from '../../types';
+import type { Process, ProcessPlan, SoulTemplate } from '../../types';
 
 export type WizardStep = 'prompt' | 'curl' | 'github' | 'review';
 
@@ -176,6 +176,8 @@ export function CreateProcessModal({
   const [planning, setPlanning] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string>();
+  const [soulTemplates, setSoulTemplates] = useState<SoulTemplate[]>([]);
+  const [editingAgentSoul, setEditingAgentSoul] = useState<{ agentName: string; soulMd: string; templateId?: string } | null>(null);
 
   useEffect(() => {
     api.llmProviders.availableModels()
@@ -183,7 +185,27 @@ export function CreateProcessModal({
         if (res?.models?.length) setAvailableModels(res.models);
       })
       .catch(() => {});
+    api.soulTemplates.list().then(setSoulTemplates).catch(() => {});
   }, []);
+
+  const handleAssignSoul = (agentName: string, templateId: string) => {
+    if (!plan) return;
+    const tmpl = soulTemplates.find((t) => t.id === templateId);
+    setPlan({
+      ...plan,
+      agents: plan.agents.map((ag) => {
+        if (ag.name === agentName) {
+          return {
+            ...ag,
+            soulTemplateId: templateId || null,
+            soulTemplateName: tmpl ? tmpl.name : 'Custom Soul',
+            soulMd: tmpl ? tmpl.content : ag.soulMd,
+          };
+        }
+        return ag;
+      }),
+    });
+  };
 
   const modelOptions = useMemo(() => {
     const options: Array<{ value: string; label: string; badge?: string }> = [
@@ -502,7 +524,28 @@ export function CreateProcessModal({
         agentCount === 'auto' ? undefined : Number(agentCount),
         selectedModel === 'auto' ? undefined : selectedModel,
       );
-      setPlan(result);
+      const enrichedAgents = (result.agents || []).map((ag) => {
+        if (ag.soulTemplateId) return ag;
+        const text = `${ag.displayName} ${ag.role || ''} ${ag.description || ''}`.toLowerCase();
+        const matched = soulTemplates.find((s) => {
+          const sName = s.name.toLowerCase();
+          if (sName.includes('engineer') && (text.includes('engineer') || text.includes('developer') || text.includes('code'))) return true;
+          if (sName.includes('devops') && (text.includes('devops') || text.includes('infra') || text.includes('deploy'))) return true;
+          if (sName.includes('reviewer') && (text.includes('review') || text.includes('audit') || text.includes('qa'))) return true;
+          if (sName.includes('manager') && (text.includes('plan') || text.includes('manager') || text.includes('lead'))) return true;
+          if (sName.includes('data') && (text.includes('data') || text.includes('sql') || text.includes('metric'))) return true;
+          if (sName.includes('security') && (text.includes('security') || text.includes('auth'))) return true;
+          return false;
+        }) || soulTemplates[0];
+
+        return {
+          ...ag,
+          soulTemplateId: matched?.id || null,
+          soulTemplateName: matched?.name || null,
+          soulMd: (matched && (!ag.soulMd || ag.soulMd.length < 50)) ? matched.content : ag.soulMd,
+        };
+      });
+      setPlan({ ...result, agents: enrichedAgents });
       setStep('review');
     } catch (err) {
       setError((err as Error).message || 'Could not plan this production block.');
@@ -1463,11 +1506,40 @@ export function CreateProcessModal({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                       {stageAgents.map((ag) => (
-                        <div key={ag.name} className="flex items-center gap-2.5 rounded-xl border border-line bg-surface p-2.5 shadow-2xs">
-                          <Avatar name={ag.name} emoji={ag.avatar} size="sm" />
-                          <div className="min-w-0 flex-1">
-                            <span className="block text-xs font-bold text-ink truncate">{ag.name}</span>
-                            <span className="block text-2xs text-brand-600 dark:text-brand-400 font-semibold truncate">{ag.role}</span>
+                        <div key={ag.name} className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-3 shadow-2xs">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar name={ag.name} emoji={ag.avatar} size="sm" />
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-xs font-bold text-ink truncate">{ag.name}</span>
+                              <span className="block text-2xs text-brand-600 dark:text-brand-400 font-semibold truncate">{ag.role}</span>
+                            </div>
+                          </div>
+
+                          {/* Soul Library Integration */}
+                          <div className="flex items-center gap-2 pt-1.5 border-t border-line-subtle">
+                            <span className="text-[10px] font-bold text-ink-muted shrink-0 flex items-center gap-1">
+                              <Sparkles size={11} className="text-brand-500" />
+                              Soul:
+                            </span>
+                            <select
+                              value={ag.soulTemplateId || ''}
+                              onChange={(e) => handleAssignSoul(ag.name, e.target.value)}
+                              className="text-[11px] font-medium bg-inset border border-line rounded-lg px-2 py-1 text-ink flex-1 truncate outline-none focus:border-brand-500 cursor-pointer"
+                            >
+                              <option value="">Custom Soul Prompt</option>
+                              {soulTemplates.map((st) => (
+                                <option key={st.id} value={st.id}>
+                                  {st.name} ({st.category})
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => setEditingAgentSoul({ agentName: ag.name, soulMd: ag.soulMd, templateId: ag.soulTemplateId || undefined })}
+                              className="text-[10px] text-brand-600 dark:text-brand-400 hover:underline font-semibold shrink-0 cursor-pointer"
+                            >
+                              Edit
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -1479,6 +1551,50 @@ export function CreateProcessModal({
           </div>
         )}
       </div>
+
+      {editingAgentSoul && (
+        <Modal
+          open={true}
+          onClose={() => setEditingAgentSoul(null)}
+          title={`Customize SOUL: ${editingAgentSoul.agentName}`}
+        >
+          <div className="space-y-3">
+            <p className="text-xs text-ink-muted">
+              Define the personality, role responsibilities, and constraints from the Soul Library.
+            </p>
+            <textarea
+              value={editingAgentSoul.soulMd}
+              onChange={(e) => setEditingAgentSoul({ ...editingAgentSoul, soulMd: e.target.value })}
+              rows={12}
+              className="w-full p-3 font-mono text-xs rounded-xl bg-inset border border-line text-ink resize-y focus:outline-none focus:border-brand-500"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" size="sm" onClick={() => setEditingAgentSoul(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  if (plan) {
+                    setPlan({
+                      ...plan,
+                      agents: plan.agents.map((a) =>
+                        a.name === editingAgentSoul.agentName
+                          ? { ...a, soulMd: editingAgentSoul.soulMd }
+                          : a
+                      ),
+                    });
+                  }
+                  setEditingAgentSoul(null);
+                }}
+              >
+                Save Soul Instructions
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Modal>
   );
 }

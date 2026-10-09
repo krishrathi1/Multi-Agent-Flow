@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Bot, Sparkles, Plus, Trash2, Check, X, Shield, RefreshCw, Cpu, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Bot, Sparkles, Plus, Trash2, Check, X, Shield, RefreshCw, Cpu, ChevronDown, ExternalLink } from 'lucide-react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button, ButtonLink } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -1406,8 +1406,13 @@ export function AgentCreate() {
               </p>
               {/* Soul Template Picker */}
               <div className="mb-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-ink-muted">Start from Soul Library</span>
+                  <Link to="/soul-templates" target="_blank" className="text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1">
+                    Browse Soul Library <ExternalLink size={10} />
+                  </Link>
+                </div>
                 <CustomSelect
-                  label="Start from Template (optional)"
                   value={selectedTemplateId}
                   onChange={(val) => handleTemplateSelect(val)}
                   placeholder="Blank — start from scratch"

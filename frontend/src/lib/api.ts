@@ -249,6 +249,18 @@ export const api = {
       }),
     remove: (id: string, deleteAgents = false) =>
       request<void>(`/processes/${id}?deleteAgents=${deleteAgents}`, { method: 'DELETE' }),
+    mcpServers: (id: string) => request<any[]>(`/processes/${id}/mcp-servers`),
+    addMcpServer: (id: string, data: { name: string; url: string; transport?: string; existingServerId?: string }) =>
+      request<any>(`/processes/${id}/mcp-servers`, { method: 'POST', body: JSON.stringify(data) }),
+    updateMcpServer: (id: string, serverId: string, data: { name?: string; url?: string; transport?: string; enabled?: boolean }) =>
+      request<any>(`/processes/${id}/mcp-servers/${serverId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteMcpServer: (id: string, serverId: string) =>
+      request<void>(`/processes/${id}/mcp-servers/${serverId}`, { method: 'DELETE' }),
+    gateways: (id: string) => request<any[]>(`/processes/${id}/gateways`),
+    addGateway: (id: string, data: { gatewayId?: string; name?: string; url?: string; token?: string; workspaceRoot?: string }) =>
+      request<any>(`/processes/${id}/gateways`, { method: 'POST', body: JSON.stringify(data) }),
+    deleteGateway: (id: string, gatewayId: string) =>
+      request<void>(`/processes/${id}/gateways/${gatewayId}`, { method: 'DELETE' }),
     testApi: (data: { url: string; method?: string; headers?: Record<string, string>; body?: string; apiKey?: string }) =>
       request<{ ok: boolean; status: number; statusText: string; latencyMs: number; snippet?: string }>('/processes/test-api', {
         method: 'POST',
@@ -375,6 +387,8 @@ export const api = {
       request('/mcp', { method: 'POST', body: JSON.stringify(data) }),
     orgRefresh: (serverId: string) =>
       request(`/mcp/${serverId}/refresh`, { method: 'POST' }),
+    refresh: (serverId: string) =>
+      request<any[]>(`/mcp/${serverId}/refresh`, { method: 'POST' }),
     orgUpdate: (serverId: string, data: Record<string, unknown>) =>
       request(`/mcp/${serverId}`, { method: 'PATCH', body: JSON.stringify(data) }),
     orgRemove: (serverId: string) =>
@@ -454,24 +468,40 @@ export const api = {
     },
   },
   tokens: {
-    usage: (params?: { agentId?: string; hours?: number }) => {
+    usage: (params?: { agentId?: string; hours?: number; processId?: string; model?: string }) => {
       const query = new URLSearchParams();
       if (params?.agentId) query.set('agentId', params.agentId);
       if (params?.hours) query.set('hours', String(params.hours));
+      if (params?.processId) query.set('processId', params.processId);
+      if (params?.model) query.set('model', params.model);
       const qs = query.toString();
       return request<TokenUsage[]>(`/tokens${qs ? `?${qs}` : ''}`);
     },
-    summary: () => request<{ totalTokens: number; totalCost: number; byAgent: Array<{ agentId: string; agentName: string; displayName: string; avatar: string; totalTokens: number; totalCost: number }> }>('/tokens/summary'),
+    summary: (params?: { processId?: string; model?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.processId) query.set('processId', params.processId);
+      if (params?.model) query.set('model', params.model);
+      const qs = query.toString();
+      return request<{ totalTokens: number; totalCost: number; byAgent: Array<{ agentId: string; agentName: string; displayName: string; avatar: string; totalTokens: number; totalCost: number }> }>(`/tokens/summary${qs ? `?${qs}` : ''}`);
+    },
   },
   metrics: {
-    list: (params?: { agentId?: string; limit?: number }) => {
+    list: (params?: { agentId?: string; limit?: number; processId?: string; model?: string }) => {
       const query = new URLSearchParams();
       if (params?.agentId) query.set('agentId', params.agentId);
       if (params?.limit) query.set('limit', String(params.limit));
+      if (params?.processId) query.set('processId', params.processId);
+      if (params?.model) query.set('model', params.model);
       const qs = query.toString();
       return request<MetricSnapshot[]>(`/metrics${qs ? `?${qs}` : ''}`);
     },
-    summary: () => request<{ byAgent: Array<{ agentId: string; agentName: string; displayName: string; avatar: string; avgResponseTime: number; p95ResponseTime: number; successRate: number; totalCalls: number }> }>('/metrics/summary'),
+    summary: (params?: { processId?: string; model?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.processId) query.set('processId', params.processId);
+      if (params?.model) query.set('model', params.model);
+      const qs = query.toString();
+      return request<{ byAgent: Array<{ agentId: string; agentName: string; displayName: string; avatar: string; avgResponseTime: number; p95ResponseTime: number; successRate: number; totalCalls: number }> }>(`/metrics/summary${qs ? `?${qs}` : ''}`);
+    },
   },
   alerts: {
     rules: () => request<AlertRule[]>('/alerts/rules'),

@@ -270,9 +270,18 @@ export async function getDashboardMetrics(
   };
 }
 
-export async function getTokenUsage(organizationId: string, params?: { agentId?: string; hours?: number }) {
+export async function getTokenUsage(
+  organizationId: string,
+  params?: { agentId?: string; hours?: number; processId?: string; model?: string },
+) {
   const where: Record<string, unknown> = { organizationId };
   if (params?.agentId) where.agentId = params.agentId;
+  if (params?.model) {
+    where.model = { contains: params.model, mode: 'insensitive' };
+  }
+  if (params?.processId) {
+    where.agent = { processId: params.processId };
+  }
   if (params?.hours) {
     where.createdAt = { gte: new Date(Date.now() - params.hours * 60 * 60 * 1000) };
   }
@@ -284,9 +293,20 @@ export async function getTokenUsage(organizationId: string, params?: { agentId?:
   });
 }
 
-export async function getTokenSummary(organizationId: string) {
+export async function getTokenSummary(
+  organizationId: string,
+  params?: { processId?: string; model?: string },
+) {
+  const where: Record<string, unknown> = { organizationId };
+  if (params?.model) {
+    where.model = { contains: params.model, mode: 'insensitive' };
+  }
+  if (params?.processId) {
+    where.agent = { processId: params.processId };
+  }
+
   const usages = await prisma.tokenUsage.findMany({
-    where: { organizationId },
+    where,
     include: { agent: { select: { id: true, name: true, displayName: true, avatar: true } } },
   });
 
@@ -326,9 +346,15 @@ export async function getTokenSummary(organizationId: string) {
   };
 }
 
-export async function getMetrics(organizationId: string, params?: { agentId?: string; limit?: number }) {
+export async function getMetrics(
+  organizationId: string,
+  params?: { agentId?: string; limit?: number; processId?: string; model?: string },
+) {
   const where: Record<string, unknown> = { organizationId };
   if (params?.agentId) where.agentId = params.agentId;
+  if (params?.processId) {
+    where.agent = { processId: params.processId };
+  }
 
   return prisma.metricSnapshot.findMany({
     where,
@@ -338,9 +364,17 @@ export async function getMetrics(organizationId: string, params?: { agentId?: st
   });
 }
 
-export async function getMetricsSummary(organizationId: string) {
+export async function getMetricsSummary(
+  organizationId: string,
+  params?: { processId?: string; model?: string },
+) {
+  const where: Record<string, unknown> = { organizationId };
+  if (params?.processId) {
+    where.agent = { processId: params.processId };
+  }
+
   const metrics = await prisma.metricSnapshot.findMany({
-    where: { organizationId },
+    where,
     include: { agent: { select: { id: true, name: true, displayName: true, avatar: true } } },
   });
 

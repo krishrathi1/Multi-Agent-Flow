@@ -22,7 +22,6 @@ import {
   Bot,
   Activity,
   RefreshCw,
-  Plus,
   Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -152,7 +151,6 @@ export function Approvals() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
-  const [creatingTest, setCreatingTest] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ApprovalStatus | 'ALL'>('ALL');
   const [boardFilter, setBoardFilter] = useState<string>('ALL');
   const [searchParams] = useSearchParams();
@@ -266,34 +264,6 @@ export function Approvals() {
     }
   };
 
-  const handleCreateTestApproval = async () => {
-    try {
-      setCreatingTest(true);
-      let targetBoardId = boards[0]?.id;
-      if (!targetBoardId) {
-        const createdBoard = await api.boards.create({ name: 'Production Operations' });
-        targetBoardId = createdBoard.id;
-      }
-      await api.approvals.create({
-        boardId: targetBoardId,
-        actionType: 'DEPLOY_CODE_RELEASE',
-        confidence: 0.94,
-        payload: {
-          release: 'v1.4.2-production',
-          trigger: 'Autonomous Multi-Agent CI/CD Chain',
-          environment: 'production',
-          automatedChecksPassed: 18,
-          requiresHumanSignOff: true,
-        },
-      });
-      await fetchData(false);
-    } catch (err) {
-      console.error('Failed to create test approval:', err);
-    } finally {
-      setCreatingTest(false);
-    }
-  };
-
   const statusOptions = [
     { value: 'ALL' as const, label: 'All Statuses', count: stats?.total },
     { value: 'PENDING' as const, label: 'Pending Review', count: stats?.pending },
@@ -326,15 +296,6 @@ export function Approvals() {
               aria-label="Refresh approvals"
             >
               Refresh
-            </Button>
-            <Button
-              variant="primary"
-              size="xs"
-              icon={Plus}
-              loading={creatingTest}
-              onClick={handleCreateTestApproval}
-            >
-              Simulate Request
             </Button>
             {approvals.length > 0 && (
               <Button
@@ -459,15 +420,13 @@ export function Approvals() {
               : 'All autonomous agent actions have been resolved. Approvals will appear here when agents or Incident Doctor request human sign-off.'}
           </p>
           <div className="flex items-center justify-center gap-2.5">
-            <Button
-              variant="primary"
-              size="sm"
-              icon={Plus}
-              loading={creatingTest}
-              onClick={handleCreateTestApproval}
+            <Link
+              to="/processes"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-line bg-brand-600 text-xs font-semibold text-white hover:bg-brand-500 transition-colors shadow-2xs"
             >
-              Generate Sample Request
-            </Button>
+              <Layers size={13} />
+              Production Fleet
+            </Link>
             <Link
               to="/alerts"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-line bg-inset text-xs font-semibold text-ink hover:text-ink-strong hover:bg-hover transition-colors"

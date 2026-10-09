@@ -141,8 +141,8 @@ export async function listWorkspaces(organizationId?: string): Promise<Workspace
   try {
     const entries = await readdir(root, { withFileTypes: true });
 
-    // Optionally lookup processes from Prisma to enrich repository data
-    let dbProcesses: Map<string, { name: string; summary: string | null; status: string }> = new Map();
+    // Lookup processes from Prisma for the organization
+    const dbProcesses: Map<string, { name: string; summary: string | null; status: string }> = new Map();
     try {
       const procs = await prisma.process.findMany({
         where: organizationId ? { organizationId } : undefined,
@@ -155,8 +155,17 @@ export async function listWorkspaces(organizationId?: string): Promise<Workspace
       // Prisma query fallback if table or DB not accessible
     }
 
+    if (organizationId && dbProcesses.size === 0) {
+      return [];
+    }
+
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+
+      // Only include workspaces that belong to real processes in this organization
+      if (organizationId && !dbProcesses.has(entry.name)) {
+        continue;
+      }
 
       const wsDir = join(root, entry.name);
       let rawName = entry.name;

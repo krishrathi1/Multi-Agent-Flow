@@ -199,21 +199,19 @@ export function Alerts() {
     };
   }, [fetchData]);
 
-  const handleRunInvestigation = async (scenario?: 'LATENCY_SPIKE' | 'DB_POOL_EXHAUSTION' | 'K8S_CRASHLOOP' | 'BAD_CONFIG_ROLLOUT') => {
+  const handleRunInvestigation = async (symptomOverride?: string) => {
     try {
       setInvestigating(true);
-      setInvestigationStep('1/4 Fetching Prometheus Telemetry & Metrics...');
-      await new Promise((r) => setTimeout(r, 400));
-      setInvestigationStep('2/4 Scanning Loki Logs & Stacktrace Anomalies...');
-      await new Promise((r) => setTimeout(r, 400));
-      setInvestigationStep('3/4 Inspecting Kubernetes Pods & Cluster Events...');
-      await new Promise((r) => setTimeout(r, 400));
-      setInvestigationStep('4/4 Correlating Recent Git Diffs & CI/CD Pipelines...');
+      setInvestigationStep('1/3 Inspecting Active Process Telemetry & Agent Health...');
+      await new Promise((r) => setTimeout(r, 350));
+      setInvestigationStep('2/3 Checking Error Logs & Pipeline State...');
+      await new Promise((r) => setTimeout(r, 350));
+      setInvestigationStep('3/3 Correlating Fleet Events & Incident History...');
       
+      const symptom = symptomOverride || incidentSymptom;
       const res = await api.incidents.investigate({
-        alertTitle: incidentSymptom || 'Autonomous Incident Triage',
-        symptom: incidentSymptom,
-        scenario: scenario || 'LATENCY_SPIKE',
+        alertTitle: symptom || 'Fleet Health Diagnostics',
+        symptom: symptom,
       });
       setActiveInvestigation(res);
       setIncidentSymptom('');
@@ -451,43 +449,16 @@ export function Alerts() {
             </div>
           </div>
 
-          {/* Quick Scenario Simulators */}
-          <div className="flex flex-wrap items-center gap-1.5 self-start md:self-auto">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted mr-1 flex items-center gap-1">
-              <Zap size={12} className="text-amber-500" />
-              Simulate:
-            </span>
+          {/* Fleet Telemetry Actions */}
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
             <Button
               size="xs"
               variant="secondary"
+              icon={Activity}
               loading={investigating}
-              onClick={() => handleRunInvestigation('LATENCY_SPIKE')}
+              onClick={() => handleRunInvestigation()}
             >
-              Latency Spike (8s)
-            </Button>
-            <Button
-              size="xs"
-              variant="secondary"
-              loading={investigating}
-              onClick={() => handleRunInvestigation('DB_POOL_EXHAUSTION')}
-            >
-              DB Pool Timeout
-            </Button>
-            <Button
-              size="xs"
-              variant="secondary"
-              loading={investigating}
-              onClick={() => handleRunInvestigation('K8S_CRASHLOOP')}
-            >
-              K8s OOMKilled
-            </Button>
-            <Button
-              size="xs"
-              variant="secondary"
-              loading={investigating}
-              onClick={() => handleRunInvestigation('BAD_CONFIG_ROLLOUT')}
-            >
-              Bad Config Secret
+              Scan Project Fleet Status
             </Button>
           </div>
         </div>

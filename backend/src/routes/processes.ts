@@ -545,4 +545,166 @@ router.post('/:id/ask-ai-fix', async (req, res) => {
   }
 });
 
+// ─── Process MCP & Gateway Integrations ──────────────────
+
+/** GET /api/processes/:id/mcp-servers — list MCP servers connected to this process */
+router.get('/:id/mcp-servers', async (req, res) => {
+  const id = paramId(req.params.id);
+  const proc = await processService.getProcessById(id, req.organizationId!);
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+  const servers = await prisma.mcpServer.findMany({
+    where: { agent: { processId: id } },
+    include: { tools: true, agent: { select: { id: true, name: true, displayName: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json(servers);
+});
+
+/** POST /api/processes/:id/mcp-servers — connect an MCP server to this process */
+router.post('/:id/mcp-servers', async (req, res) => {
+  const id = paramId(req.params.id);
+  const proc = await processService.getProcessById(id, req.organizationId!);
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+
+  const primaryAgent = proc.agents[0];
+  if (!primaryAgent) return res.status(400).json({ error: 'Process has no agents' });
+
+  const { name, url, transport, existingServerId } = req.body;
+  if (existingServerId) {
+    const existing = await prisma.mcpServer.findFirst({
+      where: { id: existingServerId, agent: { organizationId: req.organizationId! } },
+      include: { tools: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Existing MCP server not found' });
+    const linked = await prisma.mcpServer.create({
+      data: {
+        agentId: primaryAgent.id,
+        name: existing.name,
+        url: existing.url,
+        transport: existing.transport,
+        enabled: true,
+        tools: {
+          create: existing.tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.inputSchema as any,
+          })),
+        },
+      },
+      include: { tools: true, agent: { select: { id: true, name: true, displayName: true } } },
+    });
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:created', linked);
+    return res.status(201).json(linked);
+  }
+
+  const server = await prisma.mcpServer.create({
+    data: {
+      agentId: primaryAgent.id,
+      name,
+      url,
+      transport: transport || 'SSE',
+      enabled: true,
+    },
+    include: { tools: true, agent: { select: { id: true, name: true, displayName: true } } },
+  });
+
+  try {
+    const { refreshMcpTools } = await import('../services/mcp.service.js');
+    await refreshMcpTools(server.id, primaryAgent.id);
+  } catch { /* ignore connection error at create time */ }
+
+  const refreshed = await prisma.mcpServer.findUnique({
+    where: { id: server.id },
+    include: { tools: true, agent: { select: { id: true, name: true, displayName: true } } },
+  });
+
+  req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:created', refreshed);
+  res.status(201).json(refreshed);
+});
+
+/** PATCH /api/processes/:id/mcp-servers/:serverId — update MCP server */
+router.patch('/:id/mcp-servers/:serverId', async (req, res) => {
+  const serverId = req.params.serverId;
+  const { name, url, transport, enabled } = req.body;
+  const server = await prisma.mcpServer.update({
+    where: { id: serverId },
+    data: {
+      ...(name && { name }),
+      ...(url && { url }),
+      ...(transport && { transport }),
+      ...(enabled !== undefined && { enabled }),
+    },
+    include: { tools: true, agent: { select: { id: true, name: true, displayName: true } } },
+  });
+  req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:updated', server);
+  res.json(server);
+});
+
+/** DELETE /api/processes/:id/mcp-servers/:serverId — delete or unlink MCP server */
+router.delete('/:id/mcp-servers/:serverId', async (req, res) => {
+  const serverId = req.params.serverId;
+  await prisma.mcpServer.delete({ where: { id: serverId } });
+  req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:deleted', { id: serverId });
+  res.status(204).end();
+});
+
+/** GET /api/processes/:id/gateways — list gateways connected to this process */
+router.get('/:id/gateways', async (req, res) => {
+  const id = paramId(req.params.id);
+  const proc = await processService.getProcessById(id, req.organizationId!);
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+  const gatewayIds = [...new Set(proc.agents.map((a) => a.gatewayId).filter(Boolean))] as string[];
+  const gateways = await prisma.gateway.findMany({
+    where: { id: { in: gatewayIds }, organizationId: req.organizationId! },
+    select: { id: true, name: true, url: true, status: true, workspaceRoot: true, lastCheckedAt: true, createdAt: true },
+  });
+  res.json(gateways);
+});
+
+/** POST /api/processes/:id/gateways — connect a gateway to this process */
+router.post('/:id/gateways', async (req, res) => {
+  const id = paramId(req.params.id);
+  const proc = await processService.getProcessById(id, req.organizationId!);
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+  const { gatewayId, name, url, token, workspaceRoot } = req.body;
+  let targetGatewayId = gatewayId;
+  if (!targetGatewayId && name && url) {
+    const createdGw = await prisma.gateway.create({
+      data: {
+        organizationId: req.organizationId!,
+        name,
+        url,
+        token: token || 'default',
+        workspaceRoot: workspaceRoot || '',
+        status: 'ONLINE',
+      },
+    });
+    targetGatewayId = createdGw.id;
+  }
+  if (!targetGatewayId) return res.status(400).json({ error: 'Gateway ID or configuration is required' });
+
+  await prisma.agent.updateMany({
+    where: { processId: id },
+    data: { gatewayId: targetGatewayId },
+  });
+  const gateway = await prisma.gateway.findUnique({
+    where: { id: targetGatewayId },
+    select: { id: true, name: true, url: true, status: true, workspaceRoot: true, lastCheckedAt: true },
+  });
+  req.app.get('io')?.to(`org:${req.organizationId}`).emit('process:updated', { id, gatewayId: targetGatewayId });
+  res.status(201).json(gateway);
+});
+
+/** DELETE /api/processes/:id/gateways/:gatewayId — unlink gateway from this process */
+router.delete('/:id/gateways/:gatewayId', async (req, res) => {
+  const id = paramId(req.params.id);
+  const gatewayId = req.params.gatewayId;
+  await prisma.agent.updateMany({
+    where: { processId: id, gatewayId },
+    data: { gatewayId: null },
+  });
+  req.app.get('io')?.to(`org:${req.organizationId}`).emit('process:updated', { id });
+  res.status(204).end();
+});
+
 export default router;

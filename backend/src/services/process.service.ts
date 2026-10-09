@@ -206,8 +206,38 @@ async function createProcessOnce(
     });
 
     const orgSkills = await tx.marketplaceSkill.findMany({ where: { organizationId } });
+    const orgSouls = await tx.soulTemplate.findMany({ where: { organizationId } });
 
     for (const [i, spec] of plan.agents.entries()) {
+      let soulTemplateId = (spec as any).soulTemplateId || null;
+      let finalSoulMd = spec.soulMd;
+
+      if (soulTemplateId) {
+        const foundSoul = orgSouls.find((s) => s.id === soulTemplateId);
+        if (foundSoul && (!finalSoulMd || finalSoulMd.length < 50)) {
+          finalSoulMd = foundSoul.content;
+        }
+      } else if (orgSouls.length > 0) {
+        const text = `${spec.displayName} ${spec.role || ''} ${spec.description || ''}`.toLowerCase();
+        const matchedSoul = orgSouls.find((s) => {
+          const sName = s.name.toLowerCase();
+          if (sName.includes('engineer') && (text.includes('engineer') || text.includes('developer') || text.includes('coder') || text.includes('build'))) return true;
+          if (sName.includes('devops') && (text.includes('devops') || text.includes('infra') || text.includes('deploy') || text.includes('ops'))) return true;
+          if (sName.includes('reviewer') && (text.includes('review') || text.includes('audit') || text.includes('qa') || text.includes('test'))) return true;
+          if (sName.includes('manager') && (text.includes('plan') || text.includes('manager') || text.includes('lead') || text.includes('coordinat'))) return true;
+          if (sName.includes('security') && (text.includes('security') || text.includes('auth') || text.includes('vulnerab'))) return true;
+          if (sName.includes('data') && (text.includes('data') || text.includes('sql') || text.includes('metric') || text.includes('analytic'))) return true;
+          return false;
+        }) || orgSouls[0];
+
+        if (matchedSoul) {
+          soulTemplateId = matchedSoul.id;
+          if (!finalSoulMd || finalSoulMd.length < 50) {
+            finalSoulMd = matchedSoul.content;
+          }
+        }
+      }
+
       const createdAgent = await tx.agent.create({
         data: {
           organizationId,
@@ -215,7 +245,8 @@ async function createProcessOnce(
           displayName: spec.displayName,
           description: spec.description,
           workspace: `~/processes/${proc.id}/${resolvedNames[i]}/`,
-          soulMd: spec.soulMd,
+          soulMd: finalSoulMd,
+          soulTemplateId,
           avatar: spec.avatar,
           heartbeatInterval: spec.heartbeatInterval,
           gatewayId: input.gatewayId ?? null,

@@ -21,6 +21,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Cloud,
+  Cpu,
 } from 'lucide-react';
 import { cn, timeAgo } from '../lib/utils';
 import { tones } from '../lib/design';
@@ -32,6 +33,7 @@ import { ChainSettingsModal } from '../components/process/ChainSettingsModal';
 import { ProcessReportModal } from '../components/process/ProcessReportModal';
 import { EditProcessModal } from '../components/process/EditProcessModal';
 import { DeploymentLogsModal } from '../components/process/DeploymentLogsModal';
+import { ProcessMcpGatewaysModal } from '../components/process/ProcessMcpGatewaysModal';
 import { api } from '../lib/api';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button, ButtonLink } from '../components/ui/Button';
@@ -62,6 +64,7 @@ function ProcessCard({
   onLogs,
   onEdit,
   onSettings,
+  onMcpGateways,
   busy,
   hasSite,
 }: {
@@ -74,6 +77,7 @@ function ProcessCard({
   onLogs: (p: Process) => void;
   onEdit: (p: Process) => void;
   onSettings: (p: Process) => void;
+  onMcpGateways: (p: Process) => void;
   busy: boolean;
   hasSite: boolean;
 }) {
@@ -261,6 +265,17 @@ function ProcessCard({
             Cloud Logs
           </Button>
 
+          <Button
+            variant="secondary"
+            size="xs"
+            icon={Cpu}
+            onClick={() => onMcpGateways(process)}
+            className="text-cyan-600 dark:text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/10 shadow-2xs font-semibold"
+            aria-label={`Configure MCP tools & Gateways for ${process.name}`}
+          >
+            MCP & Gateways
+          </Button>
+
           <Link
             to={`/activity?processId=${process.id}`}
             className="inline-flex items-center gap-1 rounded-xl border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-ink-muted hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-500/30 transition-all shadow-2xs shrink-0"
@@ -332,6 +347,7 @@ export function Processes() {
   const [logsTarget, setLogsTarget] = useState<Process | null>(null);
   const [editTarget, setEditTarget] = useState<Process | null>(null);
   const [settingsTarget, setSettingsTarget] = useState<Process | null>(null);
+  const [mcpGwTarget, setMcpGwTarget] = useState<Process | null>(null);
   const [sites, setSites] = useState<Record<string, boolean>>({});
 
   const runControl = async (p: Process, action: 'start' | 'pause') => {
@@ -478,6 +494,7 @@ export function Processes() {
                 onLogs={setLogsTarget}
                 onEdit={setEditTarget}
                 onSettings={setSettingsTarget}
+                onMcpGateways={setMcpGwTarget}
                 hasSite={!!sites[p.id]}
               />
             ))}
@@ -486,6 +503,15 @@ export function Processes() {
       </div>
 
       <CreateProcessModal open={showCreate} onClose={() => setShowCreate(false)} />
+
+      {mcpGwTarget && (
+        <ProcessMcpGatewaysModal
+          process={mcpGwTarget}
+          isOpen={true}
+          onClose={() => setMcpGwTarget(null)}
+          onUpdated={fetchProcesses}
+        />
+      )}
 
       {settingsTarget && (
         <ChainSettingsModal

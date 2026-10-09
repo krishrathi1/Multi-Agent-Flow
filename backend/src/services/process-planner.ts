@@ -24,6 +24,8 @@ export interface PlannedAgent {
   /** 1-based pipeline position. Agents in the same stage run in parallel. */
   stage: number;
   soulMd: string;
+  soulTemplateId?: string | null;
+  soulTemplateName?: string | null;
   heartbeatInterval: number;
   avatar: string | null;
 }

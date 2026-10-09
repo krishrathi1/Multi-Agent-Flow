@@ -635,6 +635,8 @@ export interface PlannedAgent {
   description: string;
   stage: number;
   soulMd: string;
+  soulTemplateId?: string | null;
+  soulTemplateName?: string | null;
   heartbeatInterval: number;
   avatar: string | null;
 }

@@ -25,7 +25,7 @@ import { useUiStore } from '@/stores/ui-store';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { cn, timeAgo } from '@/lib/utils';
-import type { TokenUsage, MetricSnapshot, AgentInsight, RunStats } from '@/types';
+import type { TokenUsage, MetricSnapshot, AgentInsight, RunStats, Process } from '@/types';
 import { formatCompact, formatCurrency, formatMs } from '@/lib/design';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
@@ -73,13 +73,27 @@ export function Metrics() {
   const [socketConnected, setSocketConnected] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // Mobile filters & tabs
+  // Filters & tabs
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('24h');
   const [activeTab, setActiveTab] = useState<ViewTab>('spend');
   const [selectedUsage, setSelectedUsage] = useState<TokenUsage | null>(null);
+  const [selectedProcessId, setSelectedProcessId] = useState<string>('ALL');
+  const [selectedModel, setSelectedModel] = useState<string>('ALL');
+  const [processes, setProcesses] = useState<Process[]>([]);
 
   const resolvedTheme = useUiStore((s) => s.resolvedTheme);
   const isDark = resolvedTheme === 'dark';
+
+  const availableModels = useMemo(() => {
+    const set = new Set<string>();
+    tokens.forEach((t) => { if (t.model) set.add(t.model); });
+    ['gemini-2.5-pro', 'gemini-2.0-flash', 'claude-3-7-sonnet', 'gpt-4o', 'opencode'].forEach((m) => set.add(m));
+    return Array.from(set).filter(Boolean);
+  }, [tokens]);
+
+  useEffect(() => {
+    api.processes.list().then(setProcesses).catch(() => []);
+  }, []);
 
   const fetchData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -91,12 +105,14 @@ export function Metrics() {
         'all': undefined,
       };
       const hours = hoursMap[timeFilter];
+      const processId = selectedProcessId === 'ALL' ? undefined : selectedProcessId;
+      const model = selectedModel === 'ALL' ? undefined : selectedModel;
 
       const [tokList, metList, tokSum, metSum, insList, rStats] = await Promise.all([
-        api.tokens.usage({ hours }).catch(() => []),
-        api.metrics.list({ limit: 1000 }).catch(() => []),
-        api.tokens.summary().catch(() => null),
-        api.metrics.summary().catch(() => null),
+        api.tokens.usage({ hours, processId, model }).catch(() => []),
+        api.metrics.list({ limit: 1000, processId, model }).catch(() => []),
+        api.tokens.summary({ processId, model }).catch(() => null),
+        api.metrics.summary({ processId, model }).catch(() => null),
         api.orchestration.agentInsights().catch(() => []),
         api.orchestration.runStats().catch(() => null),
       ]);
@@ -114,7 +130,7 @@ export function Metrics() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [timeFilter]);
+  }, [timeFilter, selectedProcessId, selectedModel]);
 
   useEffect(() => {
     fetchData();
@@ -437,30 +453,70 @@ export function Metrics() {
         </div>
       </div>
 
-      {/* Date Range Selector Chips */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-        {(
-          [
-            { id: '24h', label: 'Today (24h)' },
-            { id: '7d', label: 'Last 7 Days' },
-            { id: '30d', label: 'Last 30 Days' },
-            { id: 'all', label: 'All Time' },
-          ] as const
-        ).map((chip) => (
-          <button
-            key={chip.id}
-            type="button"
-            onClick={() => setTimeFilter(chip.id)}
-            className={cn(
-              'shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs',
-              timeFilter === chip.id
-                ? 'bg-brand-600 text-white shadow-xs'
-                : 'border border-line bg-surface text-ink-muted hover:text-ink hover:bg-hover'
-            )}
-          >
-            {chip.label}
-          </button>
-        ))}
+      {/* Date Range Selector Chips and Project/Model Filters */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-0.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          {(
+            [
+              { id: '24h', label: 'Today (24h)' },
+              { id: '7d', label: 'Last 7 Days' },
+              { id: '30d', label: 'Last 30 Days' },
+              { id: 'all', label: 'All Time' },
+            ] as const
+          ).map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => setTimeFilter(chip.id)}
+              className={cn(
+                'shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                timeFilter === chip.id
+                  ? 'bg-brand-600 text-white shadow-xs'
+                  : 'border border-line bg-surface text-ink-muted hover:text-ink hover:bg-hover'
+              )}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Project / Production Filter */}
+          <div className="flex items-center gap-1.5 text-xs text-ink-muted bg-surface border border-line rounded-lg px-2.5 py-1 shadow-2xs">
+            <Layers size={13} className="text-brand-500 shrink-0" />
+            <span className="font-medium text-ink-faint hidden sm:inline">Project:</span>
+            <select
+              value={selectedProcessId}
+              onChange={(e) => setSelectedProcessId(e.target.value)}
+              className="bg-transparent border-none text-xs text-ink font-medium focus:outline-none cursor-pointer pr-1"
+            >
+              <option value="ALL">All Projects ({processes.length})</option>
+              {processes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Model Filter */}
+          <div className="flex items-center gap-1.5 text-xs text-ink-muted bg-surface border border-line rounded-lg px-2.5 py-1 shadow-2xs">
+            <Bot size={13} className="text-brand-500 shrink-0" />
+            <span className="font-medium text-ink-faint hidden sm:inline">Model:</span>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="bg-transparent border-none text-xs text-ink font-medium focus:outline-none cursor-pointer pr-1"
+            >
+              <option value="ALL">All Models</option>
+              {availableModels.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* 1. PRIMARY COST HERO CARD */}

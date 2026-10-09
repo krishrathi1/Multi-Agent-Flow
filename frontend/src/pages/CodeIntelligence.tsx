@@ -349,7 +349,7 @@ export function CodeIntelligence() {
                   Repository
                 </div>
                 <div className="font-bold text-ink truncate mt-0.5 max-w-[200px]">
-                  {loadingWorkspaces ? 'Loading…' : currentWorkspace ? currentWorkspace.name : 'No MyceliumOps Repos'}
+                  {loadingWorkspaces ? 'Loading…' : currentWorkspace ? currentWorkspace.name : 'No Project Repos'}
                 </div>
               </div>
               <ChevronDown className={cn('w-4 h-4 text-ink-muted transition-transform ml-1', dropdownOpen && 'rotate-180')} />
@@ -365,14 +365,14 @@ export function CodeIntelligence() {
                 <div className="px-3 py-2 border-b border-line-subtle mb-1">
                   <div className="flex items-center justify-between">
                     <span className="text-2xs font-bold uppercase tracking-wider text-ink-muted">
-                      MyceliumOps Repositories ({workspaces.length})
+                      Project Repositories ({workspaces.length})
                     </span>
                     <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 bg-brand-500/10 px-2 py-0.5 rounded-full">
                       Agent Generated
                     </span>
                   </div>
                   <p className="text-[11px] text-ink-faint mt-1">
-                    Exclusively indexing repositories engineered by MyceliumOps agents
+                    Exclusively indexing repositories engineered by project agents
                   </p>
                 </div>
 
@@ -446,23 +446,23 @@ export function CodeIntelligence() {
             <Box className="w-8 h-8" />
           </div>
           <div className="space-y-2">
-            <h2 className="text-xl font-bold text-ink">No MyceliumOps Repositories Found</h2>
+            <h2 className="text-xl font-bold text-ink">No Project Repositories Found</h2>
             <p className="text-sm text-ink-muted leading-relaxed max-w-lg mx-auto">
-              Code Intelligence is configured to strictly index and inspect repositories engineered by MyceliumOps multi-agent chains.
+              Code Intelligence is configured to strictly index and inspect repositories engineered by your project's autonomous agents.
             </p>
           </div>
           <div className="p-4 rounded-xl bg-inset border border-line-subtle text-xs text-ink-muted text-left space-y-1.5 max-w-md mx-auto">
             <div className="font-bold text-ink flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-brand-500" /> How to generate code with MyceliumOps:
+              <Sparkles className="w-3.5 h-3.5 text-brand-500" /> How repositories are generated:
             </div>
-            <p>1. Go to Mission Control or Mother Chat.</p>
-            <p>2. Launch a goal or production workflow (e.g. "Build full-stack dashboard").</p>
-            <p>3. Autonomous agents will engineer code in a dedicated workspace, which automatically appears here.</p>
+            <p>1. Go to Productions or Mission Control.</p>
+            <p>2. Deploy an autonomous process (e.g. "Build full-stack auth system").</p>
+            <p>3. The production agent fleet writes real code into a dedicated repository, which will automatically be indexed here.</p>
           </div>
           <div className="pt-2">
-            <Link to="/">
+            <Link to="/processes">
               <Button variant="primary" className="gap-2">
-                Launch Mission Control
+                Deploy Production Process
                 <ArrowUpRight className="w-4 h-4" />
               </Button>
             </Link>

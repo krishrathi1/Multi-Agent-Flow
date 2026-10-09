@@ -1535,6 +1535,17 @@ async function runStep(
         data: { status: isCancelled(processId) ? 'IDLE' : 'ERROR', currentTask: null },
       }),
     ]);
+    if (!isCancelled(processId)) {
+      try {
+        const { recordProductionAlert } = await import('./alert.service.js');
+        await recordProductionAlert({
+          organizationId,
+          agentId: agent.id,
+          message: `${agent.displayName} encountered execution error during stage ${agent.processStage}`,
+          severity: 'CRITICAL' as any,
+        });
+      } catch { /* ignore */ }
+    }
     emit('agent:updated', {
       id: agent.id,
       status: isCancelled(processId) ? 'IDLE' : 'ERROR',

@@ -91,17 +91,23 @@ async function syncLiveAlerts(organizationId: string) {
     where: { organizationId, enabled: true },
   });
 
-  const now = Date.now();
+  // Only check agents that belong to real processes in this organization
+  const activeProcesses = await prisma.process.findMany({
+    where: { organizationId, status: 'ACTIVE' },
+    select: { id: true, name: true },
+  });
+  const activeProcessIds = new Set(activeProcesses.map((p) => p.id));
+
   for (const agent of agents) {
-    // Check if agent status is OFFLINE
-    if (agent.status === 'OFFLINE') {
-      const offlineRule = allRules.find((r) => r.condition === 'AGENT_OFFLINE');
-      if (offlineRule) {
+    // Only alert if an agent is in an actual ERROR state from a production failure
+    if (agent.status === 'ERROR') {
+      const stepRule = allRules.find((r) => r.condition === 'STEP_FAILURE') || allRules[0];
+      if (stepRule) {
         const existing = await prisma.alertEvent.findFirst({
           where: {
             organizationId,
-            alertRuleId: offlineRule.id,
             message: { contains: agent.displayName },
+            acknowledged: false,
           },
           orderBy: { createdAt: 'desc' },
         });
@@ -109,8 +115,8 @@ async function syncLiveAlerts(organizationId: string) {
           await prisma.alertEvent.create({
             data: {
               organizationId,
-              alertRuleId: offlineRule.id,
-              message: `${agent.displayName} is currently offline and unreachable`,
+              alertRuleId: stepRule.id,
+              message: `${agent.displayName} failed execution in production process`,
               severity: Severity.CRITICAL,
               acknowledged: false,
             },
@@ -118,35 +124,55 @@ async function syncLiveAlerts(organizationId: string) {
         }
       }
     }
-
-    // Check if agent missed heartbeats (only if actively marked ONLINE)
-    const timeSinceUpdate = (now - new Date(agent.updatedAt).getTime()) / 60000;
-    const missedThreshold = (agent.heartbeatInterval || 30) * 2;
-    if (agent.status === 'ONLINE' && timeSinceUpdate > missedThreshold) {
-      const hbRule = allRules.find((r) => r.condition === 'HEARTBEAT_MISSED');
-      if (hbRule) {
-        const existing = await prisma.alertEvent.findFirst({
-          where: {
-            organizationId,
-            alertRuleId: hbRule.id,
-            message: { contains: agent.displayName },
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (!existing) {
-          await prisma.alertEvent.create({
-            data: {
-              organizationId,
-              alertRuleId: hbRule.id,
-              message: `${agent.displayName} missed heartbeat — last signal received ${Math.round(timeSinceUpdate)} minutes ago`,
-              severity: Severity.WARNING,
-              acknowledged: false,
-            },
-          });
-        }
-      }
-    }
   }
+}
+
+export async function recordProductionAlert(params: {
+  organizationId: string;
+  agentId?: string;
+  message: string;
+  severity: Severity;
+  io?: any;
+}) {
+  let rule = await prisma.alertRule.findFirst({
+    where: {
+      organizationId: params.organizationId,
+      condition: 'STEP_FAILURE',
+    },
+  });
+  if (!rule) {
+    rule = await prisma.alertRule.findFirst({
+      where: { organizationId: params.organizationId },
+    });
+  }
+  if (!rule) {
+    rule = await prisma.alertRule.create({
+      data: {
+        organizationId: params.organizationId,
+        name: 'Production Process Failure Guard',
+        description: 'Triggered when a production step execution fails or encounters a critical error',
+        condition: 'STEP_FAILURE',
+        threshold: 1,
+        windowMinutes: 5,
+      },
+    });
+  }
+  const event = await prisma.alertEvent.create({
+    data: {
+      organizationId: params.organizationId,
+      alertRuleId: rule.id,
+      message: params.message,
+      severity: params.severity,
+      acknowledged: false,
+    },
+    include: {
+      alertRule: {
+        select: { id: true, name: true, condition: true, agent: { select: { id: true, name: true, displayName: true, avatar: true } } },
+      },
+    },
+  });
+  params.io?.to(`org:${params.organizationId}`).emit('alert:event:created', event);
+  return event;
 }
 
 export async function getAlertRules(organizationId: string) {
