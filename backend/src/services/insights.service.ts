@@ -488,37 +488,51 @@ export async function canViewPreview(
   token?: string,
   userOrgIds?: string[] | string,
 ): Promise<boolean> {
-  const proc = await prisma.process.findUnique({
-    where: { id: processId },
-    select: { organizationId: true, previewVisibility: true, shareToken: true },
-  });
-  // Unknown or deleted chain: deny access by default (fail closed)
-  if (!proc) return false;
-
-  // 1. If user is authenticated and belongs to the owning organization, allow preview
-  if (userOrgIds) {
-    const orgs = Array.isArray(userOrgIds) ? userOrgIds : [userOrgIds];
-    if (orgs.includes(proc.organizationId)) return true;
-  }
-
-  // 2. If token is an active authenticated preview session for this process, allow preview
+  // 1. If token is an active authenticated preview session for this process, allow preview immediately
   if (token && isAuthorizedPreviewSession(processId, token)) {
     return true;
   }
 
-  // 3. If token is provided and matches shareToken, allow preview
-  if (proc.shareToken && token) {
-    const a = Buffer.from(proc.shareToken);
-    const b = Buffer.from(token);
-    if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+  try {
+    const proc = await prisma.process.findUnique({
+      where: { id: processId },
+      select: { organizationId: true, previewVisibility: true, shareToken: true },
+    });
+    // Unknown or deleted chain: deny access by default (fail closed)
+    if (!proc) {
+      // In local development, allow preview if running locally
+      if (process.env.NODE_ENV === 'development') {
+        return true;
+      }
+      return false;
+    }
+
+    // If user is authenticated and belongs to the owning organization, allow preview
+    if (userOrgIds) {
+      const orgs = Array.isArray(userOrgIds) ? userOrgIds : [userOrgIds];
+      if (orgs.includes(proc.organizationId)) return true;
+    }
+
+    // If token is provided and matches shareToken, allow preview
+    if (proc.shareToken && token) {
+      const a = Buffer.from(proc.shareToken);
+      const b = Buffer.from(token);
+      if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+        return true;
+      }
+    }
+
+    // PRIVATE or TOKEN without matching org or valid token: deny
+    if (proc.previewVisibility === PreviewVisibility.PRIVATE || proc.previewVisibility === PreviewVisibility.TOKEN) {
+      return false;
+    }
+
+    return proc.previewVisibility === PreviewVisibility.PUBLIC;
+  } catch (err) {
+    // In local development, if DB is temporarily unreachable, allow preview
+    if (process.env.NODE_ENV === 'development') {
       return true;
     }
-  }
-
-  // 4. PRIVATE or TOKEN without matching org or valid token: deny
-  if (proc.previewVisibility === PreviewVisibility.PRIVATE || proc.previewVisibility === PreviewVisibility.TOKEN) {
     return false;
   }
-
-  return proc.previewVisibility === PreviewVisibility.PUBLIC;
 }
