@@ -522,6 +522,11 @@ export async function canViewPreview(
       }
     }
 
+    // In local development or when private previews are explicitly allowed on local dev
+    if (process.env.ALLOW_PRIVATE_URLS === 'true' || process.env.NODE_ENV === 'development') {
+      return true;
+    }
+
     // PRIVATE or TOKEN without matching org or valid token: deny
     if (proc.previewVisibility === PreviewVisibility.PRIVATE || proc.previewVisibility === PreviewVisibility.TOKEN) {
       return false;
@@ -530,7 +535,7 @@ export async function canViewPreview(
     return proc.previewVisibility === PreviewVisibility.PUBLIC;
   } catch (err) {
     // In local development, if DB is temporarily unreachable, allow preview
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development' || process.env.ALLOW_PRIVATE_URLS === 'true') {
       return true;
     }
     return false;

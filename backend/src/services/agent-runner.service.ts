@@ -255,6 +255,295 @@ async function writeWorkspaceFile(workspace: string, relativePath: string, conte
 }
 
 /**
+ * Generates an interactive domain-specific Dashboard component based on the project's goal.
+ */
+function synthesizeDomainDashboard(goal: string, leadAgent: string, projectName: string): string {
+  const g = goal.toLowerCase();
+
+  // 1. System Monitoring, Telemetry & Health Metrics
+  if (g.includes('monitor') || g.includes('health') || g.includes('metric') || g.includes('telemetry') || g.includes('incident')) {
+    return `import React, { useState, useEffect } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Cpu,
+  Database,
+  HardDrive,
+  RefreshCw,
+  Server,
+  ShieldAlert,
+  Terminal,
+  Wifi,
+  Zap,
+  Sparkles,
+  Layers,
+} from 'lucide-react';
+
+export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal, leadAgent }) => {
+  const [activeTab, setActiveTab] = useState<'monitoring' | 'alerts' | 'telemetry' | 'api'>('monitoring');
+  const [metrics, setMetrics] = useState({
+    cpuLoad: 34.8,
+    cpuAvg: [1.42, 1.25, 0.98],
+    memUsedGB: 12.0,
+    memTotalGB: 16.0,
+    memPercent: 75.0,
+    diskFreeGB: 100,
+    diskTotalGB: 500,
+    diskPercent: 80.0,
+    netInMB: 24.6,
+    netOutMB: 8.4,
+    latencyMs: 28,
+  });
+
+  const [systemStatus, setSystemStatus] = useState<'HEALTHY' | 'DEGRADED' | 'CRITICAL'>('DEGRADED');
+  const [activeAlerts, setActiveAlerts] = useState<any[]>([
+    {
+      id: 'alert-1740700800000-mem-warn',
+      timestamp: 'Just now',
+      metric: 'memory.usagePercent',
+      severity: 'Warning',
+      message: 'Memory usage is elevated at 75.0%',
+      value: 75.0,
+      threshold: 80.0,
+      agent: 'QA Reporter Agent',
+    },
+  ]);
+
+  const [incidentLogs, setIncidentLogs] = useState<any[]>([
+    {
+      id: 'incident-1740223500000-482',
+      timestamp: '2 mins ago',
+      severity: 'Warning',
+      metric: 'memory.usagePercent',
+      message: 'Memory usage is elevated at 75%',
+      validatedBy: 'QA Reporter Agent',
+      actionTaken: 'Recorded in Health Dashboard & Anomaly Log',
+    },
+    {
+      id: 'incident-1740223100000-109',
+      timestamp: '8 mins ago',
+      severity: 'Info',
+      metric: 'cpu.loadAverage',
+      message: 'Spike normalized after thread pool rebalancing',
+      validatedBy: 'Metrics Collector',
+      actionTaken: 'Auto-resolved anomaly buffer',
+    },
+  ]);
+
+  const [consoleLogs, setConsoleLogs] = useState<string[]>([
+    '[INIT] Anomaly Detection Engine v2.4 initialized',
+    '[COLLECTOR] Metrics Collector listening on os/sys telemetry stream',
+    '[ANOMALY] Evaluated 4 rules · Alert raised on memory.usagePercent (75.0%)',
+    '[QA] QA Reporter Agent verified 1 incident · False positives: 0',
+  ]);
+
+  const [isScanning, setIsScanning] = useState(false);
+  const [commandInput, setCommandInput] = useState('');
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setMetrics((prev) => ({
+        ...prev,
+        cpuLoad: Math.max(12, Math.min(95, Number((prev.cpuLoad + (Math.random() - 0.5) * 3).toFixed(1)))),
+        netInMB: Math.max(5, Number((prev.netInMB + (Math.random() - 0.5) * 2).toFixed(1))),
+        latencyMs: Math.max(18, Math.min(65, Math.round(prev.latencyMs + (Math.random() - 0.5) * 4))),
+      }));
+    }, 2500);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleSimulateSpike = () => {
+    setIsScanning(true);
+    setMetrics((prev) => ({ ...prev, cpuLoad: 89.4, memPercent: 88.5, memUsedGB: 14.16, latencyMs: 78 }));
+    setSystemStatus('CRITICAL');
+    setActiveAlerts((prev) => [
+      {
+        id: \`alert-\${Date.now()}-spike\`,
+        timestamp: 'Just now',
+        metric: 'cpu.loadAverage',
+        severity: 'Critical',
+        message: 'High CPU load & Memory saturation (88.5% RAM, 89.4% CPU)',
+        value: 88.5,
+        threshold: 80.0,
+        agent: 'System Analyst',
+      },
+      ...prev,
+    ]);
+    setTimeout(() => setIsScanning(false), 800);
+  };
+
+  const handleAutoHeal = () => {
+    setIsScanning(true);
+    setMetrics({
+      cpuLoad: 24.2,
+      cpuAvg: [0.85, 0.95, 1.02],
+      memUsedGB: 7.8,
+      memTotalGB: 16.0,
+      memPercent: 48.7,
+      diskFreeGB: 100,
+      diskTotalGB: 500,
+      diskPercent: 80.0,
+      netInMB: 18.2,
+      netOutMB: 6.5,
+      latencyMs: 22,
+    });
+    setSystemStatus('HEALTHY');
+    setActiveAlerts([]);
+    setTimeout(() => setIsScanning(false), 800);
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap text-xs text-slate-400">
+              <span className="font-bold text-indigo-400 uppercase tracking-wider">Service Engine</span>
+              <span>·</span>
+              <span>Lead: <strong className="text-white">{leadAgent}</strong></span>
+            </div>
+            <h1 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">Real-Time System Monitoring Service</h1>
+            <p className="text-xs sm:text-sm text-slate-400 max-w-3xl">{goal}</p>
+          </div>
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950/80 border border-slate-800 shrink-0">
+            <div className={\`h-2.5 w-2.5 rounded-full animate-ping \${systemStatus === 'HEALTHY' ? 'bg-emerald-400' : systemStatus === 'DEGRADED' ? 'bg-amber-400' : 'bg-rose-500'}\`} />
+            <span className={\`text-xs font-extrabold \${systemStatus === 'HEALTHY' ? 'text-emerald-400' : systemStatus === 'DEGRADED' ? 'text-amber-400' : 'text-rose-400'}\`}>SYSTEM {systemStatus}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80">
+          <button onClick={handleSimulateSpike} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold cursor-pointer">
+            <Zap size={13} />
+            <span>Simulate Spike</span>
+          </button>
+          <button onClick={handleAutoHeal} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold cursor-pointer">
+            <Sparkles size={13} />
+            <span>Auto-Heal & Normalize</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+        <button onClick={() => setActiveTab('monitoring')} className={\`px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer \${activeTab === 'monitoring' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}\`}>
+          Live Telemetry & Gauges
+        </button>
+        <button onClick={() => setActiveTab('alerts')} className={\`px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer \${activeTab === 'alerts' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}\`}>
+          Anomaly Alerts ({activeAlerts.length})
+        </button>
+        <button onClick={() => setActiveTab('telemetry')} className={\`px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer \${activeTab === 'telemetry' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}\`}>
+          Agent Stream
+        </button>
+      </div>
+
+      {activeTab === 'monitoring' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+            <span className="text-xs text-slate-400 font-medium">CPU Utilization</span>
+            <div className="text-2xl font-extrabold text-white">{metrics.cpuLoad}%</div>
+            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500" style={{ width: \`\${metrics.cpuLoad}%\` }} />
+            </div>
+          </div>
+          <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+            <span className="text-xs text-slate-400 font-medium">Memory (RAM)</span>
+            <div className="text-2xl font-extrabold text-white">{metrics.memPercent}%</div>
+            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-amber-400" style={{ width: \`\${metrics.memPercent}%\` }} />
+            </div>
+          </div>
+          <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+            <span className="text-xs text-slate-400 font-medium">NVMe Disk Free</span>
+            <div className="text-2xl font-extrabold text-white">{metrics.diskFreeGB} GB</div>
+            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500" style={{ width: '20%' }} />
+            </div>
+          </div>
+          <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+            <span className="text-xs text-slate-400 font-medium">Network Rate</span>
+            <div className="text-2xl font-extrabold text-white">{metrics.netInMB} MB/s</div>
+            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500" style={{ width: '45%' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'alerts' && (
+        <div className="space-y-3">
+          {activeAlerts.map((alert) => (
+            <div key={alert.id} className="p-4 rounded-xl bg-slate-950/80 border border-amber-500/30 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-amber-400">[{alert.severity}] </span>
+                <span className="text-xs text-white">{alert.message}</span>
+              </div>
+              <button onClick={handleAutoHeal} className="px-3 py-1 rounded bg-emerald-500/20 text-emerald-300 text-xs font-semibold cursor-pointer">
+                Heal
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'telemetry' && (
+        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs space-y-1 h-64 overflow-y-auto">
+          {consoleLogs.map((l, i) => (
+            <div key={i} className="text-slate-300"><span className="text-emerald-400">❯ </span>{l}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};`;
+  }
+
+  // 2. Default Full-Stack App: Task & Project Suite
+  return `import React, { useState } from 'react';
+import { Layers, Plus, Search, Trash2, CheckCircle2 } from 'lucide-react';
+
+interface Task {
+  id: string;
+  title: string;
+  description: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal, leadAgent }) => {
+  const [tasks, setTasks] = useState<Task[]>([
+    { id: '1', title: 'Setup PostgreSQL Database Schema & Migrations', description: 'Defined models for Users, Orgs, and Tasks.', status: 'COMPLETED', priority: 'HIGH' },
+    { id: '2', title: 'Build Responsive React 19 TaskCard Suite', description: 'Constructed reusable task components with badges.', status: 'COMPLETED', priority: 'MEDIUM' },
+    { id: '3', title: 'Implement Express REST API Endpoints', description: 'Created /api/tasks endpoints with validation.', status: 'IN_PROGRESS', priority: 'HIGH' },
+  ]);
+  const [search, setSearch] = useState('');
+
+  const filteredTasks = tasks.filter((t) => t.title.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 shadow-xl space-y-3">
+        <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Full-Stack Application</span>
+        <h1 className="text-lg sm:text-xl font-extrabold text-white">${projectName}</h1>
+        <p className="text-xs sm:text-sm text-slate-400 max-w-4xl">{goal}</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {filteredTasks.map((task) => (
+          <div key={task.id} className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+            <div className="flex justify-between items-start">
+              <h3 className="text-sm font-bold text-white">{task.title}</h3>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">{task.status}</span>
+            </div>
+            <p className="text-xs text-slate-400">{task.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};`;
+}
+
+/**
  * Synthesizes production-ready, full-stack project code files tailored to the goal and agent role.
  * Generates frontend (React/Vite/Tailwind), backend (Node/Express/APIs), schemas, tests, and deployment configs.
  */
@@ -655,103 +944,7 @@ export const Navbar: React.FC<{ projectName: string }> = ({ projectName }) => {
       await writeWorkspaceFile(
         workspace,
         'src/components/Dashboard.tsx',
-        `import React, { useState } from 'react';
-import { Layers, Terminal, Send } from 'lucide-react';
-import type { FlowTask } from '../types';
-
-export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal, leadAgent }) => {
-  const [tasks] = useState<FlowTask[]>([
-    { id: '1', title: 'System Blueprint & API Specs', stage: 1, status: 'COMPLETED', agent: leadAgent, updatedAt: 'Just now' },
-    { id: '2', title: 'Frontend UI & React Component Suite', stage: 2, status: 'COMPLETED', agent: 'UX/UI Specialist', updatedAt: 'Just now' },
-    { id: '3', title: 'Node Express Backend Handlers', stage: 3, status: 'RUNNING', agent: 'Backend Architect', updatedAt: 'Running...' },
-    { id: '4', title: 'Vitest Automated Regression Suite', stage: 4, status: 'PENDING', agent: 'QA Lead', updatedAt: 'Queued' },
-  ]);
-
-  const [inputVal, setInputVal] = useState('');
-  const [consoleLogs, setConsoleLogs] = useState<string[]>([
-    '[INIT] Workspace mounted successfully',
-    \`[CHAIN] Agent \${leadAgent} completed architectural synthesis\`,
-    \`[READY] Live preview online at \${process.env.PREVIEW_BASE_URL}\`,
-  ]);
-
-  const handleExecute = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputVal.trim()) return;
-    setConsoleLogs((prev) => [...prev, \`[USER] Sent command: \${inputVal}\`, \`[FLOW] Processing via \${leadAgent}...\`]);
-    setInputVal('');
-  };
-
-  return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 glow-card space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Production Objective</span>
-          <span className="text-xs font-mono text-slate-400">Lead: {leadAgent}</span>
-        </div>
-        <p className="text-sm font-medium text-slate-200 leading-relaxed">{goal}</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-            <Layers size={15} />
-            Execution Stages & Deliverables
-          </h2>
-          <div className="space-y-3">
-            {tasks.map((task) => (
-              <div key={task.id} className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-3 hover:border-slate-700 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-slate-800 flex items-center justify-center text-indigo-400 font-bold text-xs">
-                    {task.stage}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white">{task.title}</h3>
-                    <p className="text-xs text-slate-400">Assigned to: <span className="text-indigo-400 font-semibold">{task.agent}</span></p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                    {task.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-            <Terminal size={15} />
-            Live Execution Stream
-          </h2>
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 space-y-3 font-mono text-xs flex flex-col h-[320px]">
-            <div className="flex-1 overflow-y-auto space-y-1.5 pr-2">
-              {consoleLogs.map((log, i) => (
-                <div key={i} className="text-slate-300 leading-relaxed">
-                  <span className="text-emerald-400 mr-1.5">❯</span>
-                  {log}
-                </div>
-              ))}
-            </div>
-            <form onSubmit={handleExecute} className="flex gap-2 pt-2 border-t border-slate-800">
-              <input
-                type="text"
-                value={inputVal}
-                onChange={(e) => setInputVal(e.target.value)}
-                placeholder="Send prompt to agent pipeline..."
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500"
-              />
-              <button type="submit" className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer transition-colors">
-                <Send size={13} />
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-`,
+        synthesizeDomainDashboard(goal, agent.displayName, projectName),
       );
 
       // src/components/Sidebar.tsx
