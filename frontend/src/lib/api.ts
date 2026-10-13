@@ -318,6 +318,10 @@ export const api = {
       }>(`/processes/${id}/ask-ai-fix`, { method: 'POST', body: JSON.stringify({ instruction }) }),
     report: (id: string) => request<any>(`/processes/${id}/report`),
     reportHtmlUrl: (id: string) => `/api/processes/${id}/report/html`,
+    fileContent: (id: string, path: string) =>
+      request<{ path: string; content: string; size: number }>(
+        `/processes/${id}/file-content?path=${encodeURIComponent(path)}`
+      ),
   },
 
   auth: {

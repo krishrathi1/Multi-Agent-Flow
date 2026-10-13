@@ -41,6 +41,7 @@ import { Tabs } from '../components/ui/Tabs';
 import { CreateProcessModal } from '../components/process/CreateProcessModal';
 import { EditProcessModal } from '../components/process/EditProcessModal';
 import { ProcessReportModal } from '../components/process/ProcessReportModal';
+import { WatchPreviewModal } from '../components/process/WatchPreviewModal';
 import type { Agent, Process, ProcessStatus } from '../types';
 
 const statusTone: Record<ProcessStatus, 'success' | 'warning' | 'neutral' | 'danger' | 'info'> = {
@@ -257,6 +258,7 @@ function ProductionBlockCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [showWatchPreview, setShowWatchPreview] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -328,6 +330,15 @@ function ProductionBlockCard({
             <div className="flex items-center gap-2 flex-wrap shrink-0 pt-1 sm:pt-0">
               <Button
                 size="xs"
+                variant="secondary"
+                icon={Play}
+                onClick={() => setShowWatchPreview(true)}
+                className="text-brand-600 dark:text-brand-400 border-brand-500/30 hover:bg-brand-500/10 shadow-2xs font-semibold"
+              >
+                Watch Preview
+              </Button>
+              <Button
+                size="xs"
                 variant="primary"
                 icon={isRunning ? Pause : Play}
                 loading={busy}
@@ -370,6 +381,18 @@ function ProductionBlockCard({
 
                 {menuOpen && (
                   <div className="absolute right-0 top-full z-50 mt-1.5 w-48 overflow-hidden rounded-2xl border border-line bg-surface/95 backdrop-blur-2xl p-1.5 shadow-xl space-y-0.5 animate-scale-in">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowWatchPreview(true);
+                        setMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:bg-hover transition-colors cursor-pointer text-left font-bold"
+                    >
+                      <Play size={13} className="text-brand-500" />
+                      <span>Watch Preview</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => {
@@ -528,6 +551,14 @@ function ProductionBlockCard({
         process={process}
         open={showReport}
         onClose={() => setShowReport(false)}
+      />
+    )}
+
+    {showWatchPreview && (
+      <WatchPreviewModal
+        process={process}
+        open={showWatchPreview}
+        onClose={() => setShowWatchPreview(false)}
       />
     )}
   </>

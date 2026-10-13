@@ -33,6 +33,7 @@ import { ChainSettingsModal } from '../components/process/ChainSettingsModal';
 import { ProcessReportModal } from '../components/process/ProcessReportModal';
 import { EditProcessModal } from '../components/process/EditProcessModal';
 import { DeploymentLogsModal } from '../components/process/DeploymentLogsModal';
+import { WatchPreviewModal } from '../components/process/WatchPreviewModal';
 import { ProcessMcpGatewaysModal } from '../components/process/ProcessMcpGatewaysModal';
 import { IconReportAnalytics } from '../components/ui/NaturalIcons';
 import { api } from '../lib/api';
@@ -61,6 +62,7 @@ function ProcessCard({
   onStart,
   onPause,
   onRun,
+  onWatchPreview,
   onReport,
   onLogs,
   onEdit,
@@ -74,6 +76,7 @@ function ProcessCard({
   onStart: (p: Process) => void;
   onPause: (p: Process) => void;
   onRun: (p: Process) => void;
+  onWatchPreview: (p: Process) => void;
   onReport: (p: Process) => void;
   onLogs: (p: Process) => void;
   onEdit: (p: Process) => void;
@@ -238,6 +241,17 @@ function ProcessCard({
           <Button
             variant="secondary"
             size="xs"
+            icon={Play}
+            onClick={() => onWatchPreview(process)}
+            className="text-brand-600 dark:text-brand-400 border-brand-500/30 hover:bg-brand-500/10 shadow-2xs font-semibold"
+            aria-label={`Watch Preview for ${process.name}`}
+          >
+            Watch Preview
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="xs"
             icon={Hammer}
             onClick={() => onRun(process)}
             aria-label={`Run production ${process.name}`}
@@ -344,6 +358,7 @@ export function Processes() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [runTarget, setRunTarget] = useState<Process | null>(null);
+  const [watchPreviewTarget, setWatchPreviewTarget] = useState<Process | null>(null);
   const [reportTarget, setReportTarget] = useState<Process | null>(null);
   const [logsTarget, setLogsTarget] = useState<Process | null>(null);
   const [editTarget, setEditTarget] = useState<Process | null>(null);
@@ -491,6 +506,7 @@ export function Processes() {
                 onStart={(x) => runControl(x, 'start')}
                 onPause={(x) => runControl(x, 'pause')}
                 onRun={setRunTarget}
+                onWatchPreview={setWatchPreviewTarget}
                 onReport={setReportTarget}
                 onLogs={setLogsTarget}
                 onEdit={setEditTarget}
@@ -504,6 +520,14 @@ export function Processes() {
       </div>
 
       <CreateProcessModal open={showCreate} onClose={() => setShowCreate(false)} />
+
+      {watchPreviewTarget && (
+        <WatchPreviewModal
+          process={watchPreviewTarget}
+          open={!!watchPreviewTarget}
+          onClose={() => setWatchPreviewTarget(null)}
+        />
+      )}
 
       {mcpGwTarget && (
         <ProcessMcpGatewaysModal

@@ -215,7 +215,7 @@ router.post('/:id/preview-session', async (req, res) => {
     maxAge: 4 * 60 * 60 * 1000, // 4 hours
   });
 
-  res.json({ success: true, previewUrl: `/preview/${id}` });
+  res.json({ success: true, previewUrl: `/preview/${id}?t=${sessionToken}` });
 });
 
 /** Live progress for a run in flight, or the last finished run. */
@@ -239,6 +239,27 @@ router.get('/:id/files', async (req, res) => {
   const proc = await processService.getProcessById(id, req.organizationId!);
   if (!proc) return res.status(404).json({ error: 'Process not found' });
   res.json(await runner.listWorkspaceFiles(id));
+});
+
+/** Return content of a single workspace file for code inspection in audit reports. */
+router.get('/:id/file-content', async (req, res) => {
+  const id = paramId(req.params.id);
+  const proc = await processService.getProcessById(id, req.organizationId!);
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+
+  const filePath = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!filePath) return res.status(400).json({ error: 'Query parameter path is required' });
+
+  const abs = await runner.resolveWorkspaceFile(id, filePath);
+  if (!abs) return res.status(404).json({ error: 'File not found in workspace' });
+
+  try {
+    const fs = await import('node:fs/promises');
+    const content = await fs.readFile(abs, 'utf-8');
+    res.json({ path: filePath, content, size: Buffer.byteLength(content, 'utf-8') });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to read file: ' + err.message });
+  }
 });
 
 /** Return live Git commit audit and changed files breakdown */

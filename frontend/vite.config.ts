@@ -16,6 +16,7 @@ export default defineConfig(({ mode }) => {
       port: devPort,
       proxy: {
         '/api': env.VITE_BACKEND_URL,
+        '/preview': env.VITE_BACKEND_URL,
         '/socket.io': { target: env.VITE_BACKEND_URL, ws: true },
       },
     },
