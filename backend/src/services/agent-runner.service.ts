@@ -497,7 +497,310 @@ export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal,
 };`;
   }
 
-  // 2. Default Full-Stack App: Task & Project Suite
+  // 2. E-Commerce & Online Marketplace
+  if (g.includes('shop') || g.includes('store') || g.includes('ecommerce') || g.includes('cart') || g.includes('product') || g.includes('market')) {
+    return `import React, { useState } from 'react';
+import { ShoppingBag, ShoppingCart, Star, Heart, Check, Plus, Minus, Search, Tag } from 'lucide-react';
+
+interface Product {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  rating: number;
+  badge?: string;
+  desc: string;
+}
+
+export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal, leadAgent }) => {
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [search, setSearch] = useState('');
+  const [cart, setCart] = useState<{ [id: string]: number }>({});
+  const [cartOpen, setCartOpen] = useState(false);
+
+  const products: Product[] = [
+    { id: 'p1', name: 'Neural Processing Dev Kit Pro', category: 'Hardware', price: 299, rating: 4.9, badge: 'Best Seller', desc: 'Ultra-low latency edge tensor unit for real-time autonomous agent pipelines.' },
+    { id: 'p2', name: 'CyberPulse Spatial Headset', category: 'Wearables', price: 449, rating: 4.8, badge: 'New Release', desc: 'High-density micro-OLED heads-up display with sub-millimeter eye tracking.' },
+    { id: 'p3', name: 'Titanium Mechanical Macropad', category: 'Accessories', price: 89, rating: 4.7, desc: 'Hot-swappable custom ortholinear keypad with programmable rotary knob.' },
+    { id: 'p4', name: 'Encrypted Quantum Hardware Key', category: 'Security', price: 120, rating: 5.0, badge: 'Enterprise', desc: 'FIPS 140-3 Level 4 hardware security token with physical biometric touch.' },
+    { id: 'p5', name: 'Adaptive Wireless Noise Shield', category: 'Audio', price: 199, rating: 4.6, desc: 'Dual-driver active noise cancellation with acoustic beamforming.' },
+    { id: 'p6', name: 'MagSpeed GaN 140W Rapid Dock', category: 'Power', price: 79, rating: 4.8, desc: 'Quad-port intelligent gallium nitride fast-charging matrix.' },
+  ];
+
+  const categories = ['All', 'Hardware', 'Wearables', 'Accessories', 'Security', 'Audio', 'Power'];
+
+  const filtered = products.filter((p) => {
+    const matchCat = selectedCategory === 'All' || p.category === selectedCategory;
+    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.desc.toLowerCase().includes(search.toLowerCase());
+    return matchCat && matchSearch;
+  });
+
+  const addToCart = (id: string) => {
+    setCart((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
+  };
+
+  const updateCart = (id: string, delta: number) => {
+    setCart((prev) => {
+      const next = { ...prev };
+      const count = (next[id] || 0) + delta;
+      if (count <= 0) delete next[id];
+      else next[id] = count;
+      return next;
+    });
+  };
+
+  const totalItems = Object.values(cart).reduce((a, b) => a + b, 0);
+  const totalPrice = Object.entries(cart).reduce((sum, [id, qty]) => {
+    const p = products.find((x) => x.id === id);
+    return sum + (p ? p.price * qty : 0);
+  }, 0);
+
+  return (
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">E-Commerce Storefront · Lead: {leadAgent}</span>
+            <h1 className="text-lg sm:text-xl font-extrabold text-white mt-1">Autonomous Storefront & Marketplace</h1>
+            <p className="text-xs sm:text-sm text-slate-400 max-w-3xl">{goal}</p>
+          </div>
+          <button
+            onClick={() => setCartOpen(!cartOpen)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs cursor-pointer self-start sm:self-auto"
+          >
+            <ShoppingCart size={15} />
+            <span>Cart ({totalItems})</span>
+            {totalPrice > 0 && <span className="ml-1 px-1.5 py-0.5 rounded bg-indigo-900/80 font-mono">$\${totalPrice}</span>}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80">
+          {categories.map((c) => (
+            <button
+              key={c}
+              onClick={() => setSelectedCategory(c)}
+              className={\`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer \${
+                selectedCategory === c ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }\`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {filtered.map((item) => (
+          <div key={item.id} className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-indigo-300 border border-slate-700">{item.category}</span>
+                {item.badge && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{item.badge}</span>}
+              </div>
+              <h3 className="text-sm font-bold text-white">{item.name}</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">{item.desc}</p>
+            </div>
+            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+              <div>
+                <span className="text-lg font-extrabold text-white">$\${item.price}</span>
+                <span className="text-xs text-slate-500 ml-1">USD</span>
+              </div>
+              <button
+                onClick={() => addToCart(item.id)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer shadow-2xs"
+              >
+                <Plus size={13} />
+                <span>Add ({cart[item.id] || 0})</span>
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {cartOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-white">Shopping Cart ({totalItems} items)</h2>
+              <button onClick={() => setCartOpen(false)} className="text-xs text-slate-400 hover:text-white">✕</button>
+            </div>
+            {totalItems === 0 ? (
+              <p className="text-xs text-slate-400 py-6 text-center">Your shopping cart is currently empty.</p>
+            ) : (
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                {Object.entries(cart).map(([id, qty]) => {
+                  const p = products.find((x) => x.id === id);
+                  if (!p) return null;
+                  return (
+                    <div key={id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-white">{p.name}</p>
+                        <p className="text-[11px] text-slate-400">$\${p.price} each</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => updateCart(id, -1)} className="p-1 rounded bg-slate-800 text-slate-300"><Minus size={12} /></button>
+                        <span className="text-xs font-mono font-bold text-white">{qty}</span>
+                        <button onClick={() => updateCart(id, 1)} className="p-1 rounded bg-slate-800 text-slate-300"><Plus size={12} /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+              <span className="text-xs text-slate-400">Subtotal</span>
+              <span className="text-base font-extrabold text-white">$\${totalPrice} USD</span>
+            </div>
+            <button
+              onClick={() => { alert('Order placed successfully in live preview!'); setCart({}); setCartOpen(false); }}
+              disabled={totalItems === 0}
+              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer shadow-xs"
+            >
+              Proceed to Instant Checkout
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};`;
+  }
+
+  // 3. AI Conversational Workspace & Chatbot
+  if (g.includes('chat') || g.includes('bot') || g.includes('ai') || g.includes('message') || g.includes('assistant') || g.includes('llm')) {
+    return `import React, { useState } from 'react';
+import { Bot, Send, Sparkles, User, Terminal, Cpu, RefreshCw } from 'lucide-react';
+
+export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal, leadAgent }) => {
+  const [messages, setMessages] = useState<Array<{ id: string; role: 'user' | 'assistant'; text: string; time: string }>>([
+    { id: '1', role: 'assistant', text: 'Hello! I am your autonomous AI production agent. I have analyzed your system requirements and initialized active execution channels. How can I assist you?', time: 'Just now' },
+  ]);
+  const [inputVal, setInputVal] = useState('');
+  const [selectedModel, setSelectedModel] = useState('Nemotron 3 Ultra');
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputVal.trim()) return;
+    const userMsg = { id: \`u-\${Date.now()}\`, role: 'user' as const, text: inputVal.trim(), time: 'Just now' };
+    const replyText = \`Synthesized response via \${selectedModel}: Verified execution parameter for "\${inputVal.trim()}". Pipeline healthy and synchronized.\`;
+    const aiMsg = { id: \`a-\${Date.now() + 1}\`, role: 'assistant' as const, text: replyText, time: 'Just now' };
+    setMessages((prev) => [...prev, userMsg, aiMsg]);
+    setInputVal('');
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4 flex flex-col h-[82vh]">
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 flex items-center justify-between gap-3 shrink-0">
+        <div>
+          <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Conversational AI Engine · Lead: {leadAgent}</span>
+          <h1 className="text-base sm:text-lg font-extrabold text-white">${projectName}</h1>
+        </div>
+        <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-indigo-300 font-semibold focus:outline-none">
+          <option>Nemotron 3 Ultra</option>
+          <option>Claude 3.5 Sonnet</option>
+          <option>Gemini 2.0 Flash</option>
+          <option>GPT-4o Omni</option>
+        </select>
+      </div>
+
+      <div className="flex-1 min-h-0 rounded-2xl bg-slate-900/90 border border-slate-800 p-4 overflow-y-auto space-y-4">
+        {messages.map((m) => (
+          <div key={m.id} className={\`flex gap-3 max-w-2xl \${m.role === 'user' ? 'ml-auto flex-row-reverse' : ''}\`}>
+            <div className={\`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 \${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-indigo-400 border border-slate-700'}\`}>
+              {m.role === 'user' ? <User size={15} /> : <Bot size={15} />}
+            </div>
+            <div className={\`p-3.5 rounded-2xl text-xs sm:text-sm leading-relaxed \${m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-950 border border-slate-800 text-slate-200 rounded-tl-none'}\`}>
+              {m.text}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={handleSend} className="flex gap-2 shrink-0">
+        <input
+          type="text"
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          placeholder="Type an instruction or query for the autonomous assistant..."
+          className="flex-1 rounded-xl bg-slate-900 border border-slate-800 px-4 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+        />
+        <button type="submit" className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs">
+          <Send size={14} />
+          <span>Send</span>
+        </button>
+      </form>
+    </div>
+  );
+};`;
+  }
+
+  // 4. FinTech & Crypto Asset Portfolio Tracker
+  if (g.includes('crypto') || g.includes('finance') || g.includes('portfolio') || g.includes('wallet') || g.includes('stock') || g.includes('trade')) {
+    return `import React, { useState } from 'react';
+import { TrendingUp, ArrowUpRight, ArrowDownRight, DollarSign, Wallet, RefreshCw } from 'lucide-react';
+
+export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal, leadAgent }) => {
+  const [tokens] = useState([
+    { symbol: 'BTC', name: 'Bitcoin', price: 68420.50, change: '+3.4%', isUp: true, balance: '0.45 BTC', val: '$30,789.22' },
+    { symbol: 'ETH', name: 'Ethereum', price: 3540.10, change: '+5.1%', isUp: true, balance: '4.20 ETH', val: '$14,868.42' },
+    { symbol: 'SOL', name: 'Solana', price: 182.40, change: '-1.2%', isUp: false, balance: '25.0 SOL', val: '$4,560.00' },
+    { symbol: 'AVAX', name: 'Avalanche', price: 28.75, change: '+2.8%', isUp: true, balance: '120.0 AVAX', val: '$3,450.00' },
+  ]);
+
+  return (
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 shadow-xl space-y-3">
+        <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">FinTech Portfolio Engine · Lead: {leadAgent}</span>
+        <h1 className="text-lg sm:text-xl font-extrabold text-white">${projectName}</h1>
+        <p className="text-xs sm:text-sm text-slate-400 max-w-3xl">{goal}</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+          <span className="text-xs text-slate-400">Total Net Portfolio Value</span>
+          <div className="text-2xl font-extrabold text-white">$53,667.64</div>
+          <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-0.5"><ArrowUpRight size={13} /> +$1,940.20 (24h)</span>
+        </div>
+        <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+          <span className="text-xs text-slate-400">Yield APY Average</span>
+          <div className="text-2xl font-extrabold text-white">8.42%</div>
+          <span className="text-[11px] text-slate-500">Autonomous rebalancing active</span>
+        </div>
+        <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+          <span className="text-xs text-slate-400">Asset Liquidity Index</span>
+          <div className="text-2xl font-extrabold text-white">99.4%</div>
+          <span className="text-[11px] text-emerald-400">Instant settlements enabled</span>
+        </div>
+      </div>
+
+      <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
+        <h3 className="text-sm font-bold text-white">Live Asset Holdings & Market Tickers</h3>
+        <div className="space-y-2">
+          {tokens.map((t) => (
+            <div key={t.symbol} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-slate-800 flex items-center justify-center font-bold text-xs text-white border border-slate-700">{t.symbol}</div>
+                <div>
+                  <h4 className="text-xs font-bold text-white">{t.name}</h4>
+                  <span className="text-[11px] font-mono text-slate-400">$\${t.price.toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-white font-mono">{t.val}</p>
+                <span className={\`text-[11px] font-semibold flex items-center justify-end gap-0.5 \${t.isUp ? 'text-emerald-400' : 'text-rose-400'}\`}>
+                  {t.isUp ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />} {t.change}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};`;
+  }
+
+  // 5. Default Task & Project Management Suite
   return `import React, { useState } from 'react';
 import { Layers, Plus, Search, Trash2, CheckCircle2 } from 'lucide-react';
 
@@ -522,7 +825,7 @@ export const Dashboard: React.FC<{ goal: string; leadAgent: string }> = ({ goal,
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
       <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 shadow-xl space-y-3">
-        <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Full-Stack Application</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Full-Stack Application · Lead: {leadAgent}</span>
         <h1 className="text-lg sm:text-xl font-extrabold text-white">${projectName}</h1>
         <p className="text-xs sm:text-sm text-slate-400 max-w-4xl">{goal}</p>
       </div>
@@ -1498,6 +1801,38 @@ export function workspaceFor(processId: string): string {
   if (existsSync(candidate1)) return candidate1;
   if (existsSync(candidate2)) return candidate2;
   return path.join(workspaceRoot(), safe);
+}
+
+/**
+ * Ensures a production has its full workspace deliverables synthesized.
+ * Generates domain-tailored projects for any process that hasn't run yet.
+ */
+export async function ensureWorkspaceDeliverables(processId: string): Promise<boolean> {
+  const root = workspaceFor(processId);
+  const indexPath = path.join(root, 'index.html');
+  if (existsSync(indexPath)) return true;
+
+  try {
+    const proc = await prisma.process.findUnique({
+      where: { id: processId },
+      include: { agents: true },
+    });
+    if (!proc) return false;
+
+    const leadAgent = proc.agents?.[0] || {
+      displayName: 'Lead Engineer',
+      processRole: 'Fullstack Architect',
+      processStage: 1,
+    };
+
+    await fs.mkdir(root, { recursive: true });
+    await synthesizeAgentDeliverables(root, { ...leadAgent, processStage: 1 }, proc.prompt || proc.name);
+    await synthesizeAgentDeliverables(root, { ...leadAgent, processStage: 2 }, proc.prompt || proc.name);
+    return true;
+  } catch (err) {
+    logger.warn({ err, processId }, 'Could not ensure workspace deliverables');
+    return false;
+  }
 }
 
 function agentTools(): string[] {

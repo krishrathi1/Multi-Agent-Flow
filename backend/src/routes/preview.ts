@@ -3,7 +3,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import fsSync from 'node:fs';
 import esbuild from 'esbuild';
-import { resolveWorkspaceFile, listWorkspaceFiles } from '../services/agent-runner.service.js';
+import { resolveWorkspaceFile, listWorkspaceFiles, ensureWorkspaceDeliverables } from '../services/agent-runner.service.js';
 import { canViewPreview } from '../services/insights.service.js';
 import { prisma } from '../lib/prisma.js';
 import { verifyAccessToken } from '../lib/jwt.js';
@@ -50,8 +50,13 @@ const MIME: Record<string, string> = {
 
 /** Picks the entry document for a chain that built a site. */
 async function findIndex(processId: string): Promise<string | null> {
-  const files = await listWorkspaceFiles(processId);
-  const html = files.filter((f) => f.path.endsWith('.html'));
+  let files = await listWorkspaceFiles(processId);
+  let html = files.filter((f) => f.path.endsWith('.html'));
+  if (html.length === 0) {
+    await ensureWorkspaceDeliverables(processId);
+    files = await listWorkspaceFiles(processId);
+    html = files.filter((f) => f.path.endsWith('.html'));
+  }
   if (html.length === 0) return null;
 
   // Prefer a root index.html, then any index.html, then the first page.

@@ -102,6 +102,10 @@ export function WatchPreviewModal({
 
     let isCancelled = false;
     setPreviewState('starting');
+    setRealTimeItems([]);
+    setWorkspaceFiles([]);
+    setPreviewUrl('');
+    setActiveAgentIndex(0);
 
     // 1. Fetch fresh process data with all agents and tasks
     api.processes

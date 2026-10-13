@@ -238,6 +238,7 @@ router.get('/:id/files', async (req, res) => {
   const id = paramId(req.params.id);
   const proc = await processService.getProcessById(id, req.organizationId!);
   if (!proc) return res.status(404).json({ error: 'Process not found' });
+  await runner.ensureWorkspaceDeliverables(id);
   res.json(await runner.listWorkspaceFiles(id));
 });
 
