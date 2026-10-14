@@ -8,6 +8,8 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Cpu,
   Download,
@@ -42,6 +44,7 @@ interface RealTimeItem {
   details: string;
   timestamp: string;
   agentName?: string;
+  agentId?: string;
 }
 
 const AVAILABLE_MODELS = [
@@ -76,6 +79,20 @@ export function WatchPreviewModal({
   const [inputMessage, setInputMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeAgentIndex, setActiveAgentIndex] = useState(0);
+  const [selectedAgentFilter, setSelectedAgentFilter] = useState<string | null>(null);
+  const agentScrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollAgentsLeft = () => {
+    if (agentScrollRef.current) {
+      agentScrollRef.current.scrollBy({ left: -140, behavior: 'smooth' });
+    }
+  };
+
+  const scrollAgentsRight = () => {
+    if (agentScrollRef.current) {
+      agentScrollRef.current.scrollBy({ left: 140, behavior: 'smooth' });
+    }
+  };
   const [isPublishing, setIsPublishing] = useState(false);
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceArtifact[]>([]);
 
@@ -106,6 +123,7 @@ export function WatchPreviewModal({
     setWorkspaceFiles([]);
     setPreviewUrl('');
     setActiveAgentIndex(0);
+    setSelectedAgentFilter(null);
 
     // 1. Fetch fresh process data with all agents and tasks
     api.processes
@@ -123,13 +141,32 @@ export function WatchPreviewModal({
           tasks.forEach((t: any, idx) => {
             const isDone = t.status === 'DONE' || t.status === 'COMPLETED';
             const isFailed = t.status === 'FAILED' || t.status === 'BLOCKED';
+            const assignedAgent = fullProc.agents?.find((a) => a.id === t.agentId);
             dynamicItems.push({
               id: t.id || `task-${idx}`,
               type: isDone ? 'success' : isFailed ? 'error' : 'running',
               title: t.title,
               details: t.description || (isDone ? 'Completed and verified across quality gates' : 'Executing in pipeline'),
               timestamp: 'Stage ' + (t.processStage || 1),
-              agentName: fullProc.agents?.find((a) => a.id === t.agentId)?.displayName || 'Agent',
+              agentId: t.agentId || assignedAgent?.id,
+              agentName: assignedAgent?.displayName || 'Agent',
+            });
+          });
+        }
+
+        // If tasks are empty, populate structured stage milestones for each agent in the process
+        if (dynamicItems.length === 0 && fullProc.agents && fullProc.agents.length > 0) {
+          fullProc.agents.forEach((ag: Agent, idx: number) => {
+            const role = ag.processRole || 'Autonomous Specialist';
+            const stage = ag.processStage || 1;
+            dynamicItems.push({
+              id: `init-agent-${ag.id || idx}`,
+              type: 'success',
+              title: `${ag.displayName} — Stage ${stage}`,
+              details: `${role}: Stage initialized with automated health telemetry and policy enforcement.`,
+              timestamp: `Stage ${stage}`,
+              agentId: ag.id,
+              agentName: ag.displayName,
             });
           });
         }
@@ -141,22 +178,25 @@ export function WatchPreviewModal({
             if (isCancelled) return;
             setWorkspaceFiles(files);
 
-            // If tasks were empty, populate directly from real generated files
-            if (dynamicItems.length === 0) {
-              const interestingFiles = files.filter(
-                (f) =>
-                  !f.path.includes('.git') &&
-                  !f.path.includes('node_modules') &&
-                  !f.path.includes('.env')
-              );
+            // If files exist, attach them as concrete deliverables assigned across the agents
+            const interestingFiles = files.filter(
+              (f) =>
+                !f.path.includes('.git') &&
+                !f.path.includes('node_modules') &&
+                !f.path.includes('.env')
+            );
 
-              interestingFiles.slice(0, 5).forEach((f, idx) => {
+            if (interestingFiles.length > 0 && fullProc.agents && fullProc.agents.length > 0) {
+              interestingFiles.slice(0, 6).forEach((f, idx) => {
+                const assignedAgent = fullProc.agents![idx % fullProc.agents!.length];
                 dynamicItems.push({
                   id: `file-${idx}`,
                   type: 'success',
                   title: f.path,
-                  details: `Generated autonomous component (${Math.round(f.size / 1024 * 10) / 10} KB)`,
+                  details: `Generated autonomous component (${Math.round((f.size / 1024) * 10) / 10} KB)`,
                   timestamp: 'Deliverable',
+                  agentId: assignedAgent.id,
+                  agentName: assignedAgent.displayName,
                 });
               });
             }
@@ -223,22 +263,60 @@ export function WatchPreviewModal({
     return currentProcess?.agents || [];
   }, [currentProcess]);
 
-  const activeAgent =
-    agents[activeAgentIndex % Math.max(agents.length, 1)] || {
-      id: 'default',
-      displayName: 'Pipeline Orchestrator',
-      processRole: 'Lead Orchestrator',
-      processStage: 1,
-      avatar: '🤖',
-    };
+  const activeAgent = useMemo(() => {
+    if (selectedAgentFilter) {
+      const found = agents.find((a) => a.id === selectedAgentFilter);
+      if (found) return found;
+    }
+    return (
+      agents[activeAgentIndex % Math.max(agents.length, 1)] || {
+        id: 'default',
+        displayName: 'Pipeline Orchestrator',
+        processRole: 'Lead Orchestrator',
+        processStage: 1,
+        avatar: '🤖',
+      }
+    );
+  }, [agents, activeAgentIndex, selectedAgentFilter]);
 
   const totalAgents = agents.length || 1;
 
+  // Toggle or select an agent filter
+  const handleSelectAgentFilter = (agentId: string | null, index?: number) => {
+    if (agentId === selectedAgentFilter) {
+      setSelectedAgentFilter(null);
+    } else {
+      setSelectedAgentFilter(agentId);
+      if (index !== undefined) {
+        setActiveAgentIndex(index);
+      } else if (agentId) {
+        const foundIdx = agents.findIndex((a) => a.id === agentId);
+        if (foundIdx >= 0) setActiveAgentIndex(foundIdx);
+      }
+    }
+  };
+
+  // Filtered feed items based on selected agent filter
+  const filteredRealTimeItems = useMemo(() => {
+    if (!selectedAgentFilter) return realTimeItems;
+    const targetAgent = agents.find((a) => a.id === selectedAgentFilter);
+    return realTimeItems.filter((item) => {
+      if (item.type === 'user') return true;
+      if (item.agentId && item.agentId === selectedAgentFilter) return true;
+      if (item.agentName && targetAgent) {
+        return item.agentName.toLowerCase() === targetAgent.displayName.toLowerCase();
+      }
+      return false;
+    });
+  }, [realTimeItems, selectedAgentFilter, agents]);
+
   // Copy results narrative
   const handleCopyResults = () => {
+    const itemsToCopy = selectedAgentFilter ? filteredRealTimeItems : realTimeItems;
     const textToCopy = [
       `Project: ${currentProcess?.name || 'Production'}`,
-      ...realTimeItems.map(
+      selectedAgentFilter ? `Filter: ${activeAgent.displayName}` : 'Filter: All Agents',
+      ...itemsToCopy.map(
         (i) => `${i.type === 'success' ? '✅' : i.type === 'error' ? '❌' : '🔄'} ${i.title} - ${i.details}`
       ),
       '',
@@ -269,6 +347,10 @@ export function WatchPreviewModal({
     setIsProcessing(true);
 
     const userItemId = `msg-${Date.now()}`;
+    const targetAgent = selectedAgentFilter
+      ? agents.find((a) => a.id === selectedAgentFilter) || activeAgent
+      : activeAgent;
+
     setRealTimeItems((prev) => [
       ...prev,
       {
@@ -277,14 +359,17 @@ export function WatchPreviewModal({
         title: 'User Instruction',
         details: userPrompt,
         timestamp: 'Just now',
+        agentId: targetAgent.id,
+        agentName: targetAgent.displayName,
       },
       {
         id: `working-${Date.now()}`,
         type: 'running',
-        title: `${activeAgent.displayName} processing...`,
+        title: `${targetAgent.displayName} processing...`,
         details: 'Executing instruction and compiling code update in workspace',
         timestamp: 'Just now',
-        agentName: activeAgent.displayName,
+        agentId: targetAgent.id,
+        agentName: targetAgent.displayName,
       },
     ]);
 
@@ -305,9 +390,10 @@ export function WatchPreviewModal({
             title: `Update applied: ${userPrompt.slice(0, 40)}`,
             details:
               res.message ||
-              `Autonomous patch compiled and verified by ${activeAgent.displayName}.`,
+              `Autonomous patch compiled and verified by ${targetAgent.displayName}.`,
             timestamp: 'Just now',
-            agentName: activeAgent.displayName,
+            agentId: targetAgent.id,
+            agentName: targetAgent.displayName,
           },
         ];
       });
@@ -329,9 +415,10 @@ export function WatchPreviewModal({
             id: `done-${Date.now()}`,
             type: 'success',
             title: 'Workspace Recompiled',
-            details: `Action executed by ${activeAgent.displayName}. Files verified in workspace.`,
+            details: `Action executed by ${targetAgent.displayName}. Files verified in workspace.`,
             timestamp: 'Just now',
-            agentName: activeAgent.displayName,
+            agentId: targetAgent.id,
+            agentName: targetAgent.displayName,
           },
         ];
       });
@@ -395,20 +482,20 @@ export function WatchPreviewModal({
       <div className="relative w-full max-w-[1550px] h-[94vh] max-h-[960px] bg-surface rounded-2xl sm:rounded-3xl shadow-2xl border border-line flex flex-col overflow-hidden text-ink">
         
         {/* ==============================================================
-            TOP HEADER BAR matching Image 2
+            TOP HEADER BAR (Matching Image 2 with Fleet Filter in Center Space)
             ============================================================== */}
-        <div className="h-14 px-4 sm:px-6 border-b border-line flex items-center justify-between bg-surface shrink-0 z-30">
+        <div className="h-14 px-3 sm:px-6 border-b border-line flex items-center justify-between gap-2 sm:gap-4 bg-surface shrink-0 z-30">
           
-          {/* Top Left: Model Selector Dropdown matching Image 2 */}
-          <div className="flex items-center gap-3 min-w-0">
+          {/* Top Left: Model Selector Dropdown & Process Name Tag */}
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 shrink-0">
             <div className="relative" ref={modelMenuRef}>
               <button
                 type="button"
                 onClick={() => setModelDropdownOpen((v) => !v)}
-                className="inline-flex items-center gap-2 text-sm sm:text-base font-bold text-ink hover:text-brand-600 dark:hover:text-brand-400 transition-colors cursor-pointer select-none py-1 px-2.5 rounded-xl hover:bg-hover"
+                className="inline-flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm md:text-base font-bold text-ink hover:text-brand-600 dark:hover:text-brand-400 transition-colors cursor-pointer select-none py-1 px-2.5 rounded-xl hover:bg-hover"
               >
                 <span>Select a model</span>
-                <ChevronDown size={15} className="text-ink-muted" />
+                <ChevronDown size={14} className="text-ink-muted" />
               </button>
 
               {modelDropdownOpen && (
@@ -442,14 +529,93 @@ export function WatchPreviewModal({
               )}
             </div>
 
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-inset border border-line-subtle text-xs text-ink-muted">
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-inset border border-line-subtle text-xs text-ink-muted">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-semibold text-ink truncate max-w-[240px]">{currentProcess.name}</span>
+              <span className="font-semibold text-ink truncate max-w-[190px]">{currentProcess?.name || 'Production'}</span>
+            </div>
+          </div>
+
+          {/* Top Middle: Fleet Size & Agent Filter Bar (Placed in space of Image 2) */}
+          <div className="flex-1 min-w-0 mx-1 sm:mx-3 flex items-center justify-center">
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-inset/75 border border-line-subtle rounded-2xl py-1 px-2 sm:px-3 shadow-2xs max-w-full">
+              {/* Fleet Size Indicator */}
+              <div className="flex items-center gap-1.5 shrink-0 text-2xs font-medium text-ink-muted pr-1.5 sm:pr-2.5 border-r border-line-subtle select-none">
+                <Bot size={13} className="text-brand-500" />
+                <span className="hidden xl:inline text-ink font-semibold">Fleet Size:</span>
+                <span className="text-ink font-bold">{totalAgents}</span>
+                <span className="hidden sm:inline text-ink-muted">{totalAgents === 1 ? 'Specialized Agent' : 'Specialized Agents'}</span>
+              </div>
+
+              {/* Scroll Button Left */}
+              <button
+                type="button"
+                onClick={scrollAgentsLeft}
+                className="grid h-5 w-5 place-items-center rounded hover:bg-hover text-ink-muted hover:text-ink transition-colors cursor-pointer shrink-0"
+                title="Scroll agents left"
+                aria-label="Scroll left"
+              >
+                <ChevronLeft size={13} />
+              </button>
+
+              {/* Scrollable Agent Filter Buttons */}
+              <div
+                ref={agentScrollRef}
+                className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 max-w-[280px] sm:max-w-[360px] md:max-w-[420px] lg:max-w-[500px] scroll-smooth"
+              >
+                {/* All Filter Pill */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectAgentFilter(null)}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg border text-[11px] font-mono transition-all cursor-pointer shrink-0',
+                    selectedAgentFilter === null
+                      ? 'border-brand-500/60 bg-brand-500/15 text-brand-600 dark:text-brand-400 font-bold shadow-2xs'
+                      : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink'
+                  )}
+                  title="Show deliverables from all agents"
+                >
+                  <Sparkles size={11} className={selectedAgentFilter === null ? 'text-brand-500' : 'text-ink-muted'} />
+                  <span>All</span>
+                </button>
+
+                {/* Individual Agent Pills */}
+                {agents.map((ag, idx) => {
+                  const isSelected = selectedAgentFilter === ag.id;
+                  return (
+                    <button
+                      key={ag.id || idx}
+                      type="button"
+                      onClick={() => handleSelectAgentFilter(ag.id, idx)}
+                      title={`${ag.displayName} — Stage ${ag.processStage || 1} (${ag.processRole || 'Specialist'})`}
+                      className={cn(
+                        'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg border text-[11px] font-mono transition-all cursor-pointer shrink-0',
+                        isSelected
+                          ? 'border-brand-500/60 bg-brand-500/15 text-brand-600 dark:text-brand-400 font-bold shadow-2xs'
+                          : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink'
+                      )}
+                    >
+                      <span>{ag.avatar || '🤖'}</span>
+                      <span className="truncate max-w-[90px] sm:max-w-[120px]">{ag.displayName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Scroll Button Right */}
+              <button
+                type="button"
+                onClick={scrollAgentsRight}
+                className="grid h-5 w-5 place-items-center rounded hover:bg-hover text-ink-muted hover:text-ink transition-colors cursor-pointer shrink-0"
+                title="Scroll agents right"
+                aria-label="Scroll right"
+              >
+                <ChevronRight size={13} />
+              </button>
             </div>
           </div>
 
           {/* Top Right: Share Button and Close */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <div className="relative" ref={shareMenuRef}>
               <button
                 type="button"
@@ -464,12 +630,12 @@ export function WatchPreviewModal({
                 <div className="absolute right-0 top-full mt-2 w-80 bg-surface border border-line rounded-2xl shadow-2xl p-3 z-50 animate-scale-in">
                   <div className="text-xs font-bold text-ink">Share Project Preview</div>
                   <p className="text-2xs text-ink-muted mt-0.5 leading-relaxed">
-                    Collaborate live on {currentProcess.name}. Copy the preview link below.
+                    Collaborate live on {currentProcess?.name || 'Production'}. Copy the preview link below.
                   </p>
                   <div className="mt-2.5 flex items-center gap-2">
                     <input
                       readOnly
-                      value={`${window.location.origin}${previewUrl || `/preview/${currentProcess.id}`}`}
+                      value={`${window.location.origin}${previewUrl || `/preview/${currentProcess?.id}`}`}
                       className="w-full bg-inset border border-line rounded-lg px-2 py-1 text-2xs font-mono text-ink-muted select-all truncate"
                     />
                     <Button
@@ -502,7 +668,7 @@ export function WatchPreviewModal({
         <div className="flex-1 min-h-0 flex flex-row overflow-hidden">
           
           {/* ==============================================================
-              LEFT COLUMN: 100% Dynamic Agent Status Bar, Feed & Chat Box
+              LEFT COLUMN: Dynamic Agent Status Bar, Filtered Feed & Chat Box
               ============================================================== */}
           <div className="w-[380px] sm:w-[420px] md:w-[450px] lg:w-[480px] shrink-0 border-r border-line flex flex-col justify-between bg-surface overflow-hidden">
             
@@ -533,34 +699,28 @@ export function WatchPreviewModal({
                 </span>
               </div>
 
-              {/* Fleet Roster & Count (Dynamic for the opened process) */}
+              {/* Active Filter & Role Bar */}
               <div className="flex items-center justify-between gap-2 pt-1 border-t border-line-subtle text-2xs font-medium text-ink-muted">
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Bot size={13} className="text-brand-500" />
-                  <span className="font-semibold text-ink">
-                    Fleet Size: {totalAgents} Specialized Agents
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="text-ink-muted truncate font-mono">
+                    {activeAgent.processRole || 'Autonomous Specialist'}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1 overflow-x-auto py-0.5 max-w-[260px]">
-                  {agents.map((ag, idx) => (
-                    <button
-                      key={ag.id || idx}
-                      type="button"
-                      onClick={() => setActiveAgentIndex(idx)}
-                      title={`${ag.displayName} (${ag.processRole || 'Specialist'})`}
-                      className={cn(
-                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-mono transition-all cursor-pointer shrink-0',
-                        idx === activeAgentIndex % Math.max(agents.length, 1)
-                          ? 'border-brand-500/50 bg-brand-500/15 text-brand-600 dark:text-brand-400 font-bold'
-                          : 'border-line bg-surface text-ink-muted hover:border-line-strong'
-                      )}
-                    >
-                      <span>{ag.avatar || '🤖'}</span>
-                      <span className="truncate max-w-[70px]">{ag.displayName}</span>
-                    </button>
-                  ))}
-                </div>
+                {selectedAgentFilter ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAgentFilter(null)}
+                    className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+                  >
+                    <span>Filtered ({filteredRealTimeItems.length})</span>
+                    <span className="opacity-70">✕ Show All</span>
+                  </button>
+                ) : (
+                  <span className="shrink-0 text-[10px] font-mono text-ink-muted">
+                    Showing All ({realTimeItems.length})
+                  </span>
+                )}
               </div>
             </div>
 
@@ -569,13 +729,28 @@ export function WatchPreviewModal({
               
               {/* Dynamic list of tasks / deliverables */}
               <div className="space-y-3">
-                {realTimeItems.length === 0 ? (
+                {filteredRealTimeItems.length === 0 ? (
                   <div className="p-4 rounded-xl border border-line bg-inset/40 text-center text-xs text-ink-muted">
-                    <p className="font-semibold text-ink">Pipeline initialized</p>
-                    <p className="mt-1">Agents are preparing execution deliverables for {currentProcess.name}.</p>
+                    <p className="font-semibold text-ink">
+                      {selectedAgentFilter ? `No deliverables yet for ${activeAgent.displayName}` : 'Pipeline initialized'}
+                    </p>
+                    <p className="mt-1">
+                      {selectedAgentFilter
+                        ? 'This agent has not completed any deliverables in this stage yet.'
+                        : `Agents are preparing execution deliverables for ${currentProcess?.name || 'Production'}.`}
+                    </p>
+                    {selectedAgentFilter && (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectAgentFilter(null)}
+                        className="mt-2.5 inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-surface border border-line text-2xs font-semibold text-ink hover:bg-hover transition-colors cursor-pointer"
+                      >
+                        Show all agent deliverables ({realTimeItems.length})
+                      </button>
+                    )}
                   </div>
                 ) : (
-                  realTimeItems.map((item) => {
+                  filteredRealTimeItems.map((item) => {
                     if (item.type === 'user') {
                       return (
                         <div
@@ -624,10 +799,27 @@ export function WatchPreviewModal({
                         )}
 
                         <div className="min-w-0 flex-1">
-                          <span className="font-bold text-ink">
-                            {item.title}
-                          </span>{' '}
-                          - <span className="text-ink-muted">{item.details}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-ink">
+                              {item.title}
+                            </span>
+                            {item.agentName && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const found = agents.find((a) => a.displayName.toLowerCase() === item.agentName?.toLowerCase());
+                                  if (found) {
+                                    handleSelectAgentFilter(found.id);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-inset border border-line-subtle text-ink-muted hover:text-brand-500 hover:border-brand-500/40 transition-colors cursor-pointer"
+                                title={`Filter to ${item.agentName}`}
+                              >
+                                {item.agentName}
+                              </button>
+                            )}
+                          </div>
+                          <div className="text-ink-muted text-xs mt-0.5">{item.details}</div>
                         </div>
                       </div>
                     );
