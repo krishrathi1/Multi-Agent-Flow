@@ -220,6 +220,7 @@ app.use('/api/commands', requireAuth, commandRoutes);
 app.use('/api/activities/search', requireAuth, searchRoutes);
 app.use('/api/agents', requireAuth, configRoutes);
 app.use('/api/org', requireAuth, orgRoutes);
+app.use('/api/organizations', requireAuth, orgRoutes);
 
 // MCP routes (nested under agents, needs mergeParams in router)
 app.use('/api/agents/:agentId/mcp-servers', requireAuth, mcpRoutes);
