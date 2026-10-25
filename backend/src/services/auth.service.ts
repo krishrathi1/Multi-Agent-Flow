@@ -109,9 +109,7 @@ export async function signup(data: {
       try {
         await sendVerificationEmail(data.email, result.verificationToken, result.otp);
       } catch (emailErr) {
-        logger.error({ email: data.email, err: emailErr }, 'Failed to send verification email, rolling back unverified user');
-        await prisma.user.delete({ where: { id: result.user.id } }).catch(() => {});
-        throw new Error('Failed to send verification email');
+        logger.warn({ email: data.email, err: emailErr }, 'Verification email failed, user created with OTP');
       }
 
       // Auto-provision default gateway if configured (fire-and-forget)

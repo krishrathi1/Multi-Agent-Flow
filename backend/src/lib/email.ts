@@ -22,6 +22,10 @@ async function getTransporter(): Promise<{ transporter: nodemailer.Transporter; 
       port: smtp.port,
       secure: smtp.secure || smtp.port === 465,
       auth: hasAuth ? { user: smtp.user, pass: smtp.pass } : undefined,
+      family: 4,
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 5000,
     } as any;
 
     return {
@@ -161,53 +165,28 @@ export async function sendVerificationEmail(email: string, token: string, otp?: 
     const fromAddress = config.smtp.from || (isEthereal ? '"MyceliumOps" <no-reply@ethereal.email>' : '"MyceliumOps" <no-reply@myceliumops.com>');
     const subject = otp ? `${otp} is your MyceliumOps verification code` : 'Verify your MyceliumOps account';
 
-    let info;
     try {
-      info = await transporter.sendMail({
+      const info = await transporter.sendMail({
         from: fromAddress,
         to: email,
         subject,
         html,
       });
+      logger.info({ email, messageId: info.messageId, otp }, 'Verification email sent via SMTP successfully');
     } catch (smtpErr) {
-      if (!isEthereal) {
-        logger.warn({ smtpErr }, 'Custom SMTP send failed, falling back to Ethereal test transport');
-        const testAccount = await nodemailer.createTestAccount();
-        const fallbackTransporter = nodemailer.createTransport({
-          host: testAccount.smtp.host,
-          port: testAccount.smtp.port,
-          secure: testAccount.smtp.secure,
-          auth: { user: testAccount.user, pass: testAccount.pass },
-        });
-        info = await fallbackTransporter.sendMail({
-          from: '"MyceliumOps" <no-reply@ethereal.email>',
-          to: email,
-          subject,
-          html,
-        });
-      } else {
-        throw smtpErr;
-      }
+      logger.warn({ email, otp, smtpErr }, 'SMTP send failed, proceeding with generated OTP');
     }
 
-    const previewUrl = nodemailer.getTestMessageUrl(info);
     console.log(`\n======================================================`);
-    console.log(`✉️  NEW VERIFICATION EMAIL SENT!`);
+    console.log(`✉️  VERIFICATION CODE READY!`);
     console.log(`   To: ${email}`);
     if (otp) console.log(`   🔑 Verification OTP: >>> ${otp} <<<`);
     console.log(`   Direct Link: ${verifyUrl}`);
-    if (previewUrl) console.log(`   Ethereal Preview: ${previewUrl}`);
     console.log(`======================================================\n`);
-
-    if (previewUrl) {
-      logger.info({ email, previewUrl, verifyUrl, otp }, 'Verification email sent via Ethereal test service');
-    } else {
-      logger.info({ email, messageId: info.messageId, otp }, 'Verification email sent via SMTP successfully');
-    }
 
     return verifyUrl;
   } catch (err) {
-    logger.error({ email, err }, 'Failed to send verification email');
-    throw new Error('Failed to send verification email');
+    logger.warn({ email, err }, 'Email dispatch error, returning OTP anyway');
+    return verifyUrl;
   }
 }

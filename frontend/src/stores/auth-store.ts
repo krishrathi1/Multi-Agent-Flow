@@ -46,11 +46,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         credentials: 'include', // send/receive httpOnly cookies
         body: JSON.stringify({ email, password }),
       });
+      const data = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || 'Login failed');
       }
-      const data = await res.json();
       set({
         user: data.user,
         organization: data.organization,
@@ -75,11 +74,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         credentials: 'include',
         body: JSON.stringify({ email, password, name, orgName }),
       });
+      const data = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || 'Signup failed');
       }
-      const data = await res.json();
       set({ isLoading: false });
       return data;
     } catch (e: any) {
