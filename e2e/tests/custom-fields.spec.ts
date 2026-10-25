@@ -6,15 +6,15 @@ test.describe('Custom Fields', () => {
   test('page loads with heading and Create Field button', async ({ page }) => {
     await page.goto('/custom-fields');
     await page.waitForLoadState('networkidle');
-    await expect(page.getByRole('heading', { name: /Custom Fields/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Add Custom Field|Create First Field/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Custom Fields', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add Custom Field', exact: true })).toBeVisible();
   });
 
   test('create field definition via UI', async ({ page }) => {
     await page.goto('/custom-fields');
     await page.waitForLoadState('networkidle');
 
-    await page.getByRole('button', { name: /Add Custom Field|Create First Field/ }).click();
+    await page.getByRole('button', { name: 'Add Custom Field', exact: true }).click();
 
     const modal = page.locator('div.fixed.inset-0').filter({ has: page.getByRole('heading', { name: 'Create Custom Field' }) });
     await expect(modal).toBeVisible();

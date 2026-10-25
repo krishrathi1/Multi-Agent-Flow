@@ -143,6 +143,11 @@ async function prerender() {
   );
 }
 
+if (process.env.VERCEL) {
+  console.log('[prerender] Vercel build environment detected. Skipping Puppeteer pre-render.');
+  process.exit(0);
+}
+
 prerender().catch((err) => {
   if (err.message && err.message.includes('Could not find Chrome')) {
     console.warn('[prerender] Warning: Chrome binary not found for static pre-rendering. Skipping pre-render step.');

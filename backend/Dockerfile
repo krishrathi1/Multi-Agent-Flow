@@ -26,6 +26,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Git is used by workspace and pull request operations at runtime.
+RUN apk add --no-cache git
+
 COPY package.json package-lock.json ./
 COPY backend/package.json ./backend/
 COPY frontend/package.json ./frontend/

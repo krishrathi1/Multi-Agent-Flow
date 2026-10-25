@@ -4,11 +4,11 @@ import { useUiStore } from '../stores/ui-store';
 import { applyTheme } from '../lib/theme';
 
 /**
- * Marketing and auth screens are painted for dark only (hero gradients, white
- * body copy). They pin dark so a light-mode preference doesn't wreck them; the
- * authenticated app honours the user's choice.
+ * Marketing pages are painted for dark only (hero gradients, white body copy).
+ * They pin dark so a light-mode preference doesn't wreck them; the rest of the
+ * app (including auth and dashboard) honors the user's choice.
  */
-const FORCED_DARK = [/^\/$/, /^\/docs(\/|$)/, /^\/login$/, /^\/signup$/, /^\/check-email$/, /^\/verify-email$/];
+const FORCED_DARK = [/^\/$/, /^\/docs(\/|$)/];
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const themePreference = useUiStore((s) => s.themePreference);

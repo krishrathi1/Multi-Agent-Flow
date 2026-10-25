@@ -83,7 +83,10 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Needed for WebSocket
 }));
 app.use(cors({
-  origin: corsOrigins,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    return callback(null, origin);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Agent-Token', 'X-Api-Key', 'X-Organization-Id', 'X-Webhook-Secret', 'X-Hub-Signature-256'],

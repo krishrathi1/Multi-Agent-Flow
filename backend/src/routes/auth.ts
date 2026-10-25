@@ -80,6 +80,11 @@ const verifyEmailSchema = z.object({
   token: z.string().min(1),
 });
 
+const verifyOtpSchema = z.object({
+  email: z.string().email(),
+  otp: z.string().min(4).max(10),
+});
+
 const resendVerificationSchema = z.object({
   email: z.string().email(),
 });
@@ -101,7 +106,7 @@ router.post('/signup', signupLimiter, validate(signupSchema), async (req, res) =
   }
 });
 
-// POST /verify-email
+// POST /verify-email (link-based token verification)
 router.post('/verify-email', authLimiter, validate(verifyEmailSchema), async (req, res) => {
   try {
     const result = await authService.verifyEmail(req.body.token);
@@ -117,6 +122,22 @@ router.post('/verify-email', authLimiter, validate(verifyEmailSchema), async (re
   }
 });
 
+// POST /verify-otp (6-digit OTP code verification)
+router.post('/verify-otp', authLimiter, validate(verifyOtpSchema), async (req, res) => {
+  try {
+    const result = await authService.verifyOtp(req.body.email, req.body.otp);
+    res.json(result);
+  } catch (e: any) {
+    if (e.message === 'Invalid verification code') {
+      return res.status(400).json({ error: e.message });
+    }
+    if (e.message === 'Verification code has expired') {
+      return res.status(410).json({ error: e.message });
+    }
+    return res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
 // POST /resend-verification
 router.post('/resend-verification', authLimiter, validate(resendVerificationSchema), async (req, res) => {
   try {
@@ -124,7 +145,7 @@ router.post('/resend-verification', authLimiter, validate(resendVerificationSche
     res.json(result);
   } catch {
     // Always return success to avoid email enumeration
-    res.json({ message: 'If the email is registered, a verification link has been sent' });
+    res.json({ message: 'If the email is registered, a verification code has been sent' });
   }
 });
 
