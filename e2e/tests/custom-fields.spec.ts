@@ -7,29 +7,28 @@ test.describe('Custom Fields', () => {
     await page.goto('/custom-fields');
     await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: /Custom Fields/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Create Field' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Add Custom Field|Create First Field/ })).toBeVisible();
   });
 
   test('create field definition via UI', async ({ page }) => {
     await page.goto('/custom-fields');
     await page.waitForLoadState('networkidle');
 
-    await page.getByRole('button', { name: 'Create Field' }).click();
+    await page.getByRole('button', { name: /Add Custom Field|Create First Field/ }).click();
 
-    const modal = page.locator('div.fixed.inset-0');
+    const modal = page.locator('div.fixed.inset-0').filter({ has: page.getByRole('heading', { name: 'Create Custom Field' }) });
     await expect(modal).toBeVisible();
 
-    await page.getByPlaceholder('Field label').fill(`Score ${ts}`);
-    await page.getByPlaceholder('Field key (auto-generated if empty)').fill(`score_${ts}`);
+    await page.getByPlaceholder('e.g. Deployment Environment').fill(`Score ${ts}`);
+    await page.getByPlaceholder('e.g. deploy_env (auto-generated if blank)').fill(`score_${ts}`);
 
     // Select field type and visibility
-    const selects = modal.locator('select');
-    await selects.first().selectOption('INTEGER');
-    await selects.nth(1).selectOption('ALWAYS');
+    await modal.getByRole('button', { name: 'Text', exact: true }).click();
+    await modal.getByRole('button', { name: 'Integer', exact: true }).click();
 
-    await page.getByPlaceholder('Default value (optional)').fill('0');
+    await page.getByPlaceholder('Optional default string or value').fill('0');
 
-    await modal.getByRole('button', { name: 'Create' }).click();
+    await modal.getByRole('button', { name: 'Create Field' }).click();
 
     // Field should appear in list
     await expect(page.getByText(`Score ${ts}`)).toBeVisible({ timeout: 10_000 });
@@ -47,8 +46,8 @@ test.describe('Custom Fields', () => {
     await fieldRow.getByRole('button', { name: 'Attach to Boards' }).click();
 
     // Modal with board checkboxes
-    const modal = page.locator('div.fixed.inset-0');
-    await expect(modal.getByText('Attach to Boards')).toBeVisible();
+    const modal = page.locator('div.fixed.inset-0').filter({ has: page.getByRole('heading', { name: 'Attach Field to Boards' }) });
+    await expect(modal).toBeVisible();
 
     // Check the board
     await modal.getByText(`CF Board ${ts}`).click();
@@ -67,6 +66,7 @@ test.describe('Custom Fields', () => {
 
     // Find the field row using the closest container
     const fieldRow = page.locator('main').getByText(`DelField ${ts}`).locator('xpath=ancestor::tr | ancestor::div[contains(@class,"border")]').first();
+    page.once('dialog', dialog => dialog.accept());
     await fieldRow.getByRole('button', { name: 'Delete' }).click();
 
     // Field should disappear

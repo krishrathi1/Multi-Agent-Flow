@@ -58,7 +58,7 @@ test.describe('Boards', () => {
     // Add task modal
     await expect(page.getByText('Add Task to')).toBeVisible();
     await page.getByPlaceholder('Task title...').fill(`PW Task ${ts}`);
-    await page.getByRole('button', { name: 'Add Task' }).click();
+    await page.getByRole('button', { name: 'Add Task', exact: true }).click();
 
     // Task should appear
     await expect(page.getByText(`PW Task ${ts}`)).toBeVisible({ timeout: 10_000 });
