@@ -4,7 +4,22 @@ import { Severity } from '@prisma/client';
 /**
  * Synchronizes alert rules and events with real active agents in the organization.
  */
+const liveAlertSyncs = new Map<string, Promise<void>>();
+
 async function syncLiveAlerts(organizationId: string) {
+  const inFlight = liveAlertSyncs.get(organizationId);
+  if (inFlight) return inFlight;
+
+  const sync = syncLiveAlertsOnce(organizationId);
+  liveAlertSyncs.set(organizationId, sync);
+  try {
+    await sync;
+  } finally {
+    if (liveAlertSyncs.get(organizationId) === sync) liveAlertSyncs.delete(organizationId);
+  }
+}
+
+async function syncLiveAlertsOnce(organizationId: string) {
   const agents = await prisma.agent.findMany({
     where: { organizationId },
     select: { id: true, name: true, displayName: true, avatar: true, status: true, heartbeatInterval: true, updatedAt: true },

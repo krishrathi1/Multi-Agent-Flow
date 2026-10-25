@@ -1,18 +1,19 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { prisma } from '../lib/prisma.js';
-import { acknowledgeEvent, getAlertEvents, createAlertRule } from '../services/alert.service.js';
+import { acknowledgeEvent, getAlertEvents, getAlertRules, createAlertRule } from '../services/alert.service.js';
 import { cleanupTestData, createTestUser } from './setup.js';
 
 describe('token cost alert rules', () => {
-  let organizationId: string | undefined;
+  const organizationIds: string[] = [];
 
   afterAll(async () => {
-    if (organizationId) await cleanupTestData(organizationId);
+    await Promise.all(organizationIds.map((organizationId) => cleanupTestData(organizationId)));
   });
 
   it('creates one event when rolling window spend reaches threshold', async () => {
     const testUser = await createTestUser('cost-alert');
-    organizationId = testUser.organization.id;
+    const organizationId = testUser.organization.id;
+    organizationIds.push(organizationId);
     const agent = await prisma.agent.create({
       data: {
         organizationId,
@@ -64,5 +65,30 @@ describe('token cost alert rules', () => {
     expect(repeatedEvents.filter((event) => event.alertRuleId === rule.id)).toHaveLength(1);
     const acknowledged = await acknowledgeEvent(matchingEvents[0].id, organizationId);
     expect(acknowledged.acknowledged).toBe(true);
+  });
+
+  it('creates each built-in rule only once during parallel refreshes', async () => {
+    const testUser = await createTestUser('concurrent-alert-sync');
+    const organizationId = testUser.organization.id;
+    organizationIds.push(organizationId);
+    await prisma.agent.create({
+      data: {
+        organizationId,
+        name: 'alert-sync-agent',
+        displayName: 'Alert Sync Agent',
+        description: 'Integration test agent',
+      },
+    });
+
+    await Promise.all([
+      getAlertRules(organizationId),
+      getAlertEvents(organizationId),
+      getAlertRules(organizationId),
+      getAlertEvents(organizationId),
+    ]);
+    const rules = await prisma.alertRule.findMany({ where: { organizationId } });
+    for (const condition of ['HEARTBEAT_MISSED', 'AGENT_OFFLINE', 'RESPONSE_TIME_HIGH', 'STEP_FAILURE']) {
+      expect(rules.filter((rule) => rule.condition === condition)).toHaveLength(1);
+    }
   });
 });

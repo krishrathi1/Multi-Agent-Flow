@@ -13,36 +13,35 @@ if (process.env.OTEL_DEBUG === 'true') {
   diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 }
 
-const sdk = new NodeSDK({
-  serviceName: config.otel.serviceName || 'nexus-backend',
-  traceExporter: new OTLPTraceExporter({
-    url: `${config.otel.endpoint}/v1/traces`,
-  }),
-  metricReader: new PeriodicExportingMetricReader({
-    exporter: new OTLPMetricExporter({
-      url: `${config.otel.endpoint}/v1/metrics`,
-    }),
-    exportIntervalMillis: 30_000,
-  }),
-  logRecordProcessors: [
-    new BatchLogRecordProcessor(
-      new OTLPLogExporter({ url: `${config.otel.endpoint}/v1/logs` }),
-    ),
-  ],
-  instrumentations: [
-    getNodeAutoInstrumentations({
-      '@opentelemetry/instrumentation-http': { enabled: true },
-      '@opentelemetry/instrumentation-express': { enabled: true },
-      '@opentelemetry/instrumentation-fs': { enabled: false },
-      '@opentelemetry/instrumentation-dns': { enabled: false },
-      '@opentelemetry/instrumentation-net': { enabled: false },
-    }),
-  ],
-});
-
-if (config.otel.enabled && config.otel.endpoint && config.otel.serviceName) sdk.start();
-
 if (config.otel.enabled && config.otel.endpoint && config.otel.serviceName) {
+  const sdk = new NodeSDK({
+    serviceName: config.otel.serviceName,
+    traceExporter: new OTLPTraceExporter({
+      url: `${config.otel.endpoint}/v1/traces`,
+    }),
+    metricReader: new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter({
+        url: `${config.otel.endpoint}/v1/metrics`,
+      }),
+      exportIntervalMillis: 30_000,
+    }),
+    logRecordProcessors: [
+      new BatchLogRecordProcessor(
+        new OTLPLogExporter({ url: `${config.otel.endpoint}/v1/logs` }),
+      ),
+    ],
+    instrumentations: [
+      getNodeAutoInstrumentations({
+        '@opentelemetry/instrumentation-http': { enabled: true },
+        '@opentelemetry/instrumentation-express': { enabled: true },
+        '@opentelemetry/instrumentation-fs': { enabled: false },
+        '@opentelemetry/instrumentation-dns': { enabled: false },
+        '@opentelemetry/instrumentation-net': { enabled: false },
+      }),
+    ],
+  });
+
+  sdk.start();
   process.on('SIGTERM', () => sdk.shutdown());
   process.on('SIGINT', () => sdk.shutdown());
 }

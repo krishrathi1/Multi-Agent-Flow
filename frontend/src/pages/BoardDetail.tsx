@@ -127,7 +127,14 @@ export function BoardDetail() {
         boardId: id,
         agentId: undefined,
       });
-      setTasks(prev => [...prev, task]);
+      // The socket may deliver task:update before the create request resolves.
+      // Upsert by ID so that the HTTP response cannot duplicate that live card.
+      setTasks(prev => {
+        const exists = prev.some(existing => existing.id === task.id);
+        return exists
+          ? prev.map(existing => existing.id === task.id ? task : existing)
+          : [...prev, task];
+      });
       setShowAddTask(null);
     } catch (err) {
       console.error('Failed to create task:', err);

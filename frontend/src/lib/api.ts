@@ -1,7 +1,8 @@
 import type { Agent, AgentStats, Activity, Task, Thread, Message, Session, TokenUsage, MetricSnapshot, AlertRule, AlertEvent, Command, Gateway, GatewayHealth, ModelInfo, ChatHistory, ChatResponse, WorkspaceFile, LlmProvider, UsageCredit, Board, BoardGroup, Approval, Tag, TagAssignment, TaskCustomFieldDefinition, BoardTaskCustomField, TaskCustomFieldValue, MarketplaceSkill, SkillPack, AgentSkill, AgentIntegration, BoardWebhook, BoardWebhookPayload, BoardOnboardingSession, BoardGroupMemory, OrgInvite, SoulTemplate, Process, ProcessPlan, ProcessStats, ProcessStatus, ChainRunResult, WorkspaceArtifact, RunStatus, ProcessRun, RunStats, ProcessTemplate, ProcessSchedule, ProcessWebhookConfig, ChainGate, ApprovalMode, AppNotification, CostEstimate, AgentInsight, PreviewVisibility, RunComparison, ChainBundle, WebhookDelivery } from '../types';
 import { useAuthStore } from '../stores/auth-store';
 
-const BASE_URL = '/api';
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+const BASE_URL = BACKEND_URL ? `${BACKEND_URL}/api` : '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { accessToken, organization } = useAuthStore.getState();
@@ -326,13 +327,15 @@ export const api = {
 
   auth: {
     signup: (data: { email: string; password: string; name: string; orgName: string }) =>
-      requestPublic<{ user: { id: string; email: string; name: string }; requiresVerification: boolean }>('/auth/signup', { method: 'POST', body: JSON.stringify(data) }),
+      requestPublic<{ user: { id: string; email: string; name: string }; requiresVerification: boolean; otp?: string }>('/auth/signup', { method: 'POST', body: JSON.stringify(data) }),
     login: (data: { email: string; password: string }) =>
       requestPublic('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
     verifyEmail: (token: string) =>
       requestPublic<{ message: string }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) }),
+    verifyOtp: (data: { email: string; otp: string }) =>
+      requestPublic<{ message: string }>('/auth/verify-otp', { method: 'POST', body: JSON.stringify(data) }),
     resendVerification: (email: string) =>
-      requestPublic<{ message: string }>('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email }) }),
+      requestPublic<{ message: string; otp?: string }>('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email }) }),
     refresh: () =>
       requestPublic('/auth/refresh', { method: 'POST' }),
     me: () => request('/auth/me'),

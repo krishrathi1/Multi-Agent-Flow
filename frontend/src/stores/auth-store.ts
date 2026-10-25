@@ -24,6 +24,9 @@ interface AuthState {
   fetchOrganizations: () => Promise<void>;
 }
 
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+const API_BASE = BACKEND_URL ? `${BACKEND_URL}/api` : '/api';
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   organization: null,
@@ -37,7 +40,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email, password) => {
     set({ error: null, isLoading: true });
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // send/receive httpOnly cookies
@@ -66,7 +69,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signup: async (email, password, name, orgName) => {
     set({ error: null, isLoading: true });
     try {
-      const res = await fetch('/api/auth/signup', {
+      const res = await fetch(`${API_BASE}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -76,7 +79,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const data = await res.json();
         throw new Error(data.error || 'Signup failed');
       }
+      const data = await res.json();
       set({ isLoading: false });
+      return data;
     } catch (e: any) {
       set({ error: e.message, isLoading: false });
       throw e;
@@ -86,7 +91,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     const { accessToken } = get();
     try {
-      await fetch('/api/auth/logout', {
+      await fetch(`${API_BASE}/auth/logout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -108,7 +113,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     try {
-      const res = await fetch('/api/auth/refresh', {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -116,7 +121,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (!res.ok) throw new Error('Refresh failed');
       const data = await res.json();
 
-      const meRes = await fetch('/api/auth/me', {
+      const meRes = await fetch(`${API_BASE}/auth/me`, {
         headers: { Authorization: `Bearer ${data.accessToken}` },
         credentials: 'include',
       });
@@ -140,7 +145,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   switchOrganization: async (orgId: string) => {
     const { accessToken } = get();
     try {
-      const res = await fetch('/api/auth/me', {
+      const res = await fetch(`${API_BASE}/auth/me`, {
         headers: {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           'X-Organization-Id': orgId,
@@ -169,7 +174,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { accessToken, organization } = get();
     if (!accessToken) return;
     try {
-      const res = await fetch('/api/auth/organizations', {
+      const res = await fetch(`${API_BASE}/auth/organizations`, {
         headers: { Authorization: `Bearer ${accessToken}` },
         credentials: 'include',
       });
