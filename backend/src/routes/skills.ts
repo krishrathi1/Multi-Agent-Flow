@@ -10,8 +10,34 @@ router.get('/marketplace', async (req, res) => {
 });
 
 router.post('/marketplace', async (req, res) => {
-  const skill = await skillService.createSkill(req.organizationId!, req.body);
-  res.status(201).json(skill);
+  try {
+    const skill = await skillService.createSkill(req.organizationId!, req.body);
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:created', skill);
+    res.status(201).json(skill);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/marketplace/:id/files', async (req, res) => {
+  try {
+    const subPath = (req.query.path as string) || '';
+    const result = await skillService.getSkillFiles(req.params.id, req.organizationId!, subPath);
+    res.json(result);
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+router.get('/marketplace/:id/file', async (req, res) => {
+  try {
+    const filePath = (req.query.path as string) || '';
+    if (!filePath) return res.status(400).json({ error: 'File path is required' });
+    const result = await skillService.getSkillFileContent(req.params.id, req.organizationId!, filePath);
+    res.json(result);
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
 });
 
 router.post('/marketplace/:id/install', async (req, res) => {
@@ -44,13 +70,44 @@ router.get('/packs', async (req, res) => {
 });
 
 router.post('/packs', async (req, res) => {
-  const pack = await skillService.createPack(req.organizationId!, req.body);
-  res.status(201).json(pack);
+  try {
+    const pack = await skillService.createPack(req.organizationId!, req.body);
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:pack:created', pack);
+    res.status(201).json(pack);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 router.post('/packs/:id/sync', async (req, res) => {
-  const result = await skillService.syncPack(req.params.id, req.organizationId!);
-  res.json(result);
+  try {
+    const result = await skillService.syncPack(req.params.id, req.organizationId!);
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:pack:synced', { packId: req.params.id });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/packs/:id/files', async (req, res) => {
+  try {
+    const subPath = (req.query.path as string) || '';
+    const result = await skillService.getPackFiles(req.params.id, req.organizationId!, subPath);
+    res.json(result);
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+router.get('/packs/:id/file', async (req, res) => {
+  try {
+    const filePath = (req.query.path as string) || '';
+    if (!filePath) return res.status(400).json({ error: 'File path is required' });
+    const result = await skillService.getPackFileContent(req.params.id, req.organizationId!, filePath);
+    res.json(result);
+  } catch (err: any) {
+    res.status(404).json({ error: err.message });
+  }
 });
 
 router.delete('/packs/:id', async (req, res) => {

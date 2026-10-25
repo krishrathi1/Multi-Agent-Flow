@@ -40,7 +40,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     }
   }
 
-  if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => null);
+    const msg = errorBody?.error || errorBody?.message || `API error: ${res.status} ${res.statusText}`;
+    throw new Error(msg);
+  }
   if (res.status === 204) return undefined as T;
   return res.json();
 }
@@ -718,6 +722,22 @@ export const api = {
       request('/skills/packs/' + packId + '/sync', { method: 'POST' }),
     deletePack: (packId: string) =>
       request<void>('/skills/packs/' + packId, { method: 'DELETE' }),
+    getPackFiles: (packId: string, subPath?: string) =>
+      request<{ files: Array<{ name: string; path: string; isDirectory: boolean; size?: number; extension?: string }>; currentPath: string; isCloned: boolean }>(
+        `/skills/packs/${packId}/files${subPath ? `?path=${encodeURIComponent(subPath)}` : ''}`
+      ),
+    getPackFileContent: (packId: string, filePath: string) =>
+      request<{ name: string; path: string; content: string; size: number; isBinary: boolean }>(
+        `/skills/packs/${packId}/file?path=${encodeURIComponent(filePath)}`
+      ),
+    getSkillFiles: (skillId: string, subPath?: string) =>
+      request<{ files: Array<{ name: string; path: string; isDirectory: boolean; size?: number; extension?: string }>; currentPath: string; isCloned: boolean }>(
+        `/skills/marketplace/${skillId}/files${subPath ? `?path=${encodeURIComponent(subPath)}` : ''}`
+      ),
+    getSkillFileContent: (skillId: string, filePath: string) =>
+      request<{ name: string; path: string; content: string; size: number; isBinary: boolean }>(
+        `/skills/marketplace/${skillId}/file?path=${encodeURIComponent(filePath)}`
+      ),
   },
   webhooks: {
     list: (boardId: string) => request<BoardWebhook[]>(`/boards/${boardId}/webhooks`),

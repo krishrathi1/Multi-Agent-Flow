@@ -22,6 +22,8 @@ import { Button } from '../components/ui/Button';
 import { LiveSparkleIcon } from '../components/ui/LiveIcon';
 import { HourglassLoader } from '../components/ui/HourglassLoader';
 import { CustomSelect } from '../components/ui/CustomSelect';
+import { RepoFilesModal } from '../components/skills/RepoFilesModal';
+import { Folder } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function SkillsMarketplace() {
@@ -46,6 +48,15 @@ export function SkillsMarketplace() {
 
   const [packForm, setPackForm] = useState({ name: '', description: '', sourceUrl: '', branch: 'main' });
   const [creatingPack, setCreatingPack] = useState(false);
+  const [activeRepoModal, setActiveRepoModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    sourceUrl?: string;
+    branch?: string;
+    itemType: 'pack' | 'skill';
+    itemId: string;
+    metadata?: any;
+  } | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -295,6 +306,29 @@ export function SkillsMarketplace() {
                     <p className="text-xs text-ink-muted leading-relaxed line-clamp-2">
                       {skill.description || 'No description provided'}
                     </p>
+                    {skill.sourceUrl && (
+                      <div className="pt-1">
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          icon={Folder}
+                          onClick={() => {
+                            setActiveRepoModal({
+                              isOpen: true,
+                              title: skill.name,
+                              sourceUrl: skill.sourceUrl || undefined,
+                              branch: 'main',
+                              itemType: 'skill',
+                              itemId: skill.id,
+                              metadata: skill.metadata,
+                            });
+                          }}
+                          className="text-brand-500 hover:text-brand-600 hover:bg-brand-500/10 text-2xs"
+                        >
+                          Browse Cloned Files
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   {selectedGateway && (
@@ -361,8 +395,30 @@ export function SkillsMarketplace() {
                   <Button
                     size="xs"
                     variant="secondary"
+                    icon={Folder}
+                    onClick={() => {
+                      setActiveRepoModal({
+                        isOpen: true,
+                        title: pack.name,
+                        sourceUrl: pack.sourceUrl,
+                        branch: pack.branch,
+                        itemType: 'pack',
+                        itemId: pack.id,
+                        metadata: pack.metadata,
+                      });
+                    }}
+                  >
+                    Browse Files
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="secondary"
                     icon={RefreshCw}
-                    onClick={() => api.skills.syncPack(pack.id)}
+                    onClick={async () => {
+                      await api.skills.syncPack(pack.id);
+                      const updatedPacks = await api.skills.packs();
+                      setPacks(updatedPacks);
+                    }}
                   >
                     Sync
                   </Button>
@@ -380,6 +436,26 @@ export function SkillsMarketplace() {
             ))}
           </div>
         </div>
+      )}
+
+      {activeRepoModal && (
+        <RepoFilesModal
+          isOpen={activeRepoModal.isOpen}
+          onClose={() => setActiveRepoModal(null)}
+          title={activeRepoModal.title}
+          sourceUrl={activeRepoModal.sourceUrl}
+          branch={activeRepoModal.branch}
+          itemType={activeRepoModal.itemType}
+          itemId={activeRepoModal.itemId}
+          metadata={activeRepoModal.metadata}
+          onSync={async () => {
+            if (activeRepoModal.itemType === 'pack') {
+              await api.skills.syncPack(activeRepoModal.itemId);
+              const updatedPacks = await api.skills.packs();
+              setPacks(updatedPacks);
+            }
+          }}
+        />
       )}
 
       {showCreate && (

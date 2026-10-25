@@ -3,11 +3,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://a306c3a7ebd9f9.lhr.life/api/:path*"
+      "destination": "https://spend-student-bridges-filed.trycloudflare.com/api/:path*"
     },
     {
       "source": "/socket.io/:path*",
-      "destination": "https://a306c3a7ebd9f9.lhr.life/socket.io/:path*"
+      "destination": "https://spend-student-bridges-filed.trycloudflare.com/socket.io/:path*"
     },
     {
       "source": "/(.*)",

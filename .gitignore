@@ -59,7 +59,11 @@ postgres-data/
 # Agent chain workspaces (generated artifacts)
 .nexus-workspaces/
 
-# Nested .env and local db files
+# Local utility scripts
+scripts/*.py
+scripts/*.sh
+scripts/create-admin.ts
+
 **/.env
 **/.env.*
 !.env.example

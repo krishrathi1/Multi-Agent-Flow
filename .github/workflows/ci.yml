@@ -42,6 +42,7 @@ jobs:
       - name: Verify Backend Types
         run: |
           cd backend
+          npx prisma generate
           npx tsc --noEmit
 
       - name: Verify Frontend Types & Build
@@ -65,4 +66,3 @@ jobs:
         run: |
           cd frontend
           npm test
-
