@@ -6,7 +6,7 @@ test.describe('Boards', () => {
   test('boards page loads with Create Board button', async ({ page }) => {
     await page.goto('/boards');
     await page.waitForLoadState('networkidle');
-    await expect(page.getByRole('heading', { name: /Boards/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Boards', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Create Board/ })).toBeVisible();
   });
 
@@ -18,9 +18,9 @@ test.describe('Boards', () => {
     await page.getByRole('button', { name: /Create Board/ }).first().click();
 
     // Fill form in modal
-    await page.getByPlaceholder('Board name...').fill(`E2E Board ${ts}`);
-    await page.getByPlaceholder('What is this board for...').fill('Created by Playwright E2E');
-    await page.getByPlaceholder('What should agents on this board accomplish...').fill('Test objectives');
+    await page.getByPlaceholder('e.g. SRE Production Incident Stream').fill(`E2E Board ${ts}`);
+    await page.getByPlaceholder('What is this board designed to coordinate...').fill('Created by Playwright E2E');
+    await page.getByPlaceholder('What specific outcome should agents achieve...').fill('Test objectives');
 
     // Submit — the submit button inside the modal also says "Create Board"
     const modal = page.locator('div.fixed.inset-0');
@@ -58,7 +58,7 @@ test.describe('Boards', () => {
     // Add task modal
     await expect(page.getByText('Add Task to')).toBeVisible();
     await page.getByPlaceholder('Task title...').fill(`PW Task ${ts}`);
-    await page.getByRole('button', { name: 'Add Task' }).click();
+    await page.getByRole('button', { name: 'Add Task', exact: true }).click();
 
     // Task should appear
     await expect(page.getByText(`PW Task ${ts}`)).toBeVisible({ timeout: 10_000 });

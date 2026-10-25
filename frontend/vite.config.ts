@@ -5,9 +5,10 @@ import path from 'path';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const devPort = Number(env.VITE_DEV_PORT);
-  if (!Number.isInteger(devPort) || devPort <= 0) throw new Error('VITE_DEV_PORT must be configured');
-  if (!env.VITE_BACKEND_URL) throw new Error('VITE_BACKEND_URL must be configured');
+  // Keep local defaults available for a fresh checkout and CI builds. Both
+  // values can still be overridden through frontend/.env or the environment.
+  const devPort = Number(env.VITE_DEV_PORT || 5173);
+  const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:4000';
 
   return {
     plugins: [react(), tailwindcss()],
@@ -15,9 +16,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: devPort,
       proxy: {
-        '/api': env.VITE_BACKEND_URL,
-        '/preview': env.VITE_BACKEND_URL,
-        '/socket.io': { target: env.VITE_BACKEND_URL, ws: true },
+        '/api': backendUrl,
+        '/preview': backendUrl,
+        '/socket.io': { target: backendUrl, ws: true },
       },
     },
   };

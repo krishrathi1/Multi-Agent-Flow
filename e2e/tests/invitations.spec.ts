@@ -6,9 +6,9 @@ test.describe('Invitations', () => {
   test('page loads with invite form', async ({ page }) => {
     await page.goto('/invitations');
     await page.waitForLoadState('networkidle');
-    await expect(page.getByRole('heading', { name: /Invitations/ })).toBeVisible();
-    await expect(page.getByPlaceholder('Email address')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Invite' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Workspace Invitations' })).toBeVisible();
+    await expect(page.getByPlaceholder('colleague@company.com')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Send Invite' })).toBeVisible();
   });
 
   test('send invitation and see it in list', async ({ page }) => {
@@ -16,9 +16,10 @@ test.describe('Invitations', () => {
     await page.waitForLoadState('networkidle');
 
     const email = `invite-${ts}@test.local`;
-    await page.getByPlaceholder('Email address').fill(email);
-    await page.locator('select').selectOption('ADMIN');
-    await page.getByRole('button', { name: 'Invite' }).click();
+    await page.getByPlaceholder('colleague@company.com').fill(email);
+    await page.getByRole('button', { name: /Member \(Standard Access\)/ }).click();
+    await page.getByRole('button', { name: /Admin \(Full Management\)/ }).click();
+    await page.getByRole('button', { name: 'Send Invite' }).click();
 
     // Invite should appear in the list
     await expect(page.getByText(email)).toBeVisible({ timeout: 10_000 });
@@ -44,9 +45,9 @@ test.describe('Invitations', () => {
     await page.goto('/invitations');
     await page.waitForLoadState('networkidle');
 
-    const roleSelect = page.locator('select');
-    await expect(roleSelect.locator('option[value="MEMBER"]')).toBeAttached();
-    await expect(roleSelect.locator('option[value="ADMIN"]')).toBeAttached();
-    await expect(roleSelect.locator('option[value="VIEWER"]')).toBeAttached();
+    await page.getByRole('button', { name: /Member \(Standard Access\)/ }).click();
+    await expect(page.getByRole('button', { name: /Member \(Standard Access\)/ }).last()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Admin \(Full Management\)/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Viewer \(Read Only\)/ })).toBeVisible();
   });
 });

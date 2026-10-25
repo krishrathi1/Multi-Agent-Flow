@@ -16,20 +16,21 @@ test.describe('Soul Templates', () => {
 
     await page.getByRole('button', { name: 'Create Template' }).click();
 
-    const modal = page.locator('div.fixed.inset-0');
+    const modal = page.locator('div.fixed.inset-0').filter({ has: page.getByRole('heading', { name: 'Create Soul Template' }) });
     await expect(modal).toBeVisible();
 
-    await page.getByPlaceholder('Template name').fill(`E2E Template ${ts}`);
-    await modal.locator('select').selectOption('coding');
-    await page.getByPlaceholder('Brief description').fill('Created by Playwright E2E');
-    await page.getByPlaceholder('Template content (SOUL.md format)...').fill(
+    await page.getByPlaceholder('e.g. SRE Incident Commander').fill(`E2E Template ${ts}`);
+    await modal.getByRole('button', { name: 'General', exact: true }).click();
+    await modal.getByRole('button', { name: 'Coding', exact: true }).click();
+    await page.getByPlaceholder('Short summary of role').fill('Created by Playwright E2E');
+    await page.getByPlaceholder('# Agent Role\n\nInstructions, boundaries, output rules...').fill(
       '# E2E Test Agent\nYou are an E2E test agent.\n\n## Instructions\n- Run tests thoroughly'
     );
 
     await modal.getByRole('button', { name: 'Create' }).click();
 
     // Template should appear in the sidebar list
-    await expect(page.getByText(`E2E Template ${ts}`)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: `E2E Template ${ts}` })).toBeVisible({ timeout: 10_000 });
   });
 
   test('click template to see preview', async ({ apiHelper, page }) => {
@@ -65,7 +66,7 @@ test.describe('Soul Templates', () => {
     await page.goto('/soul-templates');
     await page.waitForLoadState('networkidle');
 
-    await page.getByPlaceholder('Search templates...').fill('SearchableE2E');
+    await page.getByPlaceholder('Search templates by name, keyword, or capability...').fill('SearchableE2E');
     await page.getByRole('button', { name: 'Search', exact: true }).click();
 
     await expect(page.getByText(`SearchableE2E ${ts}`)).toBeVisible({ timeout: 10_000 });
@@ -88,10 +89,11 @@ test.describe('Soul Templates', () => {
     await expect(page.locator('pre')).toContainText('To Delete');
 
     // Delete it (exact match to avoid matching template names containing "Delete")
+    page.once('dialog', dialog => dialog.accept());
     await page.getByRole('button', { name: 'Delete', exact: true }).click();
 
     // Preview should be cleared (shows placeholder text) and pre block gone
-    await expect(page.getByText('Select a template to preview')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Select a template to preview its operating instructions')).toBeVisible({ timeout: 5_000 });
     await expect(page.locator('pre')).not.toBeVisible();
   });
 });
