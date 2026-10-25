@@ -15,7 +15,7 @@ const REFRESH_COOKIE_NAME = 'nxrt'; // nexus refresh token
 const REFRESH_COOKIE_OPTIONS: CookieOptions = {
   httpOnly: true,
   secure: isProduction,        // HTTPS only in production
-  sameSite: 'strict',          // Prevent CSRF
+  sameSite: (isProduction ? 'none' : 'lax'), // Allow cross-site in production
   path: '/api/auth',           // Only sent to auth endpoints
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
@@ -28,7 +28,7 @@ function clearRefreshCookie(res: any) {
   res.clearCookie(REFRESH_COOKIE_NAME, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'strict' as const,
+    sameSite: (isProduction ? 'none' : 'lax') as any,
     path: '/api/auth',
   });
 }

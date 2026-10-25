@@ -81,6 +81,8 @@ const corsOrigins = process.env.CORS_ORIGINS
 app.use(helmet({
   contentSecurityPolicy: false, // CSP managed by frontend
   crossOriginEmbedderPolicy: false, // Needed for WebSocket
+  crossOriginResourcePolicy: false,
+  crossOriginOpenerPolicy: false,
 }));
 app.use(cors({
   origin: (origin, callback) => {
