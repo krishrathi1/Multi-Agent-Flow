@@ -5,6 +5,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://mzcyt-203-134-206-153.run.pinggy-free.link/api/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
