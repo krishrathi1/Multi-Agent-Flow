@@ -47,6 +47,11 @@ import codeIntelligenceRoutes from './routes/code-intelligence.js';
 import promptRoutes from './routes/prompts.js';
 import gitWebhookRoutes from './routes/git-webhook.js';
 import incidentRoutes from './routes/incidents.js';
+import { blackboardRouter } from './routes/blackboard.js';
+import { pydanticRouter } from './routes/pydantic.js';
+import { agentPatternsRouter } from './routes/agent-patterns.js';
+import { monitoringRouter } from './routes/monitoring.js';
+import { a2aRouter } from './routes/a2a.js';
 import { startScheduler } from './services/scheduler.js';
 import { startGitWatcher } from './services/git-watcher.service.js';
 import { recoverOrphanedRuns } from './services/agent-runner.service.js';
@@ -281,6 +286,13 @@ app.use('/api/prompts', requireAuth, promptRoutes);
 
 // Autonomous DevOps Incident Investigation Agent & Doctor
 app.use('/api/incidents', requireAuth, incidentRoutes);
+
+// Multi-Agent System (MAS) Architecture, Interoperability & Monitoring
+app.use('/api/blackboard', requireAuth, blackboardRouter);
+app.use('/api/structured-output', requireAuth, pydanticRouter);
+app.use('/api/agent-patterns', requireAuth, agentPatternsRouter);
+app.use('/api/monitoring', requireAuth, monitoringRouter);
+app.use('/api/a2a', requireAuth, a2aRouter);
 
 // Global error handler for unhandled async errors in routes
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

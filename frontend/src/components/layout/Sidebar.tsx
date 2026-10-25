@@ -85,6 +85,7 @@ const navSections: NavSection[] = [
       { path: '/prompts', label: 'Prompt Lab', icon: BrainCircuit },
       { path: '/gateways', label: 'Gateways', icon: Router },
       { path: '/mcp', label: 'MCP Hub & Tools', icon: Cpu },
+      { path: '/mas-architecture', label: 'MAS Architecture Lab', icon: Network },
       { path: '/skills', label: 'Skills Library', icon: Sparkles },
       { path: '/alerts', label: 'Alerts & Incidents', icon: AlertTriangle },
     ],
