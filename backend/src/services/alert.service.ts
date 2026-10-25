@@ -10,8 +10,6 @@ async function syncLiveAlerts(organizationId: string) {
     select: { id: true, name: true, displayName: true, avatar: true, status: true, heartbeatInterval: true, updatedAt: true },
   });
 
-  if (agents.length === 0) return;
-
   // 1. Clean up legacy seed alerts that reference obsolete agent names like 'core-engineer'
   const legacyEvents = await prisma.alertEvent.findMany({
     where: {
@@ -68,6 +66,7 @@ async function syncLiveAlerts(organizationId: string) {
   ];
 
   for (const spec of defaultRuleSpecs) {
+    if (agents.length === 0) continue;
     const found = existingRules.find((r) => r.condition === spec.condition);
     if (!found) {
       const primaryAgent = agents[0];
@@ -91,7 +90,41 @@ async function syncLiveAlerts(organizationId: string) {
     where: { organizationId, enabled: true },
   });
 
+  // Cost rules aggregate actual token usage over the configured rolling window.
+  // Evaluate these even when the organization has no agents (for example after
+  // an agent was deleted, while historical usage still exists).
+  for (const rule of allRules.filter((candidate) => candidate.condition.toLowerCase() === 'high_cost')) {
+    if (rule.threshold == null) continue;
+    const since = new Date(Date.now() - Math.max(1, rule.windowMinutes) * 60_000);
+    const usage = await prisma.tokenUsage.aggregate({
+      where: {
+        organizationId,
+        ...(rule.agentId ? { agentId: rule.agentId } : {}),
+        createdAt: { gte: since },
+      },
+      _sum: { cost: true },
+    });
+    const cost = usage._sum.cost ?? 0;
+    if (cost < rule.threshold) continue;
+    const recentDuplicate = await prisma.alertEvent.findFirst({
+      where: { organizationId, alertRuleId: rule.id, createdAt: { gte: since } },
+      select: { id: true },
+    });
+    if (recentDuplicate) continue;
+    await prisma.alertEvent.create({
+      data: {
+        organizationId,
+        alertRuleId: rule.id,
+        message: `${rule.name}: token spend of $${cost.toFixed(4)} exceeded the $${rule.threshold.toFixed(4)} threshold in ${rule.windowMinutes} minutes`,
+        severity: Severity.WARNING,
+        acknowledged: false,
+      },
+    });
+    await prisma.alertRule.update({ where: { id: rule.id }, data: { lastTriggered: new Date() } });
+  }
+
   // Only check agents that belong to real processes in this organization
+  if (agents.length === 0) return;
   const activeProcesses = await prisma.process.findMany({
     where: { organizationId, status: 'ACTIVE' },
     select: { id: true, name: true },
