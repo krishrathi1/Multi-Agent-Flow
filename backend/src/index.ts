@@ -91,7 +91,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Agent-Token', 'X-Api-Key', 'X-Organization-Id', 'X-Webhook-Secret', 'X-Hub-Signature-256'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Agent-Token', 'X-Api-Key', 'X-Organization-Id', 'X-Webhook-Secret', 'X-Hub-Signature-256', 'X-Pinggy-No-Screen'],
 }));
 
 // Cookie parser (for httpOnly refresh token cookies)

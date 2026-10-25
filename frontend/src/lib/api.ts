@@ -6,7 +6,7 @@ const BASE_URL = BACKEND_URL ? `${BACKEND_URL}/api` : '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { accessToken, organization } = useAuthStore.getState();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Pinggy-No-Screen': 'true' };
   if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
   if (organization?.id) headers['X-Organization-Id'] = organization.id;
 
@@ -20,7 +20,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (res.status === 401) {
     const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Pinggy-No-Screen': 'true' },
       credentials: 'include', // refresh token is in httpOnly cookie
     });
     if (refreshRes.ok) {
@@ -48,7 +48,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 // For public endpoints (no auth needed)
 async function requestPublic<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Pinggy-No-Screen': 'true' },
     credentials: 'include', // receive httpOnly cookies from login/signup
     ...options,
   });

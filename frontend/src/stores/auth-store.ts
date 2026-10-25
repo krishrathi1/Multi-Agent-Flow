@@ -42,7 +42,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Pinggy-No-Screen': 'true' },
         credentials: 'include', // send/receive httpOnly cookies
         body: JSON.stringify({ email, password }),
       });
@@ -71,7 +71,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await fetch(`${API_BASE}/auth/signup`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Pinggy-No-Screen': 'true' },
         credentials: 'include',
         body: JSON.stringify({ email, password, name, orgName }),
       });
@@ -115,7 +115,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Pinggy-No-Screen': 'true' },
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Refresh failed');
