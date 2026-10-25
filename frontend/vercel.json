@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://mzcyt-203-134-206-153.run.pinggy-free.link/api/:path*"
+      "destination": "https://a306c3a7ebd9f9.lhr.life/api/:path*"
     },
     {
       "source": "/(.*)",
