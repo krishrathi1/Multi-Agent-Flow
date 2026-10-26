@@ -56,7 +56,7 @@ const statusTone: Record<ProcessStatus, 'success' | 'warning' | 'neutral' | 'dan
 type FilterType = 'all' | 'ACTIVE' | 'PAUSED' | 'PLANNING' | 'standby';
 
 export function Dashboard() {
-  const { agents, loading: agentsLoading } = useAgentStore();
+  const { agents, loading: agentsLoading, fetchAgents, fetchStats } = useAgentStore();
   const {
     processes,
     loading: processesLoading,
@@ -70,7 +70,9 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchProcesses();
-  }, [fetchProcesses]);
+    fetchAgents();
+    fetchStats();
+  }, [fetchProcesses, fetchAgents, fetchStats]);
 
   // Agents grouped into productions vs unassigned standby agents
   const { unassignedAgents, processesWithAgents } = useMemo(() => {
@@ -311,11 +313,27 @@ function ProductionBlockCard({
                 </Link>
                 <span className={cn(
                   'rounded-full px-2.5 py-0.5 text-[11px] font-semibold shrink-0',
-                  isRunning
+                  process.status === 'ACTIVE'
                     ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                    : process.status === 'PAUSED'
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                    : process.status === 'COMPLETED'
+                    ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20'
+                    : process.status === 'FAILED'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                    : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20'
                 )}>
-                  {isRunning ? 'Active' : 'Completed'}
+                  {process.status === 'ACTIVE'
+                    ? 'Active'
+                    : process.status === 'PAUSED'
+                    ? 'Paused'
+                    : process.status === 'COMPLETED'
+                    ? 'Completed'
+                    : process.status === 'FAILED'
+                    ? 'Failed'
+                    : process.status === 'PLANNING'
+                    ? 'Planning'
+                    : 'Draft'}
                 </span>
               </div>
 
@@ -569,7 +587,8 @@ function ProductionBlockCard({
  * Mini interactive row for an agent inside a stage
  */
 function AgentMiniRow({ agent }: { agent: Agent }) {
-  const initials = agent.displayName
+  const name = agent.displayName || agent.name || 'Agent';
+  const initials = name
     .split(' ')
     .map((w) => w[0])
     .join('')
@@ -588,7 +607,7 @@ function AgentMiniRow({ agent }: { agent: Agent }) {
             to={`/agents/${agent.id}`}
             className="truncate text-xs font-bold text-ink hover:text-brand-500 transition-colors block"
           >
-            {agent.displayName}
+            {name}
           </Link>
           <p className="text-[11px] text-ink-muted leading-relaxed line-clamp-2 mt-0.5">
             {agent.description || agent.processRole || agent.name}
@@ -597,7 +616,17 @@ function AgentMiniRow({ agent }: { agent: Agent }) {
       </div>
 
       <div className="shrink-0 flex items-center">
-        <CheckCircle2 size={16} className="text-emerald-500" />
+        <span
+          className={cn(
+            'inline-block h-2.5 w-2.5 rounded-full',
+            agent.status === 'ONLINE'
+              ? 'bg-emerald-500 ring-2 ring-emerald-500/20'
+              : agent.status === 'ERROR'
+              ? 'bg-rose-500 ring-2 ring-rose-500/20'
+              : 'bg-amber-500 ring-2 ring-amber-500/20'
+          )}
+          title={`Status: ${agent.status || 'IDLE'}`}
+        />
       </div>
     </div>
   );

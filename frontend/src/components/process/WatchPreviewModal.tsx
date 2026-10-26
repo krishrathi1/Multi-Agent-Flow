@@ -195,8 +195,8 @@ export function WatchPreviewModal({
                   title: f.path,
                   details: `Generated autonomous component (${Math.round((f.size / 1024) * 10) / 10} KB)`,
                   timestamp: 'Deliverable',
-                  agentId: assignedAgent.id,
-                  agentName: assignedAgent.displayName,
+                  agentId: assignedAgent?.id,
+                  agentName: assignedAgent?.displayName || 'Agent',
                 });
               });
             }

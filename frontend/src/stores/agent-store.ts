@@ -21,18 +21,43 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   fetchAgents: async () => {
     set({ loading: true });
-    const agents = await api.agents.list();
-    set({ agents, loading: false });
+    try {
+      const agents = await api.agents.list();
+      set({ agents, loading: false });
+    } catch (err) {
+      console.error('Failed to fetch agents:', err);
+      set({ loading: false });
+    }
   },
 
   fetchStats: async () => {
-    const stats = await api.agents.stats();
-    set({ stats });
+    try {
+      const stats = await api.agents.stats();
+      set({ stats });
+    } catch (err) {
+      console.error('Failed to fetch agent stats:', err);
+      const agents = get().agents;
+      set({
+        stats: {
+          total: agents.length,
+          online: agents.filter((a) => a.status === 'ONLINE').length,
+          idle: agents.filter((a) => a.status === 'IDLE').length,
+          offline: agents.filter((a) => a.status === 'OFFLINE').length,
+          error: agents.filter((a) => a.status === 'ERROR').length,
+          recentActivities: 0,
+          activeTasks: 0,
+        },
+      });
+    }
   },
 
   fetchAgent: async (id: string) => {
-    const agent = await api.agents.get(id);
-    set({ selectedAgent: agent });
+    try {
+      const agent = await api.agents.get(id);
+      set({ selectedAgent: agent });
+    } catch (err) {
+      console.error('Failed to fetch agent details:', err);
+    }
   },
 
   updateAgent: (updated) => {
