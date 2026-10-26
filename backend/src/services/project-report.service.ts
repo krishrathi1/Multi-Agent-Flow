@@ -346,7 +346,7 @@ const SECRET_PATTERNS: Array<[string, RegExp]> = [
 ];
 
 /** Last meaningful paragraph of an agent's narration ("I'll start by…" first). */
-function outcomeOf(summary: string | null): string {
+export function outcomeOf(summary: string | null): string {
   if (!summary) return '';
   const paras = summary.split(/\n{2,}|\n(?=[A-Z])/).map((p) => p.trim()).filter(Boolean);
   const last = paras[paras.length - 1] ?? '';
@@ -449,7 +449,7 @@ export async function generateProjectReport(processId: string, organizationId: s
 
   const sourceFiles = files.filter((f) => !isLockfile(f.path) && !isAgentNote(f.path));
   checks.push(sourceFiles.length > 0
-    ? { name: 'Files produced', status: 'pass', detail: `${sourceFiles.length} project files (${files.reduce((a, f) => a + f.lines, 0).toLocaleString('en-US')} lines).` }
+    ? { name: 'Files produced', status: 'pass', detail: `${sourceFiles.length} project files (${sourceFiles.reduce((a, f) => a + f.lines, 0).toLocaleString('en-US')} lines).` }
     : { name: 'Files produced', status: 'fail', detail: 'The workspace has no project files.' });
 
   checks.push(fileNames.some((f) => /(^|\/)index\.html$/.test(f))
@@ -559,11 +559,12 @@ export function renderReportMarkdown(r: Omit<ProjectReport, 'markdown'>): string
 
   out.push(`# ${r.processName}`, '');
   out.push(`Production report · generated ${when}`, '');
-  out.push(`> ${r.goal.trim().split('\n').join('\n> ')}`, '');
+  // A plain paragraph, not a blockquote: the in-app viewer doesn't render '>'.
+  out.push(`**Goal:** ${r.goal.trim().replace(/\s*\n\s*/g, ' ')}`, '');
 
   // At a glance
   out.push('## At a glance', '');
-  out.push('| | |', '|---|---|');
+  out.push('| Item | Details |', '|---|---|');
   out.push(`| Status | ${r.run ? STATE_LABEL[r.run.state] ?? r.run.state : 'Not run yet'}${r.run?.durationMs ? ` in ${formatDuration(r.run.durationMs)}` : ''} |`);
   out.push(`| Team | ${r.stages.length} agent${r.stages.length === 1 ? '' : 's'} across ${stageCount} stage${stageCount === 1 ? '' : 's'} |`);
   out.push(`| Code | ${r.stack.totalFiles} files · ${r.stack.totalLines.toLocaleString('en-US')} lines · ${formatBytes(r.stack.totalBytes)} |`);

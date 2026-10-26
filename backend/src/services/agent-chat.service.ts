@@ -9,6 +9,9 @@ import { listWorkspaceFiles, workspaceFor } from './agent-runner.service.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
 import { askAiAndSpawnFixerAgent } from './process.service.js';
 import { ask as askOpenCode } from './opencode.service.js';
+import { outcomeOf } from './project-report.service.js';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { getOrganizationIntegrationToken } from './org.service.js';
 
 const HISTORY_LIMIT = 30;
@@ -507,6 +510,27 @@ export async function chatWithMother(
         }
       } catch { /* ignore */ }
 
+      // A re-run starts with no finished steps, so without the previous run
+      // the model said the chart "isn't implemented yet" while the files from
+      // the last run were sitting in the workspace.
+      const previousRun = proc.runs.find((r) => r.id !== latestRun?.id && (r.state === 'COMPLETED' || r.state === 'FAILED'));
+      const previousSummary = previousRun
+        ? `Previous Run: ${previousRun.state.toLowerCase()}, finished ${minutes(previousRun.finishedAt ?? previousRun.startedAt)} min ago\n` +
+          [...previousRun.steps].sort((a, b) => a.stage - b.stage)
+            .map((s) => `- ${s.agentName} (Stage ${s.stage}): ${s.state === 'FAILED' ? `failed — ${(s.error || '').slice(0, 200)}` : outcomeOf(s.summary).slice(0, 400) || 'done'}`)
+            .join('\n')
+        : 'Previous Run: none';
+
+      // Agents leave a notes file at the end of each stage; short excerpts let
+      // the model answer "what did QA find?" from what was actually written.
+      const notes: string[] = [];
+      for (const f of files.filter((x) => /-output\.md$/.test(x.path)).slice(0, 4)) {
+        try {
+          const text = await fs.readFile(path.join(workspaceFor(processId), f.path), 'utf-8');
+          notes.push(`[${f.path}]\n${text.slice(0, 900).trim()}${text.length > 900 ? '\n…' : ''}`);
+        } catch { /* unreadable */ }
+      }
+
       processContext = `
 Production Block: "${proc.name}"
 Status: ${proc.status}
@@ -518,6 +542,9 @@ Latest Run State: ${latestRun?.state || 'Not run yet'}${latestRun ? `, started $
 Currently Working: ${workingNow.join(', ') || (latestRun?.state === 'RUNNING' ? 'between stages' : 'nobody')}
 Stage-by-Stage Progress:
 ${latestStepsSummary.join('\n') || 'None'}
+${previousSummary}
+Agent Notes (excerpts):
+${notes.join('\n\n') || 'None yet'}
 `;
     }
   } else {
