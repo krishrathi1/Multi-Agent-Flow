@@ -4,13 +4,24 @@ import * as approvalService from '../services/approval.service.js';
 import * as runner from '../services/agent-runner.service.js';
 import { prisma } from '../lib/prisma.js';
 import type { ApprovalStatus } from '@prisma/client';
+import { sendError } from '../lib/http-error.js';
 
 const router = Router();
 
+const STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const;
+/** Normalises a ?status= filter; undefined when absent, null when invalid. */
+function statusParam(v: unknown): ApprovalStatus | undefined | null {
+  if (typeof v !== 'string' || v === '') return undefined;
+  const up = v.toUpperCase();
+  return (STATUSES as readonly string[]).includes(up) ? (up as ApprovalStatus) : null;
+}
+
 router.get('/', async (req, res) => {
+  const status = statusParam(req.query.status);
+  if (status === null) return res.status(400).json({ error: 'status must be PENDING, APPROVED or REJECTED' });
   const approvals = await approvalService.getApprovals(req.organizationId!, {
     boardId: req.query.boardId as string | undefined,
-    status: req.query.status as ApprovalStatus | undefined,
+    status,
     limit: intParam(req.query.limit),
   });
   res.json(approvals);
@@ -32,6 +43,12 @@ router.post('/', async (req, res) => {
   if (!boardId || !actionType) {
     return res.status(400).json({ error: 'boardId and actionType are required' });
   }
+  if (typeof actionType !== 'string' || actionType.length > 100) {
+    return res.status(400).json({ error: 'actionType must be a string of at most 100 characters' });
+  }
+  if (confidence !== undefined && confidence !== null && (typeof confidence !== 'number' || !(confidence >= 0 && confidence <= 1))) {
+    return res.status(400).json({ error: 'confidence must be a number between 0 and 1' });
+  }
   try {
     const approval = await approvalService.createApproval(req.organizationId!, {
       boardId, taskId, taskIds, agentId, actionType, payload, confidence, rubricScores,
@@ -39,7 +56,7 @@ router.post('/', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('approval:created', approval);
     res.status(201).json(approval);
   } catch (e: any) {
-    return res.status(e.statusCode || 404).json({ error: e.message });
+    return sendError(res, e, 404);
   }
 });
 
@@ -107,7 +124,8 @@ router.delete('/:id', async (req, res) => {
 });
 
 router.delete('/', async (req, res) => {
-  const status = req.query.status as ApprovalStatus | undefined;
+  const status = statusParam(req.query.status);
+  if (status === null) return res.status(400).json({ error: 'status must be PENDING, APPROVED or REJECTED' });
   await prisma.approval.deleteMany({
     where: {
       board: { organizationId: req.organizationId! },

@@ -68,9 +68,52 @@ async function findIndex(processId: string): Promise<string | null> {
 }
 
 /**
- * Bundles React/TSX components on-the-fly with esbuild and creates an interactive live preview.
+ * Keeps a generated site inside /preview/:processId/.
+ *
+ * The preview shares the console's origin, so every root-relative URL in a
+ * built site — `href="/"`, `src="/main.js"`, a router's `/about` — resolved
+ * to MyceliumOps itself, and the Watch Preview iframe showed the platform
+ * instead of the project the user asked for.
  */
-async function buildPreviewHtml(processId: string, absHtmlPath: string): Promise<string> {
+export function confineToPreview(
+  html: string,
+  processId: string,
+  relPath: string,
+  bundledSpa: boolean,
+  entryPath: string = relPath,
+): string {
+  const root = `/preview/${processId}/`;
+  const dir = path.posix.dirname(relPath);
+  const base = dir === '.' ? root : `${root}${dir}/`;
+  // "/" means the site's entry page, not the page being served. Vercel's
+  // rewrite doesn't match a bare trailing slash, so it's the file itself.
+  const home = `${root}${entryPath}`;
+  const ownPrefix = root.slice(1);
+
+  const out = html.replace(
+    /(\s(?:src|href|action|poster)\s*=\s*["'])\/(?!\/)([^"']*)/gi,
+    (match, attr: string, rest: string) =>
+      rest.startsWith(ownPrefix) ? match : attr + (rest === '' ? home : root + rest),
+  );
+
+  const runtime = `<script>(function(){
+var root=${JSON.stringify(root)},home=${JSON.stringify(home)},entry=${JSON.stringify(relPath)};
+function fix(u){if(typeof u!=='string'||u.charAt(0)!=='/'||u.charAt(1)==='/'||u.indexOf(root)===0)return u;return u==='/'?home:root+u.slice(1);}
+document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;var h=a.getAttribute('href'),f=fix(h);if(f!==h)a.setAttribute('href',f);},true);
+${bundledSpa ? `var p=location.pathname;if(p.indexOf(root)===0){var rest=p.slice(root.length);if(rest===entry)rest='';history.replaceState(history.state,'','/'+rest+location.search+location.hash);}` : ''}
+})();</script>`;
+  const head = (/<base\s/i.test(out) ? '' : `<base href="${base}">`) + runtime;
+
+  return /<head[^>]*>/i.test(out)
+    ? out.replace(/<head[^>]*>/i, m => m + head)
+    : head + out;
+}
+
+/**
+ * Bundles React/TSX components on-the-fly with esbuild and creates an interactive live preview.
+ * `bundled` is true when the page was rebuilt around a client-side app.
+ */
+async function buildPreviewHtml(processId: string, absHtmlPath: string): Promise<{ html: string; bundled: boolean }> {
   const wsDir = path.dirname(absHtmlPath);
   let scriptSrcEntry: string | null = null;
   let rawHtml = '';
@@ -114,7 +157,7 @@ async function buildPreviewHtml(processId: string, absHtmlPath: string): Promise
   });
 
   if (!entry) {
-    return rawHtml || (await fs.readFile(absHtmlPath, 'utf-8'));
+    return { html: rawHtml || (await fs.readFile(absHtmlPath, 'utf-8')), bundled: false };
   }
 
   try {
@@ -149,7 +192,7 @@ async function buildPreviewHtml(processId: string, absHtmlPath: string): Promise
     const titleMatch = rawHtml.match(/<title>([^<]*)<\/title>/i);
     const title = titleMatch ? titleMatch[1] : 'Production Live Preview';
 
-    return `<!doctype html>
+    const html = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -184,9 +227,10 @@ ${bundledJs}
     </script>
   </body>
 </html>`;
+    return { html, bundled: true };
   } catch (err: any) {
     console.warn('Failed to bundle preview with esbuild, falling back to raw html:', err);
-    return await fs.readFile(absHtmlPath, 'utf-8');
+    return { html: await fs.readFile(absHtmlPath, 'utf-8'), bundled: false };
   }
 }
 
@@ -274,7 +318,28 @@ router.get('/:processId/*splat', async (req, res) => {
   const rel = (req.params as Record<string, unknown>).splat;
   const relPath = Array.isArray(rel) ? rel.join('/') : String(rel ?? '');
 
-  const abs = await resolveWorkspaceFile(req.params.processId, relPath);
+  let entry: string | null | undefined;
+  const getEntry = async () => (entry === undefined ? (entry = await findIndex(req.params.processId)) : entry);
+
+  let servedPath = relPath;
+  let abs = await resolveWorkspaceFile(req.params.processId, relPath);
+  if (!abs) {
+    // Root-relative URLs are rebased to the workspace root, but a site built
+    // in a subfolder (frontend/index.html) means its own folder by "/".
+    const e = await getEntry();
+    const entryDir = e ? path.posix.dirname(e) : '.';
+    if (e && entryDir !== '.') {
+      abs = await resolveWorkspaceFile(req.params.processId, `${entryDir}/${relPath}`);
+      if (abs) servedPath = `${entryDir}/${relPath}`;
+    }
+    // An extensionless path is a client-side route: serve the app shell.
+    // Hidden paths (.git/config) are never routes.
+    const hidden = relPath.split('/').some(seg => seg.startsWith('.'));
+    if (!abs && e && !hidden && !path.posix.extname(relPath)) {
+      abs = await resolveWorkspaceFile(req.params.processId, e);
+      servedPath = e;
+    }
+  }
   if (!abs) return res.status(404).type('text/plain').send('Not found');
 
   const type = MIME[path.extname(abs).toLowerCase()] ?? 'application/octet-stream';
@@ -303,8 +368,8 @@ router.get('/:processId/*splat', async (req, res) => {
       'Content-Security-Policy',
       "default-src 'self' data: https: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: blob:; font-src 'self' https: data:; frame-ancestors 'self'; sandbox allow-scripts allow-forms allow-same-origin allow-modals;"
     );
-    const htmlContent = await buildPreviewHtml(req.params.processId, abs);
-    return res.send(htmlContent);
+    const { html, bundled } = await buildPreviewHtml(req.params.processId, abs);
+    return res.send(confineToPreview(html, req.params.processId, servedPath, bundled, (await getEntry()) ?? servedPath));
   }
   res.send(body);
 });

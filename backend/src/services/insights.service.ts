@@ -522,8 +522,10 @@ export async function canViewPreview(
       }
     }
 
-    // In local development or when private previews are explicitly allowed on local dev
-    if (process.env.ALLOW_PRIVATE_URLS === 'true' || process.env.NODE_ENV === 'development') {
+    // Development only. ALLOW_PRIVATE_URLS is an outbound-URL (SSRF) switch and
+    // is set in production, where honouring it here made every private
+    // preview readable by anyone holding the link.
+    if (process.env.NODE_ENV === 'development') {
       return true;
     }
 
@@ -535,7 +537,7 @@ export async function canViewPreview(
     return proc.previewVisibility === PreviewVisibility.PUBLIC;
   } catch (err) {
     // In local development, if DB is temporarily unreachable, allow preview
-    if (process.env.NODE_ENV === 'development' || process.env.ALLOW_PRIVATE_URLS === 'true') {
+    if (process.env.NODE_ENV === 'development') {
       return true;
     }
     return false;

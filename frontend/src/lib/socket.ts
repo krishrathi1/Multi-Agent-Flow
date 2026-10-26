@@ -5,6 +5,10 @@ let socket: Socket | null = null;
 export function getSocket(): Socket {
   if (!socket) {
     socket = io('/', {
+      // Vercel's `/socket.io/:path*` rewrite doesn't match the bare
+      // `/socket.io/` the client requests by default, so the handshake got the
+      // SPA's index.html and real-time updates never connected.
+      addTrailingSlash: false,
       autoConnect: false,
       reconnection: true,
       reconnectionDelay: 1000,

@@ -1,18 +1,27 @@
 import { Router } from 'express';
 import * as activityService from '../services/activity.service.js';
-import type { ActivityType } from '@prisma/client';
+import { ActivityType } from '@prisma/client';
+import { intParam, strParam } from '../lib/query.js';
 
 const router = Router();
 
+const ACTIVITY_TYPES = new Set<string>(Object.values(ActivityType));
+
 router.get('/', async (req, res) => {
-  const { agentId, type, processId, limit, offset, since } = req.query;
+  const type = strParam(req.query.type);
+  const since = strParam(req.query.since);
+  const sinceDate = since ? new Date(since) : undefined;
+  // parseInt('abc') used to reach Prisma as NaN and come back as a 500.
+  if (sinceDate && Number.isNaN(sinceDate.getTime())) return res.status(400).json({ error: 'since must be a date' });
+  if (type && !ACTIVITY_TYPES.has(type)) return res.status(400).json({ error: 'Unknown activity type' });
+
   const result = await activityService.getActivities(req.organizationId!, {
-    agentId: agentId as string | undefined,
+    agentId: strParam(req.query.agentId),
     type: type as ActivityType | undefined,
-    processId: processId as string | undefined,
-    limit: limit ? parseInt(limit as string) : undefined,
-    offset: offset ? parseInt(offset as string) : undefined,
-    since: since ? new Date(since as string) : undefined,
+    processId: strParam(req.query.processId),
+    limit: intParam(req.query.limit, { max: 500 }),
+    offset: intParam(req.query.offset, { min: 0, max: 1_000_000 }),
+    since: sinceDate,
   });
   res.json(result);
 });

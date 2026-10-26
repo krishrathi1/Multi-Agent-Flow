@@ -8,6 +8,7 @@ import pinoHttp from 'pino-http';
 import { createServer } from 'http';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
+import { describeError, sendError } from './lib/http-error.js';
 import { setupWebSocket } from './websocket/index.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
@@ -292,20 +293,9 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   if (err?.type === 'entity.too.large') {
     return res.status(413).json({ error: 'Request body is too large' });
   }
-  // Prisma unique constraint violation
-  if (err?.code === 'P2002') {
-    return res.status(409).json({ error: `Unique constraint failed on: ${err.meta?.target?.join(', ') || 'unknown field'}` });
-  }
-  // Prisma foreign key constraint violation
-  if (err?.code === 'P2003') {
-    return res.status(400).json({ error: `Foreign key constraint violated: ${err.meta?.field_name || 'unknown'}` });
-  }
-  // Prisma record not found
-  if (err?.code === 'P2025') {
-    return res.status(404).json({ error: 'Record not found' });
-  }
-  logger.error({ err }, 'Unhandled route error');
-  res.status(500).json({ error: err.message || 'Internal server error' });
+  const { status } = describeError(err);
+  if (status >= 500) logger.error({ err }, 'Unhandled route error');
+  sendError(res, err);
 });
 
 // WebSocket

@@ -45,6 +45,7 @@ export class GatewayClient {
   private reconnecting = false;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private closed = false;
 
   constructor(options: GatewayClientOptions) {
     this.options = {
@@ -55,7 +56,16 @@ export class GatewayClient {
   }
 
   async connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    return new Promise((rawResolve, rawReject) => {
+      // An address that never answers (or answers but never sends the
+      // challenge) used to hold the HTTP request open until the OS gave up.
+      const handshakeTimer = setTimeout(() => {
+        reject(new Error('Gateway did not respond within 15s'));
+        this.ws?.terminate();
+      }, 15_000);
+      let settled = false;
+      const resolve = () => { if (!settled) { settled = true; clearTimeout(handshakeTimer); rawResolve(); } };
+      const reject = (err: unknown) => { if (!settled) { settled = true; clearTimeout(handshakeTimer); rawReject(err); } };
       try {
         // Set origin to match gateway URL so the loopback origin check passes
         // (required when connecting as openclaw-control-ui client)
@@ -162,7 +172,7 @@ export class GatewayClient {
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnecting) return;
+    if (this.reconnecting || this.closed) return;
     if (this.reconnectAttempts >= (this.options.maxReconnectAttempts || 50)) {
       logger.error('GatewayClient max reconnect attempts reached');
       return;
@@ -234,6 +244,7 @@ export class GatewayClient {
   }
 
   close(): void {
+    this.closed = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -270,6 +281,8 @@ export async function connectGateway(gatewayId: string, url: string, token: stri
     return client;
   } catch (err) {
     logger.error({ gatewayId, err }, 'GatewayPool failed to connect');
+    // Never pooled, so nothing else would stop its reconnect loop.
+    client.close();
     throw err;
   }
 }

@@ -135,6 +135,18 @@ export async function createApproval(organizationId: string, data: {
       const allTaskIds = normalizeTaskIds(data.taskId, data.taskIds, data.payload);
       const primaryTaskId = allTaskIds[0] || null;
 
+      // Linked tasks are marked DONE when a COMPLETE_TASK approval passes, so
+      // a task id from another org would let this org complete that org's work.
+      if (allTaskIds.length > 0) {
+        const unique = [...new Set(allTaskIds)];
+        const owned = await prisma.task.count({ where: { id: { in: unique }, organizationId } });
+        if (owned !== unique.length) throw Object.assign(new Error('Task not found'), { statusCode: 404 });
+      }
+      if (data.agentId) {
+        const agent = await prisma.agent.findFirst({ where: { id: data.agentId, organizationId }, select: { id: true } });
+        if (!agent) throw Object.assign(new Error('Agent not found'), { statusCode: 404 });
+      }
+
       // Check for pending approval conflicts (one pending per task)
       if (allTaskIds.length > 0) {
         const conflicts = await findPendingConflicts(data.boardId, allTaskIds);
@@ -210,9 +222,17 @@ export async function resolveApproval(id: string, organizationId: string, status
       });
       if (!approval) throw new Error('Approval not found');
 
-      const updated = await prisma.approval.update({
-        where: { id },
+      // A decision is final. The status filter makes the transition atomic, so
+      // two concurrent approve/reject clicks can't both win.
+      const decided = await prisma.approval.updateMany({
+        where: { id, status: 'PENDING' },
         data: { status, resolvedAt: new Date() },
+      });
+      if (decided.count === 0) {
+        throw Object.assign(new Error(`Approval already ${approval.status.toLowerCase()}`), { statusCode: 409 });
+      }
+      const updated = await prisma.approval.findUniqueOrThrow({
+        where: { id },
         include: APPROVAL_INCLUDE,
       });
 
@@ -225,7 +245,8 @@ export async function resolveApproval(id: string, organizationId: string, status
         }
         if (linkedTaskIds.length > 0) {
           await prisma.task.updateMany({
-            where: { id: { in: linkedTaskIds } },
+            // Links created before ownership was checked may still point elsewhere.
+            where: { id: { in: linkedTaskIds }, organizationId },
             data: { status: 'DONE' },
           });
         }

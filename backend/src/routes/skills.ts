@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as skillService from '../services/skill.service.js';
+import { sendError } from '../lib/http-error.js';
 
 const router = Router();
 
@@ -15,7 +16,7 @@ router.post('/marketplace', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:created', skill);
     res.status(201).json(skill);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -25,7 +26,7 @@ router.get('/marketplace/:id/files', async (req, res) => {
     const result = await skillService.getSkillFiles(req.params.id, req.organizationId!, subPath);
     res.json(result);
   } catch (err: any) {
-    res.status(404).json({ error: err.message });
+    sendError(res, err, 404);
   }
 });
 
@@ -36,7 +37,7 @@ router.get('/marketplace/:id/file', async (req, res) => {
     const result = await skillService.getSkillFileContent(req.params.id, req.organizationId!, filePath);
     res.json(result);
   } catch (err: any) {
-    res.status(404).json({ error: err.message });
+    sendError(res, err, 404);
   }
 });
 
@@ -60,7 +61,7 @@ router.delete('/marketplace/:id', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:deleted', { skillId: req.params.id });
     res.status(204).end();
   } catch (err: any) {
-    res.status(404).json({ error: err.message });
+    sendError(res, err, 404);
   }
 });
 
@@ -75,7 +76,7 @@ router.post('/packs', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:pack:created', pack);
     res.status(201).json(pack);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -85,7 +86,7 @@ router.post('/packs/:id/sync', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:pack:synced', { packId: req.params.id });
     res.json(result);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -95,7 +96,7 @@ router.get('/packs/:id/files', async (req, res) => {
     const result = await skillService.getPackFiles(req.params.id, req.organizationId!, subPath);
     res.json(result);
   } catch (err: any) {
-    res.status(404).json({ error: err.message });
+    sendError(res, err, 404);
   }
 });
 
@@ -106,7 +107,7 @@ router.get('/packs/:id/file', async (req, res) => {
     const result = await skillService.getPackFileContent(req.params.id, req.organizationId!, filePath);
     res.json(result);
   } catch (err: any) {
-    res.status(404).json({ error: err.message });
+    sendError(res, err, 404);
   }
 });
 
@@ -116,7 +117,7 @@ router.delete('/packs/:id', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:pack:deleted', { packId: req.params.id });
     res.status(204).end();
   } catch (err: any) {
-    res.status(404).json({ error: err.message });
+    sendError(res, err, 404);
   }
 });
 

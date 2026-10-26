@@ -10,6 +10,7 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { getGatewayClient } from '../openclaw/client.js';
 import type { AgentStatus, ChannelType } from '@prisma/client';
+import { sendError } from '../lib/http-error.js';
 
 const router = Router();
 
@@ -161,7 +162,7 @@ router.get('/mother/history', async (req, res) => {
     );
     res.json(history);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -179,7 +180,7 @@ router.post('/mother/chat', async (req, res) => {
     );
     res.json(response);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
@@ -210,7 +211,7 @@ router.post('/:id/chat', async (req, res) => {
         req.body.model as string | undefined,
       );
       if (!local) {
-        return res.status(502).json({ error: 'Local model did not return a response' });
+        return res.status(424).json({ error: 'Local model did not return a response' });
       }
       req.app.get('io')?.to(`org:${req.organizationId}`).emit('agent:updated', {
         id: agent.id,
@@ -537,7 +538,7 @@ router.post('/:id/chat', async (req, res) => {
       data: { organizationId: req.organizationId!, agentId: agent.id, responseTimeMs, success: true, toolName: 'chat' },
     }).catch(() => {});
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendError(res, err, 500);
   }
 });
 
@@ -610,7 +611,7 @@ router.get('/:id/files', async (req, res) => {
     const result = await client.rpc('agents.files.list', { agentId: agent.gatewayAgentId }) as { files: unknown[] };
     res.json(result.files);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendError(res, err, 500);
   }
 });
 
@@ -635,7 +636,7 @@ router.get('/:id/files/:name', async (req, res) => {
     }) as { file: unknown };
     res.json(result.file);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendError(res, err, 500);
   }
 });
 
@@ -661,7 +662,7 @@ router.put('/:id/files/:name', async (req, res) => {
     }) as { file: unknown };
     res.json(result.file);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendError(res, err, 500);
   }
 });
 
@@ -822,7 +823,7 @@ router.post('/:id/message', async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendError(res, err, 500);
   }
 });
 
@@ -840,7 +841,7 @@ router.post('/:id/token', async (req, res) => {
     const token = await generateAgentToken(agent.id);
     res.json({ token });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendError(res, err, 500);
   }
 });
 
@@ -851,7 +852,7 @@ router.get('/:id/integrations', async (req, res) => {
     const result = await integrationService.listIntegrations(req.params.id, req.organizationId!);
     res.json(result);
   } catch (err) {
-    res.status(404).json({ error: (err as Error).message });
+    sendError(res, err, 404);
   }
 });
 
@@ -861,7 +862,7 @@ router.get('/:id/integrations/:channel', async (req, res) => {
     const result = await integrationService.getIntegration(req.params.id, channel, req.organizationId!);
     res.json(result);
   } catch (err) {
-    res.status(404).json({ error: (err as Error).message });
+    sendError(res, err, 404);
   }
 });
 
@@ -876,7 +877,7 @@ router.put('/:id/integrations/:channel', async (req, res) => {
     );
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: (err as Error).message });
+    sendError(res, err, 400);
   }
 });
 
@@ -892,7 +893,7 @@ router.patch('/:id/integrations/:channel', async (req, res) => {
     );
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: (err as Error).message });
+    sendError(res, err, 400);
   }
 });
 
@@ -902,7 +903,7 @@ router.delete('/:id/integrations/:channel', async (req, res) => {
     await integrationService.deleteIntegration(req.params.id, channel, req.organizationId!);
     res.status(204).end();
   } catch (err) {
-    res.status(400).json({ error: (err as Error).message });
+    sendError(res, err, 400);
   }
 });
 
