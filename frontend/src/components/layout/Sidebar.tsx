@@ -30,7 +30,6 @@ import {
   Waypoints,
   Zap,
   Code2,
-  BrainCircuit,
   Target,
   ShieldAlert,
   Globe,
@@ -82,7 +81,6 @@ const navSections: NavSection[] = [
     items: [
       { path: '/metrics', label: 'Metrics & Cost', icon: Gauge },
       { path: '/code-intelligence', label: 'Code Intelligence', icon: Code2 },
-      { path: '/prompts', label: 'Prompt Lab', icon: BrainCircuit },
       { path: '/gateways', label: 'Gateways', icon: Router },
       { path: '/mcp', label: 'MCP Hub & Tools', icon: Cpu },
       { path: '/skills', label: 'Skills Library', icon: Sparkles },

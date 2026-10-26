@@ -8,7 +8,6 @@ import { Dashboard } from './pages/Dashboard';
 import { Processes } from './pages/Processes';
 import { Runs } from './pages/Runs';
 import { Automation } from './pages/Automation';
-import { PromptPlayground } from './pages/PromptPlayground';
 import { CodeIntelligence } from './pages/CodeIntelligence';
 import { CustomFields } from './pages/CustomFields';
 import { ActivityFeed } from './pages/ActivityFeed';
@@ -102,7 +101,6 @@ export function App() {
           <Route path="/processes" element={<Processes />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/automation" element={<Automation />} />
-          <Route path="/prompts" element={<PromptPlayground />} />
           <Route path="/code-intelligence" element={<CodeIntelligence />} />
           <Route path="/code" element={<Navigate to="/code-intelligence" replace />} />
           <Route path="/custom-fields" element={<CustomFields />} />
