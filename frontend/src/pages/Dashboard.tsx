@@ -42,6 +42,7 @@ import { CreateProcessModal } from '../components/process/CreateProcessModal';
 import { EditProcessModal } from '../components/process/EditProcessModal';
 import { ProcessReportModal } from '../components/process/ProcessReportModal';
 import { WatchPreviewModal } from '../components/process/WatchPreviewModal';
+import { useToast } from '../components/ui/Toast';
 import type { Agent, Process, ProcessStatus } from '../types';
 
 const statusTone: Record<ProcessStatus, 'success' | 'warning' | 'neutral' | 'danger' | 'info'> = {
@@ -53,9 +54,10 @@ const statusTone: Record<ProcessStatus, 'success' | 'warning' | 'neutral' | 'dan
   FAILED: 'danger',
 };
 
-type FilterType = 'all' | 'ACTIVE' | 'PAUSED' | 'PLANNING' | 'standby';
+type FilterType = 'all' | 'ACTIVE' | 'PAUSED' | 'PLANNING' | 'COMPLETED' | 'FAILED' | 'standby';
 
 export function Dashboard() {
+  const toast = useToast();
   const { agents, loading: agentsLoading, fetchAgents, fetchStats } = useAgentStore();
   const {
     processes,
@@ -76,10 +78,12 @@ export function Dashboard() {
 
   // Agents grouped into productions vs unassigned standby agents
   const { unassignedAgents, processesWithAgents } = useMemo(() => {
+    const safeAgents = Array.isArray(agents) ? agents : [];
+    const safeProcesses = Array.isArray(processes) ? processes : [];
     const processMap = new Map<string, Agent[]>();
     const unassigned: Agent[] = [];
 
-    for (const a of agents) {
+    for (const a of safeAgents) {
       if (a.processId) {
         const list = processMap.get(a.processId) ?? [];
         list.push(a);
@@ -89,7 +93,7 @@ export function Dashboard() {
       }
     }
 
-    const merged = processes.map((p) => {
+    const merged = safeProcesses.map((p) => {
       const procAgents = processMap.get(p.id) ?? p.agents ?? [];
       return {
         ...p,
@@ -102,7 +106,7 @@ export function Dashboard() {
   }, [agents, processes]);
 
   const counts = useMemo(() => {
-    const base = { all: processesWithAgents.length, ACTIVE: 0, PAUSED: 0, PLANNING: 0, standby: unassignedAgents.length };
+    const base = { all: processesWithAgents.length, ACTIVE: 0, PAUSED: 0, PLANNING: 0, COMPLETED: 0, FAILED: 0, standby: unassignedAgents.length };
     for (const p of processesWithAgents) {
       if (p.status in base) {
         (base as any)[p.status] = ((base as any)[p.status] ?? 0) + 1;
@@ -122,9 +126,13 @@ export function Dashboard() {
     try {
       if (process.status === 'ACTIVE') {
         await pauseProcess(process.id);
+        toast.success('Production Paused', `"${process.name}" has been paused.`);
       } else {
         await startProcess(process.id);
+        toast.success('Production Running', `"${process.name}" is now executing.`);
       }
+    } catch (err: any) {
+      toast.error('Action Failed', err?.message || 'Could not change production execution state.');
     } finally {
       setBusyProcessId(null);
     }
@@ -138,6 +146,8 @@ export function Dashboard() {
           { value: 'ACTIVE' as const, label: 'Active', count: counts.ACTIVE },
           { value: 'PAUSED' as const, label: 'Paused', count: counts.PAUSED },
           { value: 'PLANNING' as const, label: 'Planning', count: counts.PLANNING },
+          { value: 'COMPLETED' as const, label: 'Completed', count: counts.COMPLETED },
+          { value: 'FAILED' as const, label: 'Failed', count: counts.FAILED },
           { value: 'standby' as const, label: 'Standby Fleet', count: counts.standby },
         ] satisfies { value: FilterType; label: string; count: number }[]
       ).filter((t) => t.value === 'all' || t.count > 0),
@@ -254,6 +264,7 @@ function ProductionBlockCard({
   busy: boolean;
   onToggleRun: () => void;
 }) {
+  const toast = useToast();
   const navigate = useNavigate();
   const removeProcess = useProcessStore((s) => s.removeProcess);
   const fetchProcesses = useProcessStore((s) => s.fetchProcesses);
@@ -285,8 +296,9 @@ function ProductionBlockCard({
       setDeleting(true);
       try {
         await removeProcess(process.id, false);
+        toast.success('Production Deleted', `"${process.name}" has been removed.`);
       } catch (err) {
-        console.error('Failed to delete process:', err);
+        toast.error('Delete Failed', (err as Error).message);
       } finally {
         setDeleting(false);
         setMenuOpen(false);
@@ -590,6 +602,7 @@ function AgentMiniRow({ agent }: { agent: Agent }) {
   const name = agent.displayName || agent.name || 'Agent';
   const initials = name
     .split(' ')
+    .filter(Boolean)
     .map((w) => w[0])
     .join('')
     .slice(0, 2)

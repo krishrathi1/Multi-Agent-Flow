@@ -162,11 +162,11 @@ export function WatchPreviewModal({
             dynamicItems.push({
               id: `init-agent-${ag.id || idx}`,
               type: 'success',
-              title: `${ag.displayName} — Stage ${stage}`,
+              title: `${ag.displayName || ag.name || 'Agent'} — Stage ${stage}`,
               details: `${role}: Stage initialized with automated health telemetry and policy enforcement.`,
               timestamp: `Stage ${stage}`,
               agentId: ag.id,
-              agentName: ag.displayName,
+              agentName: ag.displayName || ag.name || 'Agent',
             });
           });
         }
@@ -304,7 +304,8 @@ export function WatchPreviewModal({
       if (item.type === 'user') return true;
       if (item.agentId && item.agentId === selectedAgentFilter) return true;
       if (item.agentName && targetAgent) {
-        return item.agentName.toLowerCase() === targetAgent.displayName.toLowerCase();
+        const tName = targetAgent.displayName || targetAgent.name || '';
+        return item.agentName.toLowerCase() === tName.toLowerCase();
       }
       return false;
     });
@@ -315,7 +316,7 @@ export function WatchPreviewModal({
     const itemsToCopy = selectedAgentFilter ? filteredRealTimeItems : realTimeItems;
     const textToCopy = [
       `Project: ${currentProcess?.name || 'Production'}`,
-      selectedAgentFilter ? `Filter: ${activeAgent.displayName}` : 'Filter: All Agents',
+      selectedAgentFilter ? `Filter: ${activeAgent.displayName || activeAgent.name || 'Agent'}` : 'Filter: All Agents',
       ...itemsToCopy.map(
         (i) => `${i.type === 'success' ? '✅' : i.type === 'error' ? '❌' : '🔄'} ${i.title} - ${i.details}`
       ),
@@ -350,6 +351,7 @@ export function WatchPreviewModal({
     const targetAgent = selectedAgentFilter
       ? agents.find((a) => a.id === selectedAgentFilter) || activeAgent
       : activeAgent;
+    const targetName = targetAgent?.displayName || targetAgent?.name || 'Agent';
 
     setRealTimeItems((prev) => [
       ...prev,
@@ -360,16 +362,16 @@ export function WatchPreviewModal({
         details: userPrompt,
         timestamp: 'Just now',
         agentId: targetAgent.id,
-        agentName: targetAgent.displayName,
+        agentName: targetName,
       },
       {
         id: `working-${Date.now()}`,
         type: 'running',
-        title: `${targetAgent.displayName} processing...`,
+        title: `${targetName} processing...`,
         details: 'Executing instruction and compiling code update in workspace',
         timestamp: 'Just now',
         agentId: targetAgent.id,
-        agentName: targetAgent.displayName,
+        agentName: targetName,
       },
     ]);
 
@@ -390,7 +392,7 @@ export function WatchPreviewModal({
             title: `Update applied: ${userPrompt.slice(0, 40)}`,
             details:
               res.message ||
-              `Autonomous patch compiled and verified by ${targetAgent.displayName}.`,
+              `Autonomous patch compiled and verified by ${targetName}.`,
             timestamp: 'Just now',
             agentId: targetAgent.id,
             agentName: targetAgent.displayName,
@@ -415,7 +417,7 @@ export function WatchPreviewModal({
             id: `done-${Date.now()}`,
             type: 'success',
             title: 'Workspace Recompiled',
-            details: `Action executed by ${targetAgent.displayName}. Files verified in workspace.`,
+            details: `Action executed by ${targetName}. Files verified in workspace.`,
             timestamp: 'Just now',
             agentId: targetAgent.id,
             agentName: targetAgent.displayName,
@@ -586,7 +588,7 @@ export function WatchPreviewModal({
                       key={ag.id || idx}
                       type="button"
                       onClick={() => handleSelectAgentFilter(ag.id, idx)}
-                      title={`${ag.displayName} — Stage ${ag.processStage || 1} (${ag.processRole || 'Specialist'})`}
+                      title={`${ag.displayName || ag.name || 'Agent'} — Stage ${ag.processStage || 1} (${ag.processRole || 'Specialist'})`}
                       className={cn(
                         'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg border text-[11px] font-mono transition-all cursor-pointer shrink-0',
                         isSelected
@@ -595,7 +597,7 @@ export function WatchPreviewModal({
                       )}
                     >
                       <span>{ag.avatar || '🤖'}</span>
-                      <span className="truncate max-w-[90px] sm:max-w-[120px]">{ag.displayName}</span>
+                      <span className="truncate max-w-[90px] sm:max-w-[120px]">{ag.displayName || ag.name || 'Agent'}</span>
                     </button>
                   );
                 })}
@@ -688,7 +690,7 @@ export function WatchPreviewModal({
                         ACTIVE WORKING AGENT:
                       </span>
                       <span className="text-xs font-bold text-ink truncate">
-                        {activeAgent.displayName}
+                        {activeAgent.displayName || activeAgent.name || 'Agent'}
                       </span>
                     </div>
                   </div>
@@ -732,7 +734,7 @@ export function WatchPreviewModal({
                 {filteredRealTimeItems.length === 0 ? (
                   <div className="p-4 rounded-xl border border-line bg-inset/40 text-center text-xs text-ink-muted">
                     <p className="font-semibold text-ink">
-                      {selectedAgentFilter ? `No deliverables yet for ${activeAgent.displayName}` : 'Pipeline initialized'}
+                      {selectedAgentFilter ? `No deliverables yet for ${activeAgent.displayName || activeAgent.name || 'Agent'}` : 'Pipeline initialized'}
                     </p>
                     <p className="mt-1">
                       {selectedAgentFilter
@@ -807,7 +809,7 @@ export function WatchPreviewModal({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const found = agents.find((a) => a.displayName.toLowerCase() === item.agentName?.toLowerCase());
+                                  const found = agents.find((a) => (a.displayName || a.name || '').toLowerCase() === item.agentName?.toLowerCase());
                                   if (found) {
                                     handleSelectAgentFilter(found.id);
                                   }

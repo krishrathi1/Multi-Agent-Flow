@@ -70,7 +70,8 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
   fetchProcesses: async () => {
     set({ loading: true, error: null });
     try {
-      const processes = await api.processes.list();
+      const rawProcesses = await api.processes.list();
+      const processes = Array.isArray(rawProcesses) ? rawProcesses : [];
       // A stale scope (deleted production) would silently filter everything
       // to nothing — drop it instead.
       const { scopeId } = get();
