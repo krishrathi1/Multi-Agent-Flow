@@ -78,3 +78,33 @@ export async function requireTaskAccess(
   if (!task) return deny(res, 'Task');
   next();
 }
+
+/**
+ * Board and agent ids that arrive in a request body are foreign keys the
+ * caller chose. Without this check a task, rule or approval could be pointed
+ * at another organization's board or agent, which then surfaces it there.
+ * Returns the first offending field name, or null when every id is ours.
+ */
+export async function foreignReference(
+  organizationId: string,
+  refs: { boardId?: string | null; agentId?: string | null; gatewayId?: string | null; boardGroupId?: string | null },
+): Promise<'boardId' | 'agentId' | 'gatewayId' | 'boardGroupId' | null> {
+  if (refs.gatewayId) {
+    // A gateway carries its org's access token; borrowing one is worse than reading it.
+    const gateway = await prisma.gateway.findFirst({ where: { id: refs.gatewayId, organizationId }, select: { id: true } });
+    if (!gateway) return 'gatewayId';
+  }
+  if (refs.boardGroupId) {
+    const group = await prisma.boardGroup.findFirst({ where: { id: refs.boardGroupId, organizationId }, select: { id: true } });
+    if (!group) return 'boardGroupId';
+  }
+  if (refs.boardId) {
+    const board = await prisma.board.findFirst({ where: { id: refs.boardId, organizationId }, select: { id: true } });
+    if (!board) return 'boardId';
+  }
+  if (refs.agentId) {
+    const agent = await prisma.agent.findFirst({ where: { id: refs.agentId, organizationId }, select: { id: true } });
+    if (!agent) return 'agentId';
+  }
+  return null;
+}

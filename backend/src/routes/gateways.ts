@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as gatewayService from '../services/gateway.service.js';
+import { sendError } from '../lib/http-error.js';
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.post('/', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('gateway:created', { ...safe, hasToken: !!token });
     res.status(201).json({ ...safe, hasToken: !!token });
   } catch (err) {
-    res.status(400).json({ error: (err as Error).message });
+    sendError(res, err, 400);
   }
 });
 
@@ -41,7 +42,7 @@ router.patch('/:id', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('gateway:updated', { ...safe, hasToken: !!token });
     res.json({ ...safe, hasToken: !!token });
   } catch (err) {
-    res.status(400).json({ error: (err as Error).message });
+    sendError(res, err, 400);
   }
 });
 
@@ -51,7 +52,7 @@ router.delete('/:id', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('gateway:deleted', { id: req.params.id });
     res.status(204).end();
   } catch (err) {
-    res.status(400).json({ error: (err as Error).message });
+    sendError(res, err, 400);
   }
 });
 
@@ -60,7 +61,7 @@ router.get('/:id/health', async (req, res) => {
     const health = await gatewayService.checkGatewayHealth(req.params.id, req.organizationId!);
     res.json(health);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendError(res, err, 500);
   }
 });
 
@@ -69,7 +70,7 @@ router.get('/:id/models', async (req, res) => {
     const models = await gatewayService.getGatewayModels(req.params.id, req.organizationId!);
     res.json(models);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendError(res, err, 500);
   }
 });
 
@@ -78,7 +79,7 @@ router.get('/:id/sessions', async (req, res) => {
     const sessions = await gatewayService.getGatewaySessions(req.params.id, req.organizationId!);
     res.json(sessions);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    sendError(res, err, 500);
   }
 });
 

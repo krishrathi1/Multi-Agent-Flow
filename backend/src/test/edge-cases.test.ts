@@ -3,6 +3,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { isValidCron, cronMatches } from '../services/process-extras.service.js';
 import { resolveWorkspaceFile, workspaceFor } from '../services/agent-runner.service.js';
+import { confineToPreview } from '../routes/preview.js';
 
 /**
  * Regressions for edge cases that were found by probing a running server.
@@ -88,5 +89,56 @@ describe('workspace containment', () => {
 
     await fs.rm(ws, { recursive: true, force: true });
     await fs.rm(outsideTarget, { force: true });
+  });
+
+  it('never serves git or agent tooling internals', async () => {
+    const ws = workspaceFor(processId);
+    await fs.mkdir(path.join(ws, '.git'), { recursive: true });
+    await fs.writeFile(path.join(ws, '.git', 'config'), '[core]');
+    expect(await resolveWorkspaceFile(processId, '.git/config')).toBeNull();
+    await fs.rm(ws, { recursive: true, force: true });
+  });
+});
+
+describe('preview confinement', () => {
+  // Root-relative URLs in a built site used to resolve to the console's own
+  // origin, so Watch Preview showed MyceliumOps instead of the user's project.
+  const id = '11111111-2222-3333-4444-555555555555';
+  const root = `/preview/${id}/`;
+
+  it('rebases root-relative asset and link URLs into the preview', () => {
+    const out = confineToPreview(
+      '<html><head><link href="/style.css"></head><body><a href="/">Home</a><a href="/about.html">About</a><img src="/img/a.png"></body></html>',
+      id, 'index.html', false,
+    );
+    expect(out).toContain(`href="${root}style.css"`);
+    expect(out).toContain(`href="${root}index.html"`);
+    expect(out).toContain(`href="${root}about.html"`);
+    expect(out).toContain(`src="${root}img/a.png"`);
+    expect(out).toContain(`<base href="${root}">`);
+  });
+
+  it('leaves external, protocol-relative and already-confined URLs alone', () => {
+    const html = `<head></head><a href="https://x.dev/"></a><script src="//cdn.x/y.js"></script><a href="${root}a.html"></a><a href="page.html"></a>`;
+    const out = confineToPreview(html, id, 'index.html', false);
+    expect(out).toContain('href="https://x.dev/"');
+    expect(out).toContain('src="//cdn.x/y.js"');
+    expect(out).toContain(`href="${root}a.html"`);
+    expect(out).toContain('href="page.html"');
+  });
+
+  it('bases a site built in a subfolder on that folder', () => {
+    const out = confineToPreview('<head></head>', id, 'frontend/index.html', false);
+    expect(out).toContain(`<base href="${root}frontend/">`);
+  });
+
+  it('only rewrites the router path for bundled client-side apps', () => {
+    expect(confineToPreview('<head></head>', id, 'index.html', true)).toContain('history.replaceState');
+    expect(confineToPreview('<head></head>', id, 'index.html', false)).not.toContain('history.replaceState');
+  });
+
+  it('keeps a base tag the site already declares', () => {
+    const out = confineToPreview('<head><base href="/x/"></head>', id, 'index.html', false);
+    expect(out.match(/<base /g)).toHaveLength(1);
   });
 });

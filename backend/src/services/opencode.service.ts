@@ -1,7 +1,9 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { config } from '../config.js';
+import { logger } from '../lib/logger.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -117,12 +119,28 @@ export async function models() {
   }
 }
 
+/**
+ * OpenCode treats the nearest enclosing git repository as the project. Agent
+ * workspaces live under `backend/.nexus-workspaces/`, inside MyceliumOps' own
+ * checkout, so without a repo of their own the agents read the platform's
+ * source and config as "the project" — and the preview ended up reflecting it.
+ */
+async function ensureOwnProjectRoot(dir: string): Promise<void> {
+  if (existsSync(path.join(dir, '.git'))) return;
+  try {
+    await execFileAsync('git', ['init', '-q'], { cwd: dir, windowsHide: true });
+  } catch (err) {
+    logger.warn({ err, dir }, 'Could not isolate agent workspace as its own git root');
+  }
+}
+
 export async function run(prompt: string, model?: string, cwd?: string, timeoutMs?: number): Promise<{ result: string; model: string | null }> {
   const args = ['run', prompt];
   if (model?.trim()) args.push('--model', model.trim());
   args.push('--pure');
   const workingDirectory = cwd?.trim() || process.env.OPENCODE_WORKDIR || process.cwd();
   if (!existsSync(workingDirectory)) throw new Error(`OpenCode working directory does not exist: ${workingDirectory}`);
+  if (cwd?.trim()) await ensureOwnProjectRoot(workingDirectory);
 
   const effectiveTimeout = timeoutMs || config.opencodeTimeoutMs;
 
@@ -131,7 +149,9 @@ export async function run(prompt: string, model?: string, cwd?: string, timeoutM
       cwd: workingDirectory,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
+      // OpenCode resolves its project directory from PWD, not the spawn cwd,
+      // so an inherited PWD would point agents at the backend's own source.
+      env: { ...process.env, PWD: workingDirectory },
     });
 
     let stdout = '';

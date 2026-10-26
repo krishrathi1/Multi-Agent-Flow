@@ -7,6 +7,7 @@ import { requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { prisma } from '../lib/prisma.js';
 import { encryptField } from '../lib/crypto.js';
+import { sendError } from '../lib/http-error.js';
 
 const router = Router();
 
@@ -118,7 +119,7 @@ router.post('/members/invite', requireRole('OWNER', 'ADMIN'), validate(inviteMem
     res.status(201).json(member);
   } catch (e: any) {
     if (e.message === 'User is already a member of this organization') {
-      return res.status(409).json({ error: e.message });
+      return sendError(res, e, 409);
     }
     return res.status(500).json({ error: 'Failed to invite member' });
   }
@@ -130,7 +131,7 @@ router.patch('/members/:id', requireRole('OWNER'), validate(updateMemberRoleSche
     const member = await orgService.updateMemberRole(req.params.id as string, req.organizationId!, req.body.role);
     res.json(member);
   } catch (e: any) {
-    return res.status(404).json({ error: e.message });
+    return sendError(res, e, 404);
   }
 });
 
@@ -140,7 +141,7 @@ router.delete('/members/:id', requireRole('OWNER', 'ADMIN'), async (req, res) =>
     await orgService.removeMember(req.params.id as string, req.organizationId!);
     res.status(204).end();
   } catch (e: any) {
-    return res.status(404).json({ error: e.message });
+    return sendError(res, e, 404);
   }
 });
 
@@ -150,7 +151,7 @@ router.get('/members/:id', async (req, res) => {
     const member = await boardAccessService.getMemberWithAccess(req.params.id as string, req.organizationId!);
     res.json(member);
   } catch (e: any) {
-    return res.status(e.statusCode || 404).json({ error: e.message });
+    return sendError(res, e, 404);
   }
 });
 
@@ -169,7 +170,7 @@ router.put('/members/:id/access', requireRole('OWNER', 'ADMIN'), async (req, res
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('member:accessUpdated', member);
     res.json(member);
   } catch (e: any) {
-    return res.status(e.statusCode || 500).json({ error: e.message });
+    return sendError(res, e, 500);
   }
 });
 
@@ -191,7 +192,7 @@ router.delete('/api-keys/:id', requireRole('OWNER', 'ADMIN'), async (req, res) =
     await orgService.revokeApiKey(req.params.id as string, req.organizationId!);
     res.status(204).end();
   } catch (e: any) {
-    return res.status(404).json({ error: e.message });
+    return sendError(res, e, 404);
   }
 });
 
@@ -228,7 +229,7 @@ router.post('/invites/:token/accept', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('invite:accepted', member);
     res.json(member);
   } catch (e: any) {
-    return res.status(400).json({ error: e.message });
+    return sendError(res, e, 400);
   }
 });
 

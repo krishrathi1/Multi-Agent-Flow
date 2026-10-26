@@ -1,8 +1,28 @@
 import { Router } from 'express';
 import { intParam } from '../lib/query.js';
 import * as alertService from '../services/alert.service.js';
+import { z } from 'zod';
+import { validate } from '../middleware/validate.js';
+import { foreignReference } from '../middleware/resource-access.js';
 
 const router = Router();
+
+const ruleFields = {
+  name: z.string().trim().min(1, 'Name is required').max(200),
+  description: z.string().max(2000).optional(),
+  agentId: z.string().uuid().optional(),
+  condition: z.string().trim().min(1, 'Condition is required').max(100),
+  threshold: z.number().finite().optional(),
+  windowMinutes: z.number().int().min(1).max(10080).optional(),
+  enabled: z.boolean().optional(),
+};
+const createRuleSchema = z.object(ruleFields);
+// Whitelisted so a PATCH can't rewrite organizationId.
+const updateRuleSchema = z.object({
+  ...ruleFields,
+  agentId: ruleFields.agentId.nullable(),
+  threshold: ruleFields.threshold.nullable(),
+}).partial();
 
 // GET /rules — list alert rules
 router.get('/rules', async (req, res) => {
@@ -11,15 +31,17 @@ router.get('/rules', async (req, res) => {
 });
 
 // POST /rules — create rule
-router.post('/rules', async (req, res) => {
+router.post('/rules', validate(createRuleSchema), async (req, res) => {
+  if (await foreignReference(req.organizationId!, req.body)) return res.status(400).json({ error: 'Unknown agentId' });
   const rule = await alertService.createAlertRule(req.organizationId!, req.body);
   req.app.get('io')?.to(`org:${req.organizationId}`).emit('alert:rule:created', rule);
   res.status(201).json(rule);
 });
 
 // PATCH /rules/:id — update rule
-router.patch('/rules/:id', async (req, res) => {
-  const rule = await alertService.updateAlertRule(req.params.id, req.organizationId!, req.body);
+router.patch('/rules/:id', validate(updateRuleSchema), async (req, res) => {
+  if (await foreignReference(req.organizationId!, req.body)) return res.status(400).json({ error: 'Unknown agentId' });
+  const rule = await alertService.updateAlertRule(String(req.params.id), req.organizationId!, req.body);
   req.app.get('io')?.to(`org:${req.organizationId}`).emit('alert:rule:updated', rule);
   res.json(rule);
 });

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import * as mcpService from '../services/mcp.service.js';
+import { sendError } from '../lib/http-error.js';
+import { foreignReference } from '../middleware/resource-access.js';
 
 const router = Router({ mergeParams: true }); // mergeParams to access :agentId from parent
 
@@ -36,7 +38,7 @@ router.patch('/:id', async (req: any, res) => {
     const server = await mcpService.updateMcpServer(req.params.id, req.params.agentId, req.body);
     res.json(server);
   } catch (e: any) {
-    return res.status(404).json({ error: e.message });
+    return sendError(res, e, 404);
   }
 });
 
@@ -46,7 +48,7 @@ router.delete('/:id', async (req: any, res) => {
     await mcpService.deleteMcpServer(req.params.id, req.params.agentId);
     res.status(204).end();
   } catch (e: any) {
-    return res.status(404).json({ error: e.message });
+    return sendError(res, e, 404);
   }
 });
 
@@ -56,7 +58,7 @@ router.post('/:id/refresh-tools', async (req: any, res) => {
     const tools = await mcpService.refreshMcpTools(req.params.id, req.params.agentId);
     res.json(tools);
   } catch (error: any) {
-    res.status(502).json({ error: error.message });
+    sendError(res, error, 424);
   }
 });
 
@@ -66,7 +68,7 @@ router.get('/:id/tools', async (req: any, res) => {
     const tools = await mcpService.getMcpTools(req.params.id, req.params.agentId);
     res.json(tools);
   } catch (e: any) {
-    return res.status(404).json({ error: e.message });
+    return sendError(res, e, 404);
   }
 });
 
@@ -81,6 +83,13 @@ orgMcpRouter.get('/', async (req, res) => {
 // POST /api/mcp (Standalone / Individual MCP Server creation)
 orgMcpRouter.post('/', async (req, res) => {
   const { agentId, name, url, transport, tools } = req.body;
+  // A body-supplied agent must be ours, or this attaches tools to another org's agent.
+  if (agentId && await foreignReference(req.organizationId!, { agentId })) {
+    return res.status(400).json({ error: 'Unknown agentId' });
+  }
+  if (transport !== undefined && transport !== 'SSE' && transport !== 'STREAMABLE_HTTP') {
+    return res.status(400).json({ error: 'transport must be SSE or STREAMABLE_HTTP' });
+  }
   try {
     let targetAgentId = agentId;
     if (!targetAgentId) {
@@ -106,7 +115,7 @@ orgMcpRouter.post('/', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:created', server);
     res.status(201).json(server);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -115,6 +124,10 @@ orgMcpRouter.post('/batch', async (req, res) => {
   const { servers, agentId } = req.body;
   if (!Array.isArray(servers) || servers.length === 0) {
     return res.status(400).json({ error: 'servers array is required' });
+  }
+  // A body-supplied agent must be ours, or this attaches tools to another org's agent.
+  if (agentId && await foreignReference(req.organizationId!, { agentId })) {
+    return res.status(400).json({ error: 'Unknown agentId' });
   }
 
   try {
@@ -162,7 +175,7 @@ orgMcpRouter.post('/batch', async (req, res) => {
 
     res.status(201).json({ results });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    sendError(res, err, 400);
   }
 });
 
@@ -178,7 +191,9 @@ orgMcpRouter.post('/:id/refresh', async (req: any, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:updated', { id: server.id, tools, lastConnected: new Date().toISOString() });
     res.json(tools);
   } catch (error: any) {
-    res.status(502).json({ error: error.message });
+    // Not 502: Cloudflare swaps an origin 502 for its own HTML page, and the
+    // UI then loses the reason the MCP server could not be reached.
+    sendError(res, error, 424);
   }
 });
 
@@ -198,7 +213,7 @@ orgMcpRouter.post('/:id/tools/:toolName/call', async (req: any, res) => {
     const output = await mcpService.callMcpTool(server.id, toolName, args);
     res.json(output);
   } catch (error: any) {
-    res.status(502).json({ error: error.message });
+    sendError(res, error, 424);
   }
 });
 
@@ -214,7 +229,7 @@ orgMcpRouter.patch('/:id', async (req: any, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:updated', updated);
     res.json(updated);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    sendError(res, error, 400);
   }
 });
 
@@ -230,7 +245,7 @@ orgMcpRouter.delete('/:id', async (req: any, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:deleted', { id: server.id });
     res.status(204).end();
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    sendError(res, error, 400);
   }
 });
 

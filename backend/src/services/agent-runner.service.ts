@@ -30,14 +30,22 @@ async function executeAgentWork(params: {
   onSpawn?: (abort: () => void) => void;
   preferredModel?: string;
 }): Promise<{ text: string; model: string; costUsd: number; inputTokens: number; outputTokens: number } | null> {
-  // Ensure workspace directory exists and foundational production files are synthesized
-  try {
-    await fs.mkdir(params.workspace, { recursive: true });
-    await synthesizeAgentDeliverables(params.workspace, params.agent, params.goal);
-  } catch { /* ignore */ }
+  const useOpenCode = Boolean(params.preferredModel && params.preferredModel.includes('/') && !params.preferredModel.startsWith('local/'));
+
+  // Ensure workspace directory exists and foundational production files are synthesized.
+  // OpenCode agents write real files themselves, and the template writer
+  // overwrites unconditionally, so it only runs if OpenCode doesn't.
+  const synthesize = async () => {
+    try {
+      await fs.mkdir(params.workspace, { recursive: true });
+      await synthesizeAgentDeliverables(params.workspace, params.agent, params.goal);
+    } catch { /* ignore */ }
+  };
+  if (useOpenCode) await fs.mkdir(params.workspace, { recursive: true }).catch(() => {});
+  else await synthesize();
 
   // 1. If an OpenCode CLI model is selected (e.g. "anthropic/claude-3-7-sonnet", "openai/gpt-4o", etc.)
-  if (params.preferredModel && params.preferredModel.includes('/') && !params.preferredModel.startsWith('local/')) {
+  if (useOpenCode && params.preferredModel) {
     try {
       const promptText = `${params.systemPrompt}\n\nTask Goal: ${params.goal}\nRole: ${params.agent.processRole || params.agent.description}\n\n${params.userPrompt}\n\nPlease generate complete production-ready code files for this task. Format code blocks with filepath as: \`\`\`typescript:src/filename.ts\n...code...\n\`\`\``;
       const opencodeRes = await runOpenCode(promptText, params.preferredModel, params.workspace);
@@ -57,6 +65,7 @@ async function executeAgentWork(params: {
     } catch (err) {
       logger.warn({ err, model: params.preferredModel }, 'OpenCode model execution failed, falling back to other engines');
     }
+    await synthesize();
   }
 
   // 2. Try Claude CLI if enabled or if preferredModel specifies Claude CLI
@@ -1811,6 +1820,8 @@ export async function ensureWorkspaceDeliverables(processId: string): Promise<bo
   const root = workspaceFor(processId);
   const indexPath = path.join(root, 'index.html');
   if (existsSync(indexPath)) return true;
+  // Agents are still writing; a template now would overwrite their files.
+  if (isRunning(processId)) return false;
 
   try {
     const proc = await prisma.process.findUnique({
@@ -1904,6 +1915,10 @@ export async function resolveWorkspaceFile(
 ): Promise<string | null> {
   const root = workspaceFor(processId);
   const target = path.resolve(root, relPath);
+
+  // `.git` now exists in every OpenCode workspace and the preview route is
+  // public; neither it nor agent tooling state is part of what was built.
+  if (relPath.split(/[\\/]/).some(seg => seg === '.git' || seg === '.claude')) return null;
 
   const contains = (base: string, p: string) =>
     p === base || p.startsWith(base + path.sep);

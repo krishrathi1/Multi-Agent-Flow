@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as remoteService from '../services/remote.service.js';
+import { sendError } from '../lib/http-error.js';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.post('/heartbeat', async (req, res) => {
     }
     res.json(result);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    sendError(res, error, 400);
   }
 });
 
@@ -25,7 +26,7 @@ router.post('/activity', async (req, res) => {
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('activity:new', activity);
     res.json(activity);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    sendError(res, error, 400);
   }
 });
 
@@ -35,7 +36,7 @@ router.post('/metrics', async (req, res) => {
     const result = await remoteService.remoteMetrics(req.organizationId!, req.body);
     res.json(result);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    sendError(res, error, 400);
   }
 });
 

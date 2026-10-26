@@ -7,11 +7,13 @@ import { Button } from '../components/ui/Button';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { HourglassLoader } from '../components/ui/HourglassLoader';
 import { cn } from '../lib/utils';
+import { useToast } from '../components/ui/Toast';
 
 export function CustomFields() {
   const [definitions, setDefinitions] = useState<TaskCustomFieldDefinition[]>([]);
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
   const [showCreate, setShowCreate] = useState(false);
   const [attachFieldId, setAttachFieldId] = useState<string | null>(null);
   const [selectedBoards, setSelectedBoards] = useState<string[]>([]);
@@ -26,29 +28,46 @@ export function CustomFields() {
       }).catch(() => setLoading(false));
   }, []);
 
+  // These used to reject unhandled, so a duplicate key or a bad regex left the
+  // form open with no explanation.
   async function handleCreate() {
-    const def = await api.customFields.create({
-      fieldKey: form.fieldKey || form.label.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-      label: form.label,
-      fieldType: form.fieldType,
-      uiVisibility: form.uiVisibility,
-      validationRegex: form.validationRegex || undefined,
-      defaultValue: form.defaultValue || undefined,
-    });
-    setDefinitions(prev => [...prev, def]);
+    try {
+      const def = await api.customFields.create({
+        fieldKey: form.fieldKey || form.label.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+        label: form.label,
+        fieldType: form.fieldType,
+        uiVisibility: form.uiVisibility,
+        validationRegex: form.validationRegex || undefined,
+        defaultValue: form.defaultValue || undefined,
+      });
+      setDefinitions(prev => [...prev, def]);
+    } catch (err) {
+      toast.error('Could not create field', (err as Error).message);
+      return;
+    }
     setShowCreate(false);
     setForm({ fieldKey: '', label: '', fieldType: 'TEXT', uiVisibility: 'ALWAYS', validationRegex: '', defaultValue: '' });
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Are you sure you want to delete this custom field?')) return;
-    await api.customFields.delete(id);
+    try {
+      await api.customFields.delete(id);
+    } catch (err) {
+      toast.error('Could not delete field', (err as Error).message);
+      return;
+    }
     setDefinitions(prev => prev.filter(d => d.id !== id));
   }
 
   async function handleAttach() {
     if (!attachFieldId || selectedBoards.length === 0) return;
-    await api.customFields.attach(attachFieldId, selectedBoards);
+    try {
+      await api.customFields.attach(attachFieldId, selectedBoards);
+    } catch (err) {
+      toast.error('Could not attach field', (err as Error).message);
+      return;
+    }
     setAttachFieldId(null);
     setSelectedBoards([]);
     const refreshed = await api.customFields.list();

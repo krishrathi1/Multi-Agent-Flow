@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
 import * as runner from '../services/agent-runner.service.js';
 import { logger } from '../lib/logger.js';
+import { sendError } from '../lib/http-error.js';
 
 const router = Router();
 
@@ -177,7 +178,7 @@ router.post('/', async (req, res) => {
     });
   } catch (err: any) {
     logger.error({ err }, 'Failed to process git webhook');
-    res.status(500).json({ error: err.message });
+    sendError(res, err, 500);
   }
 });
 
