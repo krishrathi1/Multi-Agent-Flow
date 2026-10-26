@@ -36,7 +36,6 @@ import { SkillsMarketplace } from './pages/SkillsMarketplace';
 import { McpHub } from './pages/McpHub';
 import { SoulTemplates } from './pages/SoulTemplates';
 import { Invitations } from './pages/Invitations';
-import { MasArchitectureLab } from './pages/MasArchitectureLab';
 import { DocsLayout } from './pages/docs/DocsLayout';
 import { DocsGettingStarted } from './pages/docs/DocsGettingStarted';
 import { DocsMcpIntegration } from './pages/docs/DocsMcpIntegration';
@@ -129,8 +128,6 @@ export function App() {
           <Route path="/soul-templates" element={<SoulTemplates />} />
           <Route path="/invitations" element={<Invitations />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/mas-architecture" element={<MasArchitectureLab />} />
-          <Route path="/architecture" element={<Navigate to="/mas-architecture" replace />} />
 
         </Route>
       </Route>

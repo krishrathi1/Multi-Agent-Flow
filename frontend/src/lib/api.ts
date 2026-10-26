@@ -801,41 +801,4 @@ export const api = {
     revoke: (id: string) => request<void>(`/org/invites/${id}`, { method: 'DELETE' }),
     accept: (token: string) => request('/org/invites/' + token + '/accept', { method: 'POST' }),
   },
-  blackboard: {
-    getCompare: (agentCount: number = 5) => request<any>(`/blackboard/compare?agentCount=${agentCount}`),
-    getState: (scopeId: string, seed: boolean = true) => request<any>(`/blackboard/${scopeId}?seed=${seed}`),
-    postEntry: (scopeId: string, data: any) =>
-      request<any>(`/blackboard/${scopeId}/entry`, { method: 'POST', body: JSON.stringify(data) }),
-    seed: (scopeId: string) => request<any>(`/blackboard/${scopeId}/seed`, { method: 'POST' }),
-    clear: (scopeId: string) => request<any>(`/blackboard/${scopeId}`, { method: 'DELETE' }),
-  },
-  structuredOutput: {
-    validate: (payload?: any) =>
-      request<any>('/structured-output/validate', { method: 'POST', body: JSON.stringify(payload || {}) }),
-    getSchema: () => request<any>('/structured-output/schema'),
-  },
-  agentPatterns: {
-    evaluate: () => request<any>('/agent-patterns/evaluate'),
-    run: (pattern: string, prompt?: string, scopeId?: string) =>
-      request<any>(`/agent-patterns/run/${pattern}`, {
-        method: 'POST',
-        body: JSON.stringify({ prompt, scopeId }),
-      }),
-  },
-  monitoring: {
-    getHeatMap: () => request<any>('/monitoring/heatmap'),
-    getRecentCallbacks: (limit: number = 50) => request<any>(`/monitoring/callbacks/recent?limit=${limit}`),
-    simulate: () => request<any>('/monitoring/simulate', { method: 'POST' }),
-  },
-  a2a: {
-    getAgents: () => request<any>('/a2a/v1/agents'),
-    sendMessage: (envelope: any) =>
-      request<any>('/a2a/v1/messages/send', { method: 'POST', body: JSON.stringify(envelope) }),
-    delegateTask: (fromAgentId: string, toAgentId: string, taskDescription: string, contextData?: any) =>
-      request<any>(`/a2a/v1/tasks/delegate`, {
-        method: 'POST',
-        body: JSON.stringify({ fromAgentId, toAgentId, taskDescription, contextData }),
-      }),
-    getHistory: () => request<any>('/a2a/v1/messages/history'),
-  },
 };
