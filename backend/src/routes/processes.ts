@@ -17,7 +17,7 @@ import { validateExternalUrl } from '../lib/url-validator.js';
 const router = Router();
 
 const planSchema = z.object({
-  prompt: z.string().min(8, 'Describe the goal in at least a few words').max(4000),
+  prompt: z.string().min(8, 'Describe the goal in at least a few words').max(20000, 'Keep the brief under 20,000 characters'),
   agentCount: z.number().int().min(2).max(8).optional(),
   model: z.string().optional(),
 });
