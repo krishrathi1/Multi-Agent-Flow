@@ -1,0 +1,9 @@
+# Vercel only builds frontend/; keep server state and secrets out of uploads.
+node_modules
+**/node_modules
+backend/.nexus-workspaces
+backend/dist
+**/.env
+**/.env.*
+!**/.env.example
+Multi-Agent-Flow-main
