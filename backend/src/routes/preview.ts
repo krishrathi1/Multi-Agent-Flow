@@ -3,6 +3,11 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import fsSync from 'node:fs';
 import esbuild from 'esbuild';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
+
+const execFileAsync = promisify(execFile);
 import { resolveWorkspaceFile, listWorkspaceFiles, ensureWorkspaceDeliverables } from '../services/agent-runner.service.js';
 import { canViewPreview } from '../services/insights.service.js';
 import { prisma } from '../lib/prisma.js';
@@ -186,9 +191,13 @@ export async function buildPreviewHtml(processId: string, absHtmlPath: string): 
   }
 
   try {
-    const rootNodeModules = path.resolve('node_modules');
-    const backendNodeModules = path.resolve('backend/node_modules');
-    const frontendNodeModules = path.resolve('frontend/node_modules');
+    await ensureDependencies(wsDir);
+    // Resolved from this file, not process.cwd(): under pm2 the cwd is
+    // backend/, so these became backend/backend/node_modules and never
+    // reached the repo-root packages (react, recharts, …).
+    const rootNodeModules = path.join(REPO_DIR, 'node_modules');
+    const backendNodeModules = path.join(BACKEND_DIR, 'node_modules');
+    const frontendNodeModules = path.join(REPO_DIR, 'frontend', 'node_modules');
 
     const buildRes = await esbuild.build({
       entryPoints: [entry],
@@ -200,18 +209,31 @@ export async function buildPreviewHtml(processId: string, absHtmlPath: string): 
       format: 'esm',
       target: 'es2022',
       nodePaths: [rootNodeModules, backendNodeModules, frontendNodeModules],
+      // Match what Vite gives generated apps, so any React/Vite project
+      // previews without per-project fixes: the automatic JSX runtime (no
+      // `import React` needed), import.meta.env, and the common "@/" alias.
+      jsx: 'automatic',
+      alias: fsSync.existsSync(path.join(wsDir, 'src')) ? { '@': path.join(wsDir, 'src') } : {},
       define: {
         'process.env.NODE_ENV': JSON.stringify('production'),
         'process.env.PREVIEW_BASE_URL': JSON.stringify(''),
         'process.env': JSON.stringify({ NODE_ENV: 'production' }),
+        'import.meta.env': JSON.stringify({ MODE: 'production', DEV: false, PROD: true, SSR: false, BASE_URL: '/' }),
       },
       loader: {
         '.tsx': 'tsx',
         '.ts': 'ts',
         '.jsx': 'jsx',
-        '.js': 'js',
+        // JSX in .js files is common in generated React code.
+        '.js': 'jsx',
         '.css': 'css',
+        '.module.css': 'local-css',
         '.json': 'json',
+        '.woff': 'dataurl',
+        '.woff2': 'dataurl',
+        '.ttf': 'dataurl',
+        '.mp3': 'dataurl',
+        '.wav': 'dataurl',
         '.svg': 'dataurl',
         '.png': 'dataurl',
         '.jpg': 'dataurl',
@@ -252,9 +274,50 @@ export async function buildPreviewHtml(processId: string, absHtmlPath: string): 
     html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, () => `${headExtras}</head>`) : headExtras + html;
     return { html, bundled: true };
   } catch (err: any) {
-    console.warn('Failed to bundle preview with esbuild, falling back to raw html:', err);
-    return { html: await fs.readFile(absHtmlPath, 'utf-8'), bundled: false };
+    // The raw HTML points at /src/main.jsx, which a browser can't run, so
+    // falling back to it showed a blank page. Say what failed instead.
+    const messages: string[] = (err?.errors ?? []).slice(0, 8).map((e: any) =>
+      `${e.location ? `${path.relative(wsDir, e.location.file)}:${e.location.line} — ` : ''}${e.text}`);
+    if (messages.length === 0) messages.push(String(err?.message ?? err));
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return {
+      html: `<!doctype html><html><head><meta charset="utf-8"><title>Preview build failed</title></head>
+<body style="font:14px/1.5 system-ui,sans-serif;max-width:46rem;margin:3rem auto;padding:0 1rem;color:#111827">
+<h1 style="font-size:20px">This project couldn't be built for preview</h1>
+<p>The app's code has errors the preview bundler couldn't resolve. Fix these (for example by re-running the production or asking Mother Chat), then reload.</p>
+<pre style="white-space:pre-wrap;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;color:#991b1b">${esc(messages.join('\n'))}</pre>
+</body></html>`,
+      bundled: false,
+    };
   }
+}
+
+/** Where the backend's own dependencies live, regardless of the process cwd. */
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const BACKEND_DIR = path.resolve(MODULE_DIR, '..', '..');
+const REPO_DIR = path.resolve(BACKEND_DIR, '..');
+
+const installs = new Map<string, Promise<void>>();
+
+/**
+ * Installs a workspace's declared dependencies when the agents didn't. The
+ * bundler only falls back to the platform's own packages, so anything else a
+ * project imports (a chart or date library) failed to resolve. Install
+ * scripts are disabled: the package list came from an agent.
+ */
+async function ensureDependencies(wsDir: string): Promise<void> {
+  if (fsSync.existsSync(path.join(wsDir, 'node_modules'))) return;
+  let pkg: any;
+  try { pkg = JSON.parse(await fs.readFile(path.join(wsDir, 'package.json'), 'utf-8')); } catch { return; }
+  if (!Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).length) return;
+  if (!installs.has(wsDir)) {
+    installs.set(wsDir, execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
+      ['install', '--no-audit', '--no-fund', '--ignore-scripts', '--loglevel=error'],
+      { cwd: wsDir, timeout: 180_000, windowsHide: true, shell: process.platform === 'win32' })
+      .then(() => undefined)
+      .catch((e) => { console.warn('Preview dependency install failed:', (e as Error).message); }));
+  }
+  await installs.get(wsDir);
 }
 
 /** Token may arrive as ?t=, X-Share-Token header, or preview_token cookie. */
