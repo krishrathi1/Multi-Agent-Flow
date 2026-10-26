@@ -75,13 +75,19 @@ async function findIndex(processId: string): Promise<string | null> {
  * to MyceliumOps itself, and the Watch Preview iframe showed the platform
  * instead of the project the user asked for.
  */
-export function confineToPreview(html: string, processId: string, relPath: string, bundledSpa: boolean): string {
+export function confineToPreview(
+  html: string,
+  processId: string,
+  relPath: string,
+  bundledSpa: boolean,
+  entryPath: string = relPath,
+): string {
   const root = `/preview/${processId}/`;
   const dir = path.posix.dirname(relPath);
   const base = dir === '.' ? root : `${root}${dir}/`;
-  // Vercel's rewrite doesn't match a bare trailing slash, so "home" is the
-  // entry file itself rather than the directory.
-  const home = `${root}${relPath}`;
+  // "/" means the site's entry page, not the page being served. Vercel's
+  // rewrite doesn't match a bare trailing slash, so it's the file itself.
+  const home = `${root}${entryPath}`;
   const ownPrefix = root.slice(1);
 
   const out = html.replace(
@@ -312,21 +318,26 @@ router.get('/:processId/*splat', async (req, res) => {
   const rel = (req.params as Record<string, unknown>).splat;
   const relPath = Array.isArray(rel) ? rel.join('/') : String(rel ?? '');
 
+  let entry: string | null | undefined;
+  const getEntry = async () => (entry === undefined ? (entry = await findIndex(req.params.processId)) : entry);
+
   let servedPath = relPath;
   let abs = await resolveWorkspaceFile(req.params.processId, relPath);
   if (!abs) {
     // Root-relative URLs are rebased to the workspace root, but a site built
     // in a subfolder (frontend/index.html) means its own folder by "/".
-    const entry = await findIndex(req.params.processId);
-    const entryDir = entry ? path.posix.dirname(entry) : '.';
-    if (entry && entryDir !== '.') {
+    const e = await getEntry();
+    const entryDir = e ? path.posix.dirname(e) : '.';
+    if (e && entryDir !== '.') {
       abs = await resolveWorkspaceFile(req.params.processId, `${entryDir}/${relPath}`);
       if (abs) servedPath = `${entryDir}/${relPath}`;
     }
     // An extensionless path is a client-side route: serve the app shell.
-    if (!abs && entry && !path.posix.extname(relPath)) {
-      abs = await resolveWorkspaceFile(req.params.processId, entry);
-      servedPath = entry;
+    // Hidden paths (.git/config) are never routes.
+    const hidden = relPath.split('/').some(seg => seg.startsWith('.'));
+    if (!abs && e && !hidden && !path.posix.extname(relPath)) {
+      abs = await resolveWorkspaceFile(req.params.processId, e);
+      servedPath = e;
     }
   }
   if (!abs) return res.status(404).type('text/plain').send('Not found');
@@ -358,7 +369,7 @@ router.get('/:processId/*splat', async (req, res) => {
       "default-src 'self' data: https: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: blob:; font-src 'self' https: data:; frame-ancestors 'self'; sandbox allow-scripts allow-forms allow-same-origin allow-modals;"
     );
     const { html, bundled } = await buildPreviewHtml(req.params.processId, abs);
-    return res.send(confineToPreview(html, req.params.processId, servedPath, bundled));
+    return res.send(confineToPreview(html, req.params.processId, servedPath, bundled, (await getEntry()) ?? servedPath));
   }
   res.send(body);
 });

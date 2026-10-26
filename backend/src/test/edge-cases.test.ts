@@ -127,6 +127,12 @@ describe('preview confinement', () => {
     expect(out).toContain('href="page.html"');
   });
 
+  it('sends "/" to the site entry from any page, not the current one', () => {
+    const out = confineToPreview('<head></head><a href="/">Home</a>', id, 'menu.html', false, 'index.html');
+    expect(out).toContain(`href="${root}index.html"`);
+    expect(out).not.toContain(`href="${root}menu.html"`);
+  });
+
   it('bases a site built in a subfolder on that folder', () => {
     const out = confineToPreview('<head></head>', id, 'frontend/index.html', false);
     expect(out).toContain(`<base href="${root}frontend/">`);
