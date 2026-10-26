@@ -10,7 +10,7 @@ import { decryptField } from '../lib/crypto.js';
 import { safeFetch } from '../lib/url-validator.js';
 import { fireWebhooks } from './process-extras.service.js';
 import { notify } from './insights.service.js';
-import { pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
+import { pushWorkspaceToGitHub, deployToVercel, snapshotWorkspace } from './git-deploy.service.js';
 import { run as runOpenCode } from './opencode.service.js';
 import { getOrganizationIntegrationToken } from './org.service.js';
 
@@ -3173,7 +3173,23 @@ export async function runProcessChain(
       break;
     }
 
-    const inStage = proc.agents.filter((a) => a.processStage === stage);
+    // Fleet Controls can pause an agent mid-run, so the switch is read per
+    // stage rather than from the snapshot loaded when the run began.
+    const stageAgents = proc.agents.filter((a) => a.processStage === stage);
+    const pausedIds = new Set(
+      (await prisma.agent.findMany({
+        where: { id: { in: stageAgents.map((a) => a.id) }, enabled: false },
+        select: { id: true },
+      })).map((a) => a.id),
+    );
+    const inStage = stageAgents.filter((a) => !pausedIds.has(a.id));
+    if (pausedIds.size > 0) {
+      logger.info({ processId, stage, paused: [...pausedIds] }, 'Skipping agents paused in Fleet Controls');
+    }
+    if (inStage.length === 0 && stageAgents.length > 0) {
+      stoppedReason = `Stage ${stage} has no active agents — all are paused in Fleet Controls`;
+      break;
+    }
 
     // Pre-flight: the cap used to be discovered only *after* the stage that
     // broke it had been paid for. Project this stage's cost and decline it.
@@ -3338,6 +3354,16 @@ export async function runProcessChain(
   activeChildren.delete(processId);
   stopHeartbeat(processId);
 
+  // Every run that changed files becomes a commit in the project's own repo,
+  // so reports and the GitHub push describe this project's real history.
+  if (files.length > 0) {
+    const sha = await snapshotWorkspace(
+      workspaceFor(processId),
+      `${proc.name}: run ${allOk ? 'completed' : 'ended early'} (${steps.length} agent step${steps.length === 1 ? '' : 's'})`,
+    );
+    if (sha) logger.info({ processId, sha }, 'Workspace snapshot committed');
+  }
+
   // ── AUTONOMOUS POST-BUILD DELIVERY: GITHUB PUSH & VERCEL AUTO-DEPLOY ──
   if (allOk && files.length > 0) {
     const workspace = workspaceFor(processId);
@@ -3375,9 +3401,13 @@ export async function runProcessChain(
                 processId,
                 type: ActivityType.SYSTEM,
                 message: `✓ Autonomous delivery: Pushed ${files.length} production files to GitHub: ${pushRes.repoUrl}`,
+                // Read back by the project report as the real pushed commit.
+                metadata: { githubPush: { repoUrl: pushRes.repoUrl, commitSha: pushRes.commitSha ?? null, branch: pushRes.branch ?? 'main', at: new Date().toISOString() } },
               },
             });
           }
+        } else {
+          logger.warn({ processId, targetRepo, error: pushRes.error }, 'GitHub push failed');
         }
       } catch (err: any) {
         logger.warn({ err, processId }, 'GitHub auto-push encountered non-fatal error');

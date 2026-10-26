@@ -31,7 +31,7 @@ import {
   XCircle,
   Zap,
 } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, downloadWithAuth } from '../../lib/api';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/Button';
 import { useToast } from '../ui/Toast';
@@ -448,14 +448,9 @@ export function WatchPreviewModal({
   // Download Artifacts Zip
   const handleDownloadZip = () => {
     if (!currentProcess) return;
-    const downloadUrl = api.processes.artifactsZipUrl(currentProcess.id);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = `${currentProcess.name || 'production-artifacts'}.zip`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.info('Downloading workspace zip', 'Production archive download triggered.');
+    // A plain link can't send the bearer token, so it downloaded a 401 body.
+    downloadWithAuth(`/processes/${currentProcess.id}/artifacts.zip`, `${currentProcess.name || 'production-artifacts'}.zip`)
+      .catch((err) => toast.error('Download failed', (err as Error).message));
   };
 
   // Publish handler

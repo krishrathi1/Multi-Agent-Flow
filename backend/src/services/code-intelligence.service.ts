@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { run as runOpenCode } from './opencode.service.js';
+import { ask as askOpenCode } from './opencode.service.js';
 import { readdir, readFile, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, relative, extname, basename, resolve } from 'path';
@@ -951,7 +951,7 @@ export async function askCodebase(
   // 1. Explicit OpenCode model selection
   if (preferredModel && (preferredModel.startsWith('opencode/') || preferredModel.startsWith('nvidia/'))) {
     try {
-      const op = await runOpenCode(prompt, preferredModel);
+      const op = await askOpenCode(prompt, preferredModel);
       if (op.result && op.result.trim().length > 20) aiAnswer = op.result.trim();
     } catch { /* continue */ }
   }
@@ -1048,6 +1048,15 @@ export async function askCodebase(
         }
       } catch { /* try next */ }
     }
+  }
+
+  // 4. "Auto" with no Gemini key or local model used to stop here, so orgs on
+  // the platform's OpenCode models only ever got the retrieval fallback.
+  if (!aiAnswer && !preferredModel && config.opencodeModel) {
+    try {
+      const op = await askOpenCode(prompt, config.opencodeModel);
+      if (op.result && op.result.trim().length > 20) aiAnswer = op.result.trim();
+    } catch { /* fall through to retrieval */ }
   }
 
   // Grounded truthful retrieval synthesis (no invented summaries)

@@ -6,6 +6,77 @@ import { logger } from '../lib/logger.js';
 
 const execFileAsync = promisify(execFile);
 
+/** Never committed or pushed: dependencies, build output and secrets. */
+const UNTRACKED = ['node_modules', '.next', 'dist', 'build', '.env', '.env.*', '!.env.example', '.claude'];
+const isSecretFile = (name: string) => /^\.env(\..+)?$/.test(name) && name !== '.env.example';
+
+const git = (cwd: string, args: string[]) =>
+  execFileAsync('git', args, { cwd, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+
+/** True when `dir` is the top of its own git repository (not inside another). */
+async function isOwnRepo(dir: string): Promise<boolean> {
+  try {
+    const { stdout } = await git(dir, ['rev-parse', '--show-toplevel']);
+    return path.resolve(stdout.trim()) === path.resolve(dir);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Commits whatever a run left in its workspace, so each run is a real,
+ * diffable commit in the project's own repository. Returns the new commit
+ * SHA, or null when nothing changed or git is unavailable.
+ */
+export async function snapshotWorkspace(workspace: string, message: string): Promise<string | null> {
+  try {
+    if (!(await isOwnRepo(workspace))) await git(workspace, ['init', '-q']);
+    // info/exclude rather than .gitignore: the agents' files stay untouched.
+    await fs.writeFile(path.join(workspace, '.git', 'info', 'exclude'), UNTRACKED.join('\n') + '\n');
+    await git(workspace, ['add', '-A']);
+    const { stdout: pending } = await git(workspace, ['status', '--porcelain']);
+    if (!pending.trim()) return null;
+    await git(workspace, [
+      '-c', 'user.name=MyceliumOps Agents', '-c', 'user.email=agents@myceliumops.local',
+      'commit', '-q', '-m', message,
+    ]);
+    const { stdout } = await git(workspace, ['rev-parse', 'HEAD']);
+    return stdout.trim();
+  } catch (err) {
+    logger.warn({ err, workspace }, 'Could not snapshot workspace as a commit');
+    return null;
+  }
+}
+
+export interface WorkspaceGitInfo {
+  branch: string;
+  latestCommit: string;
+  author: string;
+  date: string;
+  commitMessage: string;
+  diffStat: string | null;
+  commitCount: number;
+}
+
+/**
+ * Git details of a workspace's own repository — never of the repo the
+ * backend itself runs from, which is what reports used to show.
+ */
+export async function readWorkspaceGit(workspace: string): Promise<WorkspaceGitInfo | null> {
+  if (!(await isOwnRepo(workspace))) return null;
+  try {
+    const { stdout: head } = await git(workspace, ['log', '-1', '--format=%H%x1f%an%x1f%aI%x1f%s']);
+    if (!head.trim()) return null;
+    const [latestCommit, author, date, commitMessage] = head.trim().split('\x1f');
+    const branch = (await git(workspace, ['branch', '--show-current'])).stdout.trim() || 'main';
+    const commitCount = Number((await git(workspace, ['rev-list', '--count', 'HEAD'])).stdout.trim()) || 1;
+    const diffStat = (await git(workspace, ['show', '--stat', '--format=', 'HEAD'])).stdout.trim() || null;
+    return { branch, latestCommit, author, date, commitMessage, diffStat, commitCount };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Pushes all files in a workspace directory to a GitHub repository via direct GitHub REST API.
  * This works 100% reliably across all operating systems without requiring git.exe credentials.
@@ -16,7 +87,7 @@ export async function pushWorkspaceToGitHub(params: {
   branch?: string;
   githubToken: string;
   commitMessage?: string;
-}): Promise<{ success: boolean; repoUrl: string; error?: string }> {
+}): Promise<{ success: boolean; repoUrl: string; error?: string; commitSha?: string; branch?: string }> {
   const { workspace, repoFullName, branch = 'main', githubToken, commitMessage } = params;
   const repoUrl = `https://github.com/${repoFullName}`;
 
@@ -35,8 +106,11 @@ export async function pushWorkspaceToGitHub(params: {
         body: JSON.stringify({
           name: repoNameOnly,
           description: 'Autonomous multi-agent deliverables created by Nexus AI',
-          private: false,
-          auto_init: false,
+          // Private: it's the user's code. auto_init gives the repo a first
+          // commit — GitHub's tree API rejects an empty repository, which
+          // forced every first push into one commit per file.
+          private: true,
+          auto_init: true,
         }),
       });
     } catch {
@@ -58,7 +132,7 @@ export async function pushWorkspaceToGitHub(params: {
     async function scanDir(dir: string, prefix = '') {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.next' || entry.name === 'dist') continue;
+        if (['node_modules', '.git', '.next', 'dist', 'build', '.claude'].includes(entry.name) || isSecretFile(entry.name)) continue;
         const fullPath = path.join(dir, entry.name);
         const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
         if (entry.isDirectory()) {
@@ -154,10 +228,12 @@ export async function pushWorkspaceToGitHub(params: {
       }
 
       logger.info({ repoFullName, filesCount: filesToPush.length, commitSha }, 'Successfully pushed atomic commit to GitHub');
-      return { success: true, repoUrl };
+      return { success: true, repoUrl, commitSha, branch };
     } catch (atomicErr: any) {
       logger.warn({ atomicErr: atomicErr.message, repoFullName }, 'Atomic git tree commit failed, falling back to sequential contents API');
-      // Fallback: Sequential Contents API
+      // Fallback: Sequential Contents API. Failures used to be swallowed and
+      // the push reported as a success even when nothing landed.
+      const failed: string[] = [];
       for (const item of filesToPush) {
         try {
           let sha: string | undefined;
@@ -169,7 +245,7 @@ export async function pushWorkspaceToGitHub(params: {
             }
           } catch { /* ignore */ }
 
-          await fetch(`https://api.github.com/repos/${repoFullName}/contents/${item.path}`, {
+          const putRes = await fetch(`https://api.github.com/repos/${repoFullName}/contents/${item.path}`, {
             method: 'PUT',
             headers,
             body: JSON.stringify({
@@ -179,9 +255,15 @@ export async function pushWorkspaceToGitHub(params: {
               ...(sha ? { sha } : {}),
             }),
           });
-        } catch { /* ignore individual failures */ }
+          if (!putRes.ok) failed.push(item.path);
+        } catch {
+          failed.push(item.path);
+        }
       }
-      return { success: true, repoUrl };
+      if (failed.length > 0) {
+        return { success: false, repoUrl, error: `${failed.length} of ${filesToPush.length} files failed to upload (first: ${failed[0]})` };
+      }
+      return { success: true, repoUrl, branch };
     }
   } catch (err: any) {
     logger.warn({ err: err.message, repoFullName }, 'Failed to push workspace to GitHub repository');

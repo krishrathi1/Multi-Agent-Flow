@@ -10,7 +10,9 @@ import { decryptField } from '../lib/crypto.js';
 import { randomBytes } from 'node:crypto';
 import { getOrganizationIntegrationToken } from '../services/org.service.js';
 import { recordAuthorizedPreviewSession } from '../services/insights.service.js';
-import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from '../services/git-deploy.service.js';
+import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel, readWorkspaceGit } from '../services/git-deploy.service.js';
+import * as gatewayService from '../services/gateway.service.js';
+import { validateExternalUrl } from '../lib/url-validator.js';
 
 const router = Router();
 
@@ -263,58 +265,26 @@ router.get('/:id/file-content', async (req, res) => {
   }
 });
 
-/** Return live Git commit audit and changed files breakdown */
+/**
+ * Git details of this production's own workspace repository. It used to run
+ * git in the backend's directory and return MyceliumOps' own commit history
+ * (with --stat) to any signed-in user as if it were their project's.
+ */
 router.get('/:id/git-audit', async (req, res) => {
   const id = paramId(req.params.id);
   const proc = await processService.getProcessById(id, req.organizationId!);
   if (!proc) return res.status(404).json({ error: 'Process not found' });
 
-  try {
-    const { execSync } = await import('child_process');
-    let log = '';
-    let diffStat = '';
-    let latestCommit = '';
-    let branch = '';
-    try {
-      log = execSync('git log -n 3 --stat', { encoding: 'utf-8' });
-      diffStat = execSync('git diff --stat HEAD~1 HEAD', { encoding: 'utf-8' });
-      latestCommit = execSync('git log -1 --format="%H||%an||%ad||%s"', { encoding: 'utf-8' }).trim();
-      branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
-    } catch {
-      /* ignore git sub-errors */
-    }
-
-    const [hash, author, date, message] = latestCommit ? latestCommit.split('||') : [];
-
-    res.json({
-      processId: id,
-      processName: proc.name,
-      commit: {
-        hash: hash || null,
-        shortHash: hash?.slice(0, 8) || null,
-        author: author || 'Unknown',
-        date: date || null,
-        message: message || null,
-        branch: branch || null,
-      },
-      log,
-      diffStat,
-    });
-  } catch (err: any) {
-    res.json({
-      processId: id,
-      processName: proc.name,
-      commit: {
-        hash: null,
-        shortHash: null,
-        author: null,
-        date: null,
-        message: null,
-      },
-      log: '',
-      diffStat: '',
-    });
-  }
+  const info = await readWorkspaceGit(runner.workspaceFor(id));
+  res.json({
+    processId: id,
+    processName: proc.name,
+    commit: info
+      ? { hash: info.latestCommit, shortHash: info.latestCommit.slice(0, 8), author: info.author, date: info.date, message: info.commitMessage, branch: info.branch }
+      : null,
+    commitCount: info?.commitCount ?? 0,
+    diffStat: info?.diffStat ?? '',
+  });
 });
 
 /** GET /:id/report — Comprehensive Project Architecture & QA Report (JSON) */
@@ -618,6 +588,13 @@ router.post('/:id/ask-ai-fix', async (req, res) => {
 
 // ─── Process MCP & Gateway Integrations ──────────────────
 
+const MCP_TRANSPORTS = ['SSE', 'STREAMABLE_HTTP'];
+const allowPrivateUrls = () => process.env.ALLOW_PRIVATE_URLS === 'true' || process.env.ALLOW_LOCAL_URLS === 'true';
+
+/** An MCP server attached to one of this org's agents in this process, or null. */
+const findProcessMcpServer = (processId: string, serverId: string, organizationId: string) =>
+  prisma.mcpServer.findFirst({ where: { id: serverId, agent: { processId, organizationId } }, select: { id: true } });
+
 /** GET /api/processes/:id/mcp-servers — list MCP servers connected to this process */
 router.get('/:id/mcp-servers', async (req, res) => {
   const id = paramId(req.params.id);
@@ -641,6 +618,9 @@ router.post('/:id/mcp-servers', async (req, res) => {
   if (!primaryAgent) return res.status(400).json({ error: 'Process has no agents' });
 
   const { name, url, transport, existingServerId } = req.body;
+  if (transport !== undefined && !MCP_TRANSPORTS.includes(transport)) {
+    return res.status(400).json({ error: 'transport must be SSE or STREAMABLE_HTTP' });
+  }
   if (existingServerId) {
     const existing = await prisma.mcpServer.findFirst({
       where: { id: existingServerId, agent: { organizationId: req.organizationId! } },
@@ -666,6 +646,15 @@ router.post('/:id/mcp-servers', async (req, res) => {
     });
     req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:created', linked);
     return res.status(201).json(linked);
+  }
+
+  if (typeof name !== 'string' || !name.trim() || typeof url !== 'string') {
+    return res.status(400).json({ error: 'name and url are required' });
+  }
+  try {
+    validateExternalUrl(url, 'MCP server URL', allowPrivateUrls());
+  } catch (e) {
+    return res.status(400).json({ error: (e as Error).message });
   }
 
   const server = await prisma.mcpServer.create({
@@ -695,8 +684,23 @@ router.post('/:id/mcp-servers', async (req, res) => {
 
 /** PATCH /api/processes/:id/mcp-servers/:serverId — update MCP server */
 router.patch('/:id/mcp-servers/:serverId', async (req, res) => {
-  const serverId = req.params.serverId;
+  const serverId = paramId(req.params.serverId);
+  // These two routes took the server id alone, so any signed-in user could
+  // repoint or delete another org's MCP server.
+  if (!(await findProcessMcpServer(paramId(req.params.id), serverId, req.organizationId!))) {
+    return res.status(404).json({ error: 'MCP server not found' });
+  }
   const { name, url, transport, enabled } = req.body;
+  if (transport !== undefined && !MCP_TRANSPORTS.includes(transport)) {
+    return res.status(400).json({ error: 'transport must be SSE or STREAMABLE_HTTP' });
+  }
+  if (url !== undefined) {
+    try {
+      validateExternalUrl(String(url), 'MCP server URL', allowPrivateUrls());
+    } catch (e) {
+      return res.status(400).json({ error: (e as Error).message });
+    }
+  }
   const server = await prisma.mcpServer.update({
     where: { id: serverId },
     data: {
@@ -713,7 +717,10 @@ router.patch('/:id/mcp-servers/:serverId', async (req, res) => {
 
 /** DELETE /api/processes/:id/mcp-servers/:serverId — delete or unlink MCP server */
 router.delete('/:id/mcp-servers/:serverId', async (req, res) => {
-  const serverId = req.params.serverId;
+  const serverId = paramId(req.params.serverId);
+  if (!(await findProcessMcpServer(paramId(req.params.id), serverId, req.organizationId!))) {
+    return res.status(404).json({ error: 'MCP server not found' });
+  }
   await prisma.mcpServer.delete({ where: { id: serverId } });
   req.app.get('io')?.to(`org:${req.organizationId}`).emit('mcp:deleted', { id: serverId });
   res.status(204).end();
@@ -739,18 +746,22 @@ router.post('/:id/gateways', async (req, res) => {
   if (!proc) return res.status(404).json({ error: 'Process not found' });
   const { gatewayId, name, url, token, workspaceRoot } = req.body;
   let targetGatewayId = gatewayId;
-  if (!targetGatewayId && name && url) {
-    const createdGw = await prisma.gateway.create({
-      data: {
-        organizationId: req.organizationId!,
-        name,
-        url,
-        token: token || 'default',
-        workspaceRoot: workspaceRoot || '',
-        status: 'ONLINE',
-      },
-    });
-    targetGatewayId = createdGw.id;
+  if (targetGatewayId) {
+    // A gateway carries its org's access token; attaching another org's to
+    // our agents would run our work through it.
+    const owned = await prisma.gateway.findFirst({ where: { id: targetGatewayId, organizationId: req.organizationId! }, select: { id: true } });
+    if (!owned) return res.status(404).json({ error: 'Gateway not found' });
+  } else if (name && url) {
+    // Same path as the Gateways page: SSRF check, encrypted token, and a real
+    // connection attempt instead of a hard-coded ONLINE status.
+    try {
+      const createdGw = await gatewayService.createGateway(req.organizationId!, {
+        name: String(name), url: String(url), token: token ? String(token) : 'default', workspaceRoot,
+      });
+      targetGatewayId = createdGw.id;
+    } catch (e) {
+      return res.status(400).json({ error: (e as Error).message });
+    }
   }
   if (!targetGatewayId) return res.status(400).json({ error: 'Gateway ID or configuration is required' });
 
@@ -769,7 +780,10 @@ router.post('/:id/gateways', async (req, res) => {
 /** DELETE /api/processes/:id/gateways/:gatewayId — unlink gateway from this process */
 router.delete('/:id/gateways/:gatewayId', async (req, res) => {
   const id = paramId(req.params.id);
-  const gatewayId = req.params.gatewayId;
+  const gatewayId = paramId(req.params.gatewayId);
+  if (!(await processService.getProcessById(id, req.organizationId!))) {
+    return res.status(404).json({ error: 'Process not found' });
+  }
   await prisma.agent.updateMany({
     where: { processId: id, gatewayId },
     data: { gatewayId: null },

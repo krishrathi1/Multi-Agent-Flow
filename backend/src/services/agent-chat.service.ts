@@ -8,7 +8,7 @@ import { safeFetch } from '../lib/url-validator.js';
 import { listWorkspaceFiles, workspaceFor } from './agent-runner.service.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
 import { askAiAndSpawnFixerAgent } from './process.service.js';
-import { run as runOpenCode } from './opencode.service.js';
+import { ask as askOpenCode } from './opencode.service.js';
 import { getOrganizationIntegrationToken } from './org.service.js';
 
 const HISTORY_LIMIT = 30;
@@ -145,10 +145,12 @@ async function callChatLLM(params: {
     }
   }
 
-  // 2. OpenCode CLI Model Selection (Focused timeout & pure execution)
+  // 2. OpenCode CLI Model Selection
   if (isOpenCode) {
     try {
-      const op = await runOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, preferred, undefined, 12000);
+      // Runs in an empty sandbox (it offered to "scaffold this repo" when it
+      // ran in the backend's source); 12s used to cut most answers off.
+      const op = await askOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, preferred, 45000);
       if (op.result && op.result.length > 0) {
         const inputTokens = Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
         const outputTokens = Math.max(50, Math.ceil(op.result.length / 4));
@@ -275,34 +277,20 @@ async function callChatLLM(params: {
     }
   }
 
-  // 4. Local Deterministic Co-Work Synthesizer (Zero-Fail Offline Engine)
+  // 6. No model answered. Say so, and show the live facts instead of a canned
+  // reply that ignored the question and claimed progress it couldn't know.
   const cw = params.coworkData;
-  const userQuery = params.prompt.toLowerCase();
-  let synthesizedAnswer = '';
+  const filesLine = cw?.files?.length
+    ? `${cw.files.length} file(s): ${cw.files.slice(0, 15).map((f) => `\`${f}\``).join(', ')}${cw.files.length > 15 ? ', …' : ''}`
+    : 'none yet';
+  const synthesizedAnswer = cw
+    ? `I couldn't reach an AI model just now, so I can't answer that question in detail. Here is the live status of **${cw.processName || 'this production'}** — ask again in a moment for a full answer.
 
-  if (cw && (userQuery.includes('kaise') || userQuery.includes('kya') || userQuery.includes('status') || userQuery.includes('progress') || userQuery.includes('work') || userQuery.includes('update') || userQuery.includes('task') || userQuery.includes('file'))) {
-    synthesizedAnswer = `### 🛰️ Live Multi-Agent Co-Work Status Report
+**Progress**
+${cw.latestSteps?.length ? cw.latestSteps.join('\n') : '- No run has started yet.'}
 
-Aapki production **"${cw.processName || 'Multi-Agent Pipeline'}"** ka live status:
-
-1. **Current Goal**: ${cw.goal || 'Autonomous pipeline execution'}
-2. **Active Agents & Roles**:
-${cw.agents?.map(a => `   - **${a.name}** (${a.role || 'Agent'}, Stage ${a.stage || 1}) → Status: \`${a.status || 'ONLINE'}\``).join('\n') || '   - All agents are synchronized.'}
-
-3. **Deliverables & Generated Code Files** (${cw.files?.length || 0}):
-${cw.files && cw.files.length > 0 ? cw.files.map(f => `   - 📄 \`${f}\``).join('\n') : '   - Initial stage execution underway; files are being drafted.'}
-
-4. **Execution Progress**:
-${cw.latestSteps && cw.latestSteps.length > 0 ? cw.latestSteps.map(s => `   - ${s}`).join('\n') : '   - Pipeline is active and standing by for next instructions.'}
-
-Sabhi agents coordinated tareeke se kaam kar rahe hain! Agar aapko kisi specific agent ko naya task inject karna hai ya files verify karni hain, toh batayein.`;
-  } else {
-    synthesizedAnswer = `👋 Hello Operator! Main **Mother Chat** hoon, aapke multi-agent fleet ka central orchestrator.
-
-Aapke production **"${cw?.processName || 'Workspace'}"** mein currently **${cw?.agents?.length || 0} agents** deployed hain aur **${cw?.files?.length || 0} files** successfully generate hui hain.
-
-Aap mujhse live status, task breakdown, code reviews, ya agent coordination ke bare mein kuch bhi pooch sakte hain!`;
-  }
+**Workspace files:** ${filesLine}`
+    : `I couldn't reach an AI model just now. Please try again in a moment.`;
 
   return {
     text: synthesizedAnswer,
@@ -464,7 +452,35 @@ export async function chatWithMother(
 
       const files = await listWorkspaceFiles(processId);
       const latestRun = proc.runs[0];
-      const latestStepsSummary = latestRun?.steps?.map((s) => `- ${s.agentName} (Stage ${s.stage}): ${s.state} - ${s.summary || s.error || 'Completed'}`) || [];
+      // A running step has no summary yet; labelling it "Completed" made the
+      // model tell operators nobody was working while stage 1 was mid-build.
+      const minutes = (from: Date, to?: Date | null) =>
+        Math.max(0, Math.round(((to ?? new Date()).getTime() - from.getTime()) / 60000));
+      const steps = [...(latestRun?.steps ?? [])].sort((a, b) => a.stage - b.stage || a.startedAt.getTime() - b.startedAt.getTime());
+      const latestStepsSummary = steps.map((s) => {
+        const who = `- ${s.agentName} (Stage ${s.stage})`;
+        switch (s.state) {
+          case 'RUNNING': return `${who}: working now, ${minutes(s.startedAt)} min so far`;
+          case 'COMPLETED': return `${who}: done in ${minutes(s.startedAt, s.finishedAt)} min${s.summary ? ` — ${s.summary.slice(0, 400)}` : ''}`;
+          case 'FAILED': return `${who}: failed — ${(s.error || 'no error recorded').slice(0, 300)}`;
+          case 'QUEUED': return `${who}: queued`;
+          default: return `${who}: ${s.state.toLowerCase().replace(/_/g, ' ')}`;
+        }
+      });
+      // A step row is only written when the agent finishes, so the agents of
+      // the stage in progress have none yet; the run records which stage that is.
+      const stepAgentIds = new Set(steps.map((s) => s.agentId));
+      const workingNow = steps.filter((s) => s.state === 'RUNNING').map((s) => `${s.agentName} (Stage ${s.stage})`);
+      const inProgress = latestRun?.state === 'RUNNING' ? latestRun.currentStage : null;
+      for (const a of [...proc.agents].sort((x, y) => (x.processStage ?? 0) - (y.processStage ?? 0))) {
+        if (!latestRun || stepAgentIds.has(a.id)) continue;
+        if (inProgress != null && a.processStage === inProgress) {
+          latestStepsSummary.push(`- ${a.displayName} (Stage ${a.processStage}): working now`);
+          workingNow.push(`${a.displayName} (Stage ${a.processStage})`);
+        } else {
+          latestStepsSummary.push(`- ${a.displayName} (Stage ${a.processStage ?? '?'}): not started yet`);
+        }
+      }
 
       coworkData = {
         processName: proc.name,
@@ -498,8 +514,9 @@ Goal / Prompt: ${proc.prompt}
 Agents in Block: ${proc.agents.map((a) => `${a.displayName} (${a.processRole || 'Agent'}, Stage ${a.processStage}, Status: ${a.status})`).join(', ')}
 Workspace Files Created (${files.length}): ${files.map((f) => f.path).join(', ') || 'None yet'}
 Cloud Deployment Telemetry: ${deploymentInfo}
-Latest Run State: ${latestRun?.state || 'Not run yet'} (${latestRun?.steps?.length || 0} steps executed)
-Latest Steps Summary:
+Latest Run State: ${latestRun?.state || 'Not run yet'}${latestRun ? `, started ${minutes(latestRun.startedAt)} min ago` : ''}
+Currently Working: ${workingNow.join(', ') || (latestRun?.state === 'RUNNING' ? 'between stages' : 'nobody')}
+Stage-by-Stage Progress:
 ${latestStepsSummary.join('\n') || 'None'}
 `;
     }
@@ -560,19 +577,20 @@ ${allAgents.map((a) => `- ${a.displayName} (${a.processRole || 'Agent'}, Status:
           userInstruction: message,
         });
 
+        // Only report what actually happened — a missing push or deploy used
+        // to be announced as "Pushed clean atomic commit" all the same.
+        const lines: string[] = [];
         if (fixRes.agentSpawned) {
-          autoHealReport = `\n\n[ACTION EXECUTED BY MOTHER CORE]:
-- Recruited & Provisioned Specialist Agent: "${fixRes.agentSpawned.displayName}" (Stage ${fixRes.agentSpawned.processStage}: ${fixRes.agentSpawned.processRole}) with Avatar ${fixRes.agentSpawned.avatar}.
-- Dispatched fix task & patched ${fixRes.fixedFiles.length} workspace files (${fixRes.fixedFiles.join(', ')}).
-- Pushed clean atomic commit to GitHub: ${fixRes.pushResult?.repoUrl || '(repository URL unavailable)'}.
-- Re-triggered live Vercel Cloud Deployment: ${fixRes.deployResult?.previewUrl || 'Vercel Deployment Initialized'}.`;
-        } else {
-          autoHealReport = `\n\n[ACTION EXECUTED BY MOTHER CORE]:
-- Diagnosis: ${fixRes.diagnosis}
-- Auto-healed workspace across ${fixRes.fixedFiles.length} files (${fixRes.fixedFiles.join(', ')}).
-- Pushed clean atomic commit to GitHub: ${fixRes.pushResult?.repoUrl || '(repository URL unavailable)'}.
-- Re-triggered live Vercel Cloud Deployment: ${fixRes.deployResult?.previewUrl || 'Vercel Deploy Initialized'}.`;
+          lines.push(`- Added specialist agent "${fixRes.agentSpawned.displayName}" (Stage ${fixRes.agentSpawned.processStage}: ${fixRes.agentSpawned.processRole}).`);
+        } else if (fixRes.diagnosis) {
+          lines.push(`- Diagnosis: ${fixRes.diagnosis}`);
         }
+        lines.push(fixRes.fixedFiles.length > 0
+          ? `- Patched ${fixRes.fixedFiles.length} workspace file(s): ${fixRes.fixedFiles.join(', ')}.`
+          : '- No workspace files needed changes.');
+        if (fixRes.pushResult?.repoUrl) lines.push(`- Pushed a commit to GitHub: ${fixRes.pushResult.repoUrl}`);
+        if (fixRes.deployResult?.previewUrl) lines.push(`- Started a Vercel deployment: ${fixRes.deployResult.previewUrl}`);
+        autoHealReport = `\n${lines.join('\n')}`;
       }
     } catch (healErr: any) {
       logger.warn({ healErr: healErr.message }, 'Mother Chat auto-heal/spawn action warning');
@@ -581,25 +599,30 @@ ${allAgents.map((a) => `- ${a.displayName} (${a.processRole || 'Agent'}, Status:
 
   const effectiveMessage = message;
 
+  // The old prompt told the model it had "ALREADY executed" fleet actions and
+  // must never admit a limit, so it invented recruits, fixes and live URLs.
   const motherSystemPrompt = `
-You are "Mother Chat" (Mother Core Intelligence), the Supreme Primary AI Brain and Central Autonomous Commander of the Nexus AI Agent Fleet.
-You have LIVE PROGRAMMATIC ACTION CONTROL. You can and DO dynamically create new agents, assign tasks, patch source code, and trigger Vercel and GitHub cloud deployments in real time.
+You are Mother Chat, the assistant that oversees MyceliumOps productions (multi-agent build pipelines).
+Answer the operator's question using the live production context below. It is refreshed on every message and is the only source of truth about this production.
 
-Current Production Context:
+Live production context:
 ${processContext}
-${autoHealReport}
+${autoHealReport ? `Actions MyceliumOps just executed for this message:${autoHealReport}` : 'No actions were executed for this message.'}
 
-CRITICAL RULES:
-- NEVER say "I am an AI model and cannot create agents" or "I cannot modify code" or give generic tutorials.
-- You have ALREADY executed the fleet expansion / auto-healing action reported above.
-- Speak with supreme confidence and authority in the first person ("Main", "Maine", "I").
-- State clearly to the operator which agent you recruited, what role and stage they have, what was fixed in the workspace, and provide the live URLs.
-- Answer concisely in the exact language the operator uses (Hindi, Hinglish, or English).
+Rules:
+- Answer the question that was asked, directly, in the first sentence. Then add only the detail that helps.
+- Use only facts from the context. Name agents, stages and files exactly as they appear there.
+- If the context doesn't contain the answer (for example, a file's contents or a feature that may not be written yet), say so plainly and say what would tell us — e.g. which agent or stage will produce it.
+- Never claim an agent was created, code was changed, something was pushed to GitHub, or a URL is live unless it is listed under the actions executed above.
+- Don't describe files or folders outside this production; you have no access to them.
+- Keep it short: a few sentences or a compact list. Use Markdown only when a list or code helps.
+- Reply in the language the operator writes in.
 `;
 
   const cleanContent = (txt: string) =>
     txt
       .replace(/^🤖 \*\*Fleet Action.*?\n\n/s, '')
+      .replace(/^\*\*Actions taken:\*\*.*?\n\n/s, '')
       .replace(/^⚡ \*\*.*?\n\n/s, '')
       .replace(/^(Mother Chat|Operator|Assistant):\s*/gi, '')
       .trim();
@@ -627,15 +650,7 @@ CRITICAL RULES:
     .trim();
 
   if (autoHealReport) {
-    if (
-      cleanText.toLowerCase().includes('as an ai model') ||
-      cleanText.toLowerCase().includes('cannot create') ||
-      cleanText.toLowerCase().includes("i'm sorry") ||
-      cleanText.toLowerCase().includes('i apologize')
-    ) {
-      cleanText = `Maine naya specialist agent provision karke fleet me include kar diya hai aur workflow re-run kar diya hai. Saari build fixes live push ho chuki hain!`;
-    }
-    cleanText = `🤖 **Fleet Action Executed by Mother Core:**\n${autoHealReport.trim()}\n\n` + cleanText;
+    cleanText = `**Actions taken:**\n${autoHealReport.trim()}\n\n` + cleanText;
   }
   res.text = cleanText;
 
