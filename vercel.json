@@ -3,15 +3,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://collective-elephant-monster-terrorist.trycloudflare.com/api/:path*"
+      "destination": "https://architectural-asp-cashiers-dividend.trycloudflare.com/api/:path*"
     },
     {
       "source": "/socket.io/:path*",
-      "destination": "https://collective-elephant-monster-terrorist.trycloudflare.com/socket.io/:path*"
+      "destination": "https://architectural-asp-cashiers-dividend.trycloudflare.com/socket.io/:path*"
     },
     {
       "source": "/preview/:path*",
-      "destination": "https://collective-elephant-monster-terrorist.trycloudflare.com/preview/:path*"
+      "destination": "https://architectural-asp-cashiers-dividend.trycloudflare.com/preview/:path*"
     },
     {
       "source": "/(.*)",

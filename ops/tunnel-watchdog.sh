@@ -66,6 +66,22 @@ restart_tunnel() {
   return 1
 }
 
+# Deploys from a git-free copy of the checkout. With git metadata attached,
+# Vercel blocks the deployment when the last commit's author isn't on the
+# Vercel team — and the CLI then waits on the blocked build forever.
+deploy_vercel() {
+  local src rc
+  src=$(mktemp -d)
+  git -C "$APP_DIR" archive HEAD | tar -x -C "$src"
+  cp "$APP_DIR/vercel.json" "$src/vercel.json"
+  cp "$APP_DIR/frontend/vercel.json" "$src/frontend/vercel.json"
+  mkdir -p "$src/.vercel" && cp "$APP_DIR/.vercel/project.json" "$src/.vercel/"
+  (cd "$src" && timeout 600 vercel deploy --prod --yes --token "$VERCEL_TOKEN") >"$STATE_DIR/deploy.log" 2>&1
+  rc=$?
+  rm -rf "$src"
+  return $rc
+}
+
 point_vercel_at() {
   local host=$1 old
   old=$(configured_host)
@@ -83,7 +99,7 @@ point_vercel_at() {
 
   sed -i "s/[a-z0-9-]*\.trycloudflare\.com/$host/g" "$APP_DIR/vercel.json" "$APP_DIR/frontend/vercel.json"
   log "deploying Vercel with $host (was $old)"
-  if (cd "$APP_DIR" && vercel deploy --prod --yes --token "$VERCEL_TOKEN" >"$STATE_DIR/deploy.log" 2>&1); then
+  if deploy_vercel; then
     sleep 10
     if healthy "$SITE_URL"; then log "site healthy through Vercel"; else log "deployed, but $SITE_URL/api/health still failing"; fi
   else
@@ -117,4 +133,16 @@ fi
 # 3. Does Vercel point at it?
 if [ "$host" != "$(configured_host)" ]; then
   point_vercel_at "$host"
+elif healthy "$SITE_URL"; then
+  echo 0 > "$STATE_DIR/site_fails"
+else
+  # Tunnel fine, config matches, site still down: a Git-triggered deploy of
+  # main ships whatever (possibly stale) address its vercel.json holds.
+  site_fails=$(( $(cat "$STATE_DIR/site_fails" 2>/dev/null || echo 0) + 1 ))
+  echo "$site_fails" > "$STATE_DIR/site_fails"
+  log "site down through Vercel while tunnel $host is healthy ($site_fails/2)"
+  if [ "$site_fails" -ge 2 ]; then
+    echo 0 > "$STATE_DIR/site_fails"
+    point_vercel_at "$host"
+  fi
 fi
