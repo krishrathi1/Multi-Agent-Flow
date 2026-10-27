@@ -1,6 +1,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
@@ -132,6 +134,19 @@ async function ensureOwnProjectRoot(dir: string): Promise<void> {
   } catch (err) {
     logger.warn({ err, dir }, 'Could not isolate agent workspace as its own git root');
   }
+}
+
+/** Empty directory for prompt-only turns (chat, Q&A) — never a real project. */
+const PROMPT_SANDBOX = path.join(os.tmpdir(), 'mycelium-chat-sandbox');
+
+/**
+ * Runs a question-and-answer turn. Without a cwd, OpenCode ran inside the
+ * backend's own source tree with its file tools enabled, so a chat message
+ * could steer it into reading or editing the platform itself.
+ */
+export async function ask(prompt: string, model?: string, timeoutMs = 45000) {
+  await mkdir(PROMPT_SANDBOX, { recursive: true });
+  return run(prompt, model, PROMPT_SANDBOX, timeoutMs);
 }
 
 export async function run(prompt: string, model?: string, cwd?: string, timeoutMs?: number): Promise<{ result: string; model: string | null }> {

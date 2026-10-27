@@ -13,6 +13,14 @@ let watcherInterval: NodeJS.Timeout | null = null;
  */
 export function startGitWatcher(io: SocketIOServer) {
   if (watcherInterval) return;
+  // Off unless asked for. It watches the backend's own checkout, so every
+  // platform deploy moved HEAD and started a full run on whichever production
+  // was updated last — in any organization, spending its credits. Real pushes
+  // arrive through the git webhook route, which knows the repository.
+  if (process.env.GIT_WATCHER_ENABLED !== 'true') {
+    logger.info('Git Auto-Watcher disabled (set GIT_WATCHER_ENABLED=true to enable)');
+    return;
+  }
 
   // Initialize with current HEAD so server restart doesn't re-trigger existing commit
   try {

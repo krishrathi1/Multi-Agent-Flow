@@ -4,6 +4,11 @@ import { logger } from '../lib/logger.js';
 import type { ActivityType, Prisma } from '@prisma/client';
 const tracer = trace.getTracer('nexus-command');
 
+const FLEET_EFFECTS: Record<string, Prisma.AgentUpdateInput> = {
+  PAUSE: { enabled: false, status: 'IDLE', currentTask: null },
+  RESUME: { enabled: true, status: 'ONLINE' },
+};
+
 export async function sendCommand(organizationId: string, data: {
   agentId: string;
   type: string;
@@ -15,13 +20,23 @@ export async function sendCommand(organizationId: string, data: {
       span.setAttribute('org.id', organizationId);
       span.setAttribute('agent.id', data.agentId);
       span.setAttribute('command.type', data.type);
+
+      const agent = await prisma.agent.findFirst({ where: { id: data.agentId, organizationId }, select: { id: true } });
+      if (!agent) throw Object.assign(new Error('Agent not found'), { statusCode: 404 });
+
+      // Commands were only ever stored: nothing consumed them, so Fleet
+      // Controls reported "fleet paused" while every agent kept working.
+      // PAUSE/RESUME take effect here; the runner skips disabled agents.
+      const effect = FLEET_EFFECTS[data.type.toUpperCase()];
+      if (effect) await prisma.agent.update({ where: { id: agent.id }, data: effect });
+
       const command = await prisma.command.create({
         data: {
           organizationId,
           agentId: data.agentId,
           type: data.type,
           payload: (data.payload as Prisma.InputJsonValue) ?? undefined,
-          status: 'PENDING',
+          status: effect ? 'COMPLETED' : 'PENDING',
           issuedBy: data.issuedBy ?? null,
         },
         include: {

@@ -7,7 +7,7 @@ import { planProcess, type ProcessPlan } from './process-planner.js';
 import { workspaceFor } from './agent-runner.service.js';
 import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, deployToVercel } from './git-deploy.service.js';
 import { decryptField } from '../lib/crypto.js';
-import { run as runOpenCode } from './opencode.service.js';
+import { ask as askOpenCode } from './opencode.service.js';
 import { getOrganizationIntegrationToken } from './org.service.js';
 
 /** Palette used to tint a production so it's identifiable across screens. */
@@ -759,7 +759,7 @@ Guidelines:
   if (isOpenCode) {
     try {
       const combined = `${systemInstruction}\n\nUser Objective:\n${prompt}\n\nEnhanced Production Prompt:`;
-      const op = await runOpenCode(combined, preferred, undefined, 18000);
+      const op = await askOpenCode(combined, preferred, 30000);
       if (op.result && op.result.trim().length > 30) {
         return {
           expandedPrompt: op.result.trim(),

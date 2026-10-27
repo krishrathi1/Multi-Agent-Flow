@@ -49,6 +49,36 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+/**
+ * Authenticated request for non-JSON responses (HTML, ZIP). Opening an /api
+ * URL in a new tab can't carry the bearer token, so those links answered 401.
+ */
+export async function fetchWithAuth(path: string): Promise<Response> {
+  const { accessToken, organization } = useAuthStore.getState();
+  const headers: Record<string, string> = { 'X-Pinggy-No-Screen': 'true' };
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  if (organization?.id) headers['X-Organization-Id'] = organization.id;
+  const res = await fetch(`${BASE_URL}${path}`, { headers, credentials: 'include' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error || `Request failed (${res.status})`);
+  }
+  return res;
+}
+
+/** Downloads an authenticated file (a plain <a href> can't send the token). */
+export async function downloadWithAuth(path: string, filename: string): Promise<void> {
+  const blob = await (await fetchWithAuth(path)).blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // For public endpoints (no auth needed)
 async function requestPublic<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {

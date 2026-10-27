@@ -10,6 +10,9 @@ router.post('/', async (req, res) => {
     payload?: Record<string, unknown>;
     issuedBy?: string;
   };
+  if (typeof agentId !== 'string' || typeof type !== 'string' || !type.trim() || type.length > 50) {
+    return res.status(400).json({ error: 'agentId and type are required' });
+  }
   const command = await commandService.sendCommand(req.organizationId!, { agentId, type, payload, issuedBy });
   req.app.get('io')?.to(`org:${req.organizationId}`).emit('command:sent', command);
   res.status(201).json(command);

@@ -16,7 +16,7 @@ import {
   TrendingUp,
   XCircle,
 } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, downloadWithAuth } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth-store';
 import { cn } from '../../lib/utils';
 import { formatCompact, formatCurrency } from '../../lib/design';
@@ -183,6 +183,14 @@ export function RunPanel({
     }
   };
 
+  // Was a plain link to /api/processes/:id/download — a route that doesn't
+  // exist, and a link can't carry the bearer token anyway.
+  const downloadZip = () =>
+    downloadWithAuth(
+      `/processes/${process.id}/artifacts.zip`,
+      `${process.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}-workspace.zip`,
+    ).catch((err) => toast.error('Download failed', (err as Error).message));
+
   const handleDownloadFile = async (relPath: string) => {
     try {
       const token = useAuthStore.getState().accessToken;
@@ -247,14 +255,14 @@ export function RunPanel({
               </Button>
             )}
             {files.length > 0 && (
-              <a
-                href={`/api/processes/${process.id}/download`}
-                download={`${process.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}-workspace.zip`}
+              <button
+                type="button"
+                onClick={downloadZip}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-line-subtle bg-surface px-2.5 py-1.5 text-xs font-medium text-ink transition-colors hover:border-line hover:bg-hover"
               >
                 <Archive size={13} />
                 Download ZIP
-              </a>
+              </button>
             )}
           </div>
         }
@@ -349,14 +357,14 @@ export function RunPanel({
                 <Chip>{files.length}</Chip>
               </h4>
               {files.length > 0 && (
-                <a
-                  href={`/api/processes/${process.id}/download`}
-                  download={`${process.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}-workspace.zip`}
+                <button
+                  type="button"
+                  onClick={downloadZip}
                   className="inline-flex items-center gap-1 text-2xs font-medium text-brand-600 hover:text-brand-500 dark:text-brand-400"
                 >
                   <Download size={12} />
                   Download All ({files.length})
-                </a>
+                </button>
               )}
             </div>
 

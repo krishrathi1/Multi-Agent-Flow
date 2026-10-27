@@ -1,7 +1,7 @@
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { runClaudeCli, isClaudeCliEnabled } from '../lib/claude-cli.js';
-import { run as runOpenCode } from './opencode.service.js';
+import { ask as askOpenCode } from './opencode.service.js';
 
 /**
  * Turns a plain-language goal into a staged agent roster.
@@ -506,7 +506,7 @@ async function planWithLlm(prompt: string, requested?: number, preferredModel?: 
   if (preferredModel && preferredModel.includes('/') && !preferredModel.startsWith('local/')) {
     try {
       const combined = `${PLANNER_SYSTEM}\n\nUser Production Request:\n${ask}\n\nRespond ONLY with the raw JSON plan object:`;
-      const op = await runOpenCode(combined, preferredModel);
+      const op = await askOpenCode(combined, preferredModel, 90000);
       if (op.result && op.result.trim().length > 20) {
         const plan = parsePlanJson(op.result, prompt, `opencode:${preferredModel}`);
         if (plan && plan.agents.length > 0) {
