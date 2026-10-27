@@ -1004,6 +1004,7 @@ async function answerFromRanked(
   }
 
   let aiAnswer: string | null = null;
+  let unavailableReason: string | null = null;
   const contextBlock = topFiles.map(tf => (
     `File: ${tf.file.relativePath} (${tf.file.language}, ${tf.file.lineCount} lines)\n` +
     `Symbols: ${tf.file.symbols.slice(0, 6).map(s => `${s.kind} ${s.name}`).join(', ')}\n` +
@@ -1022,7 +1023,7 @@ async function answerFromRanked(
     try {
       const op = await askOpenCode(prompt, preferredModel);
       if (op.result && op.result.trim().length > 20) aiAnswer = op.result.trim();
-    } catch { /* continue */ }
+    } catch (err) { unavailableReason = (err as Error).message; }
   }
 
   // 2. Try Gemini API (Default Cloud Intelligence)
@@ -1125,13 +1126,13 @@ async function answerFromRanked(
     try {
       const op = await askOpenCode(prompt, config.opencodeModel);
       if (op.result && op.result.trim().length > 20) aiAnswer = op.result.trim();
-    } catch { /* fall through to retrieval */ }
+    } catch (err) { unavailableReason = (err as Error).message; }
   }
 
   // Grounded truthful retrieval synthesis (no invented summaries)
   const finalAnswer = aiAnswer || (
     `### 🔍 Direct Retrieval Matches for: "${question}"\n\n` +
-    `No configured LLM was reachable to synthesize an answer. Below are the directly retrieved code passages grounded in the **${repoName}** workspace:\n\n` +
+    `No AI model answered${unavailableReason ? ` (${unavailableReason})` : ''}, so here are the matching code passages from the **${repoName}** workspace instead:\n\n` +
     topFiles.map((tf, idx) => {
       const lineStart = tf.file.symbols[0]?.line || 1;
       const lineEnd = lineStart + (tf.snippet ? tf.snippet.split('\n').length : 1) - 1;

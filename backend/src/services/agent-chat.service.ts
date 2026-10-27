@@ -87,6 +87,8 @@ async function callChatLLM(params: {
     latestSteps?: string[];
   };
 }): Promise<{ text: string; model: string; inputTokens: number; outputTokens: number; costUsd: number }> {
+  /** Why the model didn't answer, shown in the fallback reply. */
+  let unavailableReason: string | null = null;
   // Resolve Active LLM Providers
   const providers = await prisma.llmProvider.findMany({
     where: { organizationId: params.organizationId, isActive: true },
@@ -168,6 +170,7 @@ async function callChatLLM(params: {
       }
     } catch (err) {
       logger.warn({ err, model: preferred }, 'OpenCode model execution timed out or failed; falling back to ultra-fast cloud model');
+      unavailableReason = (err as Error).message;
     }
   }
 
@@ -288,13 +291,13 @@ async function callChatLLM(params: {
     ? `${cw.files.length} file(s): ${cw.files.slice(0, 15).map((f) => `\`${f}\``).join(', ')}${cw.files.length > 15 ? ', …' : ''}`
     : 'none yet';
   const synthesizedAnswer = cw
-    ? `I couldn't reach an AI model just now, so I can't answer that question in detail. Here is the live status of **${cw.processName || 'this production'}** — ask again in a moment for a full answer.
+    ? `I couldn't reach an AI model just now${unavailableReason ? ` (${unavailableReason})` : ''}, so I can't answer that question in detail. Here is the live status of **${cw.processName || 'this production'}** — ask again in a moment for a full answer.
 
 **Progress**
 ${cw.latestSteps?.length ? cw.latestSteps.join('\n') : '- No run has started yet.'}
 
 **Workspace files:** ${filesLine}`
-    : `I couldn't reach an AI model just now. Please try again in a moment.`;
+    : `I couldn't reach an AI model just now${unavailableReason ? ` (${unavailableReason})` : ''}. Please try again in a moment.`;
 
   return {
     text: synthesizedAnswer,

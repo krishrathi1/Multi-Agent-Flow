@@ -379,54 +379,52 @@ export function WatchPreviewModal({
       streamEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
 
+    // Runs a real edit in the project's workspace and reloads the preview when
+    // it lands. This used to call a fixed "auto-heal" that ignored the
+    // instruction, and showed "Files verified" even when the request failed.
+    const finish = (item: Omit<RealTimeItem, 'timestamp' | 'agentId' | 'agentName'>) =>
+      setRealTimeItems((prev) => [
+        ...prev.filter((i) => i.type !== 'running'),
+        { ...item, timestamp: 'Just now', agentId: targetAgent.id, agentName: targetName },
+      ]);
     try {
-      const res = await api.processes.askAiFix(currentProcess.id, userPrompt);
-
-      setRealTimeItems((prev) => {
-        const filtered = prev.filter((i) => i.type !== 'running');
-        return [
-          ...filtered,
-          {
-            id: `done-${Date.now()}`,
-            type: 'success',
-            title: `Update applied: ${userPrompt.slice(0, 40)}`,
-            details:
-              res.message ||
-              `Autonomous patch compiled and verified by ${targetName}.`,
-            timestamp: 'Just now',
-            agentId: targetAgent.id,
-            agentName: targetAgent.displayName,
-          },
-        ];
-      });
-
-      if (agents.length > 1) {
-        setActiveAgentIndex((idx) => (idx + 1) % agents.length);
+      let job = await api.processes.startEdit(currentProcess.id, userPrompt);
+      const started = Date.now();
+      while (job.state === 'running') {
+        await new Promise((r) => setTimeout(r, 2500));
+        job = await api.processes.getEdit(currentProcess.id, job.id);
+        const secs = Math.round((Date.now() - started) / 1000);
+        setRealTimeItems((prev) =>
+          prev.map((i) => (i.type === 'running' ? { ...i, details: `Editing the project with ${job.model}… ${secs}s` } : i)),
+        );
+        if (Date.now() - started > 12 * 60_000) throw new Error('The edit is taking unusually long; check back shortly.');
       }
 
-      if (iframeRef.current) {
-        iframeRef.current.src = iframeRef.current.src;
+      if (job.state === 'completed') {
+        const files = job.changedFiles.slice(0, 6).join(', ') + (job.changedFiles.length > 6 ? ` +${job.changedFiles.length - 6} more` : '');
+        finish({
+          id: `done-${Date.now()}`,
+          type: 'success',
+          title: `Change applied: ${userPrompt.slice(0, 48)}`,
+          details: `${job.summary ? `${job.summary}\n\n` : ''}Changed ${job.changedFiles.length} file${job.changedFiles.length === 1 ? '' : 's'}: ${files}`,
+        });
+        if (iframeRef.current) iframeRef.current.src = iframeRef.current.src;
+        toast.success('Preview updated', `${job.changedFiles.length} file${job.changedFiles.length === 1 ? '' : 's'} changed.`);
+      } else {
+        finish({
+          id: `done-${Date.now()}`,
+          type: 'error',
+          title: 'Change not applied',
+          details: `${job.error ?? 'The edit failed.'}${job.summary ? `\n\n${job.summary}` : ''}`,
+        });
       }
-      toast.success('Task completed', 'Live code updated in preview.');
     } catch (err: any) {
-      setRealTimeItems((prev) => {
-        const filtered = prev.filter((i) => i.type !== 'running');
-        return [
-          ...filtered,
-          {
-            id: `done-${Date.now()}`,
-            type: 'success',
-            title: 'Workspace Recompiled',
-            details: `Action executed by ${targetName}. Files verified in workspace.`,
-            timestamp: 'Just now',
-            agentId: targetAgent.id,
-            agentName: targetAgent.displayName,
-          },
-        ];
+      finish({
+        id: `done-${Date.now()}`,
+        type: 'error',
+        title: 'Change not applied',
+        details: err?.message || 'The edit could not be started.',
       });
-      if (iframeRef.current) {
-        iframeRef.current.src = iframeRef.current.src;
-      }
     } finally {
       setIsProcessing(false);
       setTimeout(() => {
@@ -816,7 +814,7 @@ export function WatchPreviewModal({
                               </button>
                             )}
                           </div>
-                          <div className="text-ink-muted text-xs mt-0.5">{item.details}</div>
+                          <div className="text-ink-muted text-xs mt-0.5 whitespace-pre-wrap break-words">{item.details}</div>
                         </div>
                       </div>
                     );
