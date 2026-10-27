@@ -845,15 +845,40 @@ export async function askCodebase(
     };
   }
 
-  const { files } = indexed.cache;
   const repoName = indexed.ws.name;
+  const { files, topFiles } = await rankFilesForQuestion(indexed.cache.files, question, 5, 3);
+  return answerFromRanked(organizationId, question, repoName, files.length, topFiles, preferredModel);
+}
+
+type RankedFile = { file: FileInfo; score: number; matchedReasons: string[]; snippet?: string; snippetStart?: number };
+
+/**
+ * Files most relevant to a natural-language question, with an excerpt around
+ * the first matching line. Shared by Code Intelligence "Ask" and Mother Chat,
+ * which otherwise only knew file names and couldn't answer code questions.
+ */
+export async function retrieveCodeContext(
+  organizationId: string,
+  question: string,
+  workspaceId: string,
+  opts: { maxFiles?: number; contextLines?: number } = {},
+): Promise<Array<{ file: string; startLine: number; snippet: string }>> {
+  const indexed = await indexCodebase(organizationId, workspaceId);
+  if (!indexed) return [];
+  const { topFiles } = await rankFilesForQuestion(indexed.cache.files, question, opts.maxFiles ?? 3, opts.contextLines ?? 15);
+  return topFiles
+    .filter((t) => t.snippet)
+    .map((t) => ({ file: t.file.relativePath, startLine: t.snippetStart ?? 1, snippet: t.snippet! }));
+}
+
+async function rankFilesForQuestion(files: FileInfo[], question: string, maxFiles: number, contextLines: number) {
   const q = question.toLowerCase();
   const keywords = q
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
     .filter(k => k.length > 2 && !['how', 'what', 'where', 'when', 'which', 'who', 'why', 'does', 'did', 'the', 'and', 'for', 'are', 'with', 'from', 'this', 'that', 'nexus', 'work', 'works', 'working', 'implemented', 'explain', 'tell', 'show', 'into', 'have', 'been'].includes(k));
 
-  const scoredFiles: { file: FileInfo; score: number; matchedReasons: string[]; snippet?: string }[] = [];
+  const scoredFiles: RankedFile[] = [];
   for (const f of files) {
     let score = 0;
     const reasons: string[] = [];
@@ -891,7 +916,7 @@ export async function askCodebase(
   }
 
   scoredFiles.sort((a, b) => b.score - a.score);
-  const topFiles = scoredFiles.slice(0, 5);
+  const topFiles = scoredFiles.slice(0, maxFiles);
 
   // Extract snippet excerpts for top files
   for (const tf of topFiles) {
@@ -907,12 +932,25 @@ export async function askCodebase(
         }
       }
       const start = Math.max(0, targetLine - 2);
-      const end = Math.min(lines.length, targetLine + 4);
+      const end = Math.min(lines.length, targetLine + contextLines + 1);
       tf.snippet = lines.slice(start, end).join('\n');
+      tf.snippetStart = start + 1;
     } catch {
       // Ignore read error
     }
   }
+  return { files, topFiles };
+}
+
+async function answerFromRanked(
+  organizationId: string,
+  question: string,
+  repoName: string,
+  filesScanned: number,
+  topFiles: RankedFile[],
+  preferredModel?: string,
+): Promise<{ question: string; answer: string; citations: { file: string; line?: number; reason: string }[]; relatedSymbols: CodeSymbol[] }> {
+  const files = { length: filesScanned };
 
   const relatedSymbols: CodeSymbol[] = [];
   for (const item of topFiles) {

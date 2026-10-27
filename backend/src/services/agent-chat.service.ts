@@ -10,6 +10,7 @@ import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, depl
 import { askAiAndSpawnFixerAgent } from './process.service.js';
 import { ask as askOpenCode } from './opencode.service.js';
 import { outcomeOf } from './project-report.service.js';
+import { retrieveCodeContext } from './code-intelligence.service.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getOrganizationIntegrationToken } from './org.service.js';
@@ -531,10 +532,18 @@ export async function chatWithMother(
         } catch { /* unreadable */ }
       }
 
+      // File names alone left code questions ("how does the timer avoid
+      // drift?") unanswerable; pull the most relevant excerpts for this one.
+      let codeExcerpts = '';
+      try {
+        const hits = await retrieveCodeContext(organizationId, message, processId, { maxFiles: 3, contextLines: 25 });
+        codeExcerpts = hits.map((h) => `[${h.file} from line ${h.startLine}]\n${h.snippet}`).join('\n\n');
+      } catch { /* code index unavailable */ }
+
       processContext = `
 Production Block: "${proc.name}"
 Status: ${proc.status}
-Goal / Prompt: ${proc.prompt}
+Goal / Prompt: ${proc.prompt.length > 6000 ? `${proc.prompt.slice(0, 6000)}\n…(brief truncated)` : proc.prompt}
 Agents in Block: ${proc.agents.map((a) => `${a.displayName} (${a.processRole || 'Agent'}, Stage ${a.processStage}, Status: ${a.status})`).join(', ')}
 Workspace Files Created (${files.length}): ${files.map((f) => f.path).join(', ') || 'None yet'}
 Cloud Deployment Telemetry: ${deploymentInfo}
@@ -545,6 +554,8 @@ ${latestStepsSummary.join('\n') || 'None'}
 ${previousSummary}
 Agent Notes (excerpts):
 ${notes.join('\n\n') || 'None yet'}
+Relevant Code (excerpts matched to this question):
+${codeExcerpts || 'None matched'}
 `;
     }
   } else {
