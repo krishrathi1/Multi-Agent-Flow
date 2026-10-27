@@ -57,7 +57,9 @@ export function signAccessToken(payload: TokenPayload): string {
 }
 
 export function signRefreshToken(payload: TokenPayload): string {
-  return jwt.sign(payload, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRY });
+  // jwtid makes every token unique: two issued in the same second for the
+  // same user were byte-identical, so rotation could collide with itself.
+  return jwt.sign(payload, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRY, jwtid: randomBytes(12).toString('hex') });
 }
 
 export function verifyAccessToken(token: string): TokenPayload {

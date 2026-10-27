@@ -10,6 +10,7 @@ import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, depl
 import { askAiAndSpawnFixerAgent } from './process.service.js';
 import { ask as askOpenCode } from './opencode.service.js';
 import { outcomeOf } from './project-report.service.js';
+import { retrieveCodeContext } from './code-intelligence.service.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getOrganizationIntegrationToken } from './org.service.js';
@@ -153,7 +154,7 @@ async function callChatLLM(params: {
     try {
       // Runs in an empty sandbox (it offered to "scaffold this repo" when it
       // ran in the backend's source); 12s used to cut most answers off.
-      const op = await askOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, preferred, 45000);
+      const op = await askOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, preferred, 80000);
       if (op.result && op.result.length > 0) {
         const inputTokens = Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
         const outputTokens = Math.max(50, Math.ceil(op.result.length / 4));
@@ -531,10 +532,18 @@ export async function chatWithMother(
         } catch { /* unreadable */ }
       }
 
+      // File names alone left code questions ("how does the timer avoid
+      // drift?") unanswerable; pull the most relevant excerpts for this one.
+      let codeExcerpts = '';
+      try {
+        const hits = await retrieveCodeContext(organizationId, message, processId, { maxFiles: 3, contextLines: 25, wholeTopFileChars: 16000 });
+        codeExcerpts = hits.map((h) => `[${h.file} from line ${h.startLine}]\n${h.snippet}`).join('\n\n');
+      } catch { /* code index unavailable */ }
+
       processContext = `
 Production Block: "${proc.name}"
 Status: ${proc.status}
-Goal / Prompt: ${proc.prompt}
+Goal / Prompt: ${proc.prompt.length > 6000 ? `${proc.prompt.slice(0, 6000)}\n…(brief truncated)` : proc.prompt}
 Agents in Block: ${proc.agents.map((a) => `${a.displayName} (${a.processRole || 'Agent'}, Stage ${a.processStage}, Status: ${a.status})`).join(', ')}
 Workspace Files Created (${files.length}): ${files.map((f) => f.path).join(', ') || 'None yet'}
 Cloud Deployment Telemetry: ${deploymentInfo}
@@ -545,6 +554,8 @@ ${latestStepsSummary.join('\n') || 'None'}
 ${previousSummary}
 Agent Notes (excerpts):
 ${notes.join('\n\n') || 'None yet'}
+Relevant Code (excerpts matched to this question):
+${codeExcerpts || 'None matched'}
 `;
     }
   } else {

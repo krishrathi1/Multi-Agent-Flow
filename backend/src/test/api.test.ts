@@ -187,23 +187,24 @@ describe('MyceliumOps Backend Integration Tests', () => {
       expect(newTokenInDb).not.toBeNull();
     });
 
-    it('refresh: rejects an already-used (rotated) token', async () => {
-      // Create a dedicated user to avoid token hash collisions
+    it('refresh: a rotated token works briefly, then is rejected', async () => {
       const rotateUser = await createTestUser('refresh-used');
       authTestOrgIds.push(rotateUser.organization.id);
-
       const originalRefresh = rotateUser.refreshToken;
 
-      // Wait 1.1s so the rotation produces a different token (different iat)
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      const first = await authService.refresh(originalRefresh);
+      expect(first.refreshToken).not.toBe(originalRefresh);
 
-      // Use it once (rotation deletes it and creates a new different token)
-      await authService.refresh(originalRefresh);
+      // A lost or parallel refresh re-presents the old cookie: still accepted
+      // inside the grace window, so the user isn't logged out.
+      await expect(authService.refresh(originalRefresh)).resolves.toHaveProperty('accessToken');
 
-      // Attempt to use the same token again -- it should be gone from DB
-      await expect(
-        authService.refresh(originalRefresh)
-      ).rejects.toThrow('Refresh token not found or already used');
+      // Once the window has passed the old token is dead.
+      await prisma.refreshToken.updateMany({
+        where: { userId: rotateUser.user.id, expiresAt: { lt: new Date(Date.now() + 120_000) } },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+      await expect(authService.refresh(originalRefresh)).rejects.toThrow('Refresh token expired');
     });
 
     it('logout: invalidates refresh token', async () => {

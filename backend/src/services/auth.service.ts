@@ -10,6 +10,9 @@ import { populateOrgDefaults } from './org-defaults.service.js';
 
 const tracer = trace.getTracer('nexus-auth');
 
+/** How long a rotated refresh token keeps working (see refresh()). */
+const REFRESH_REUSE_GRACE_MS = 60_000;
+
 function toSlug(name: string): string {
   return name
     .toLowerCase()
@@ -384,7 +387,15 @@ export async function refresh(refreshTokenValue: string) {
         throw new Error('User no longer exists');
       }
 
-      await prisma.refreshToken.delete({ where: { id: storedToken.id } });
+      // Rotate with a short grace window instead of deleting outright. A
+      // browser that navigates while a refresh is in flight never receives
+      // the new cookie, and parallel refreshes all present the same one; with
+      // immediate deletion either case logged the user out (reloading a page
+      // twice was enough). The old token stops working after the window.
+      const graceEnds = new Date(Date.now() + REFRESH_REUSE_GRACE_MS);
+      if (storedToken.expiresAt > graceEnds) {
+        await prisma.refreshToken.update({ where: { id: storedToken.id }, data: { expiresAt: graceEnds } });
+      }
 
       const tokenPayload = { userId: user.id, email: user.email };
       const newAccessToken = signAccessToken(tokenPayload);

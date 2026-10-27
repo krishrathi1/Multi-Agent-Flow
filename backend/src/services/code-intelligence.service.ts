@@ -845,15 +845,53 @@ export async function askCodebase(
     };
   }
 
-  const { files } = indexed.cache;
   const repoName = indexed.ws.name;
+  const { files, topFiles } = await rankFilesForQuestion(indexed.cache.files, question, 5, 3);
+  return answerFromRanked(organizationId, question, repoName, files.length, topFiles, preferredModel);
+}
+
+type RankedFile = { file: FileInfo; score: number; matchedReasons: string[]; snippet?: string; snippetStart?: number };
+
+/**
+ * Files most relevant to a natural-language question, with the excerpt that
+ * best matches it. Shared by Code Intelligence "Ask" and Mother Chat, which
+ * otherwise only knew file names and couldn't answer code questions.
+ *
+ * Word matching can't link "drift" to `endAt - Date.now()`, so when the top
+ * file is small enough it is returned whole and the model finds the logic.
+ */
+export async function retrieveCodeContext(
+  organizationId: string,
+  question: string,
+  workspaceId: string,
+  opts: { maxFiles?: number; contextLines?: number; wholeTopFileChars?: number } = {},
+): Promise<Array<{ file: string; startLine: number; snippet: string }>> {
+  const indexed = await indexCodebase(organizationId, workspaceId);
+  if (!indexed) return [];
+  const { topFiles } = await rankFilesForQuestion(indexed.cache.files, question, opts.maxFiles ?? 3, opts.contextLines ?? 15);
+  const out = topFiles
+    .filter((t) => t.snippet)
+    .map((t) => ({ file: t.file.relativePath, startLine: t.snippetStart ?? 1, snippet: t.snippet! }));
+  const limit = opts.wholeTopFileChars ?? 0;
+  if (limit > 0 && topFiles[0]) {
+    try {
+      const whole = await readFile(topFiles[0].file.path, 'utf-8');
+      if (whole.length <= limit) out[0] = { file: topFiles[0].file.relativePath, startLine: 1, snippet: whole };
+    } catch { /* keep the excerpt */ }
+  }
+  return out;
+}
+
+async function rankFilesForQuestion(files: FileInfo[], question: string, maxFiles: number, contextLines: number) {
   const q = question.toLowerCase();
   const keywords = q
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
-    .filter(k => k.length > 2 && !['how', 'what', 'where', 'when', 'which', 'who', 'why', 'does', 'did', 'the', 'and', 'for', 'are', 'with', 'from', 'this', 'that', 'nexus', 'work', 'works', 'working', 'implemented', 'explain', 'tell', 'show', 'into', 'have', 'been'].includes(k));
+    .filter(k => k.length > 2 && !['how', 'what', 'where', 'when', 'which', 'who', 'why', 'does', 'did', 'the', 'and', 'for', 'are', 'with', 'from', 'this', 'that', 'nexus', 'work', 'works', 'working', 'implemented', 'explain', 'tell', 'show', 'into', 'have', 'been'].includes(k))
+    // Light stemming so "drifting" finds "drift" and "timers" finds "timer".
+    .map(k => (k.length > 5 ? k.replace(/(ing|ed|es|s)$/, '') : k));
 
-  const scoredFiles: { file: FileInfo; score: number; matchedReasons: string[]; snippet?: string }[] = [];
+  const scoredFiles: RankedFile[] = [];
   for (const f of files) {
     let score = 0;
     const reasons: string[] = [];
@@ -891,28 +929,59 @@ export async function askCodebase(
   }
 
   scoredFiles.sort((a, b) => b.score - a.score);
-  const topFiles = scoredFiles.slice(0, 5);
+  const topFiles = scoredFiles.slice(0, maxFiles);
 
   // Extract snippet excerpts for top files
   for (const tf of topFiles) {
     try {
       const content = await readFile(tf.file.path, 'utf-8');
       const lines = content.split('\n');
-      let targetLine = tf.file.symbols[0]?.line || 1;
+      // The window with the most keyword hits, not the first hit: the first
+      // mention is usually an import line, so a question about a component's
+      // logic used to get its import block instead of the logic.
+      // Each keyword is weighted by how rare it is in this file, so a word
+      // that names the file (and fills its class names) can't drown out the
+      // one that points at the logic.
+      const isImport = (line: string) => /^\s*(import\s|export\s+\*|.*\brequire\()/.test(line);
+      const lineCount: Record<string, number> = {};
+      for (const kw of keywords) lineCount[kw] = lines.filter((l) => !isImport(l) && l.toLowerCase().includes(kw)).length;
+      const hits = lines.map((line) => {
+        if (isImport(line)) return 0;
+        const l = line.toLowerCase();
+        return keywords.reduce((n, kw) => n + (l.includes(kw) ? 1 / lineCount[kw] : 0), 0);
+      });
+      const span = Math.max(4, contextLines + 3);
+      let best = -1;
+      let bestStart = Math.max(0, (tf.file.symbols[0]?.line || 1) - 2);
+      let sum = 0;
       for (let i = 0; i < lines.length; i++) {
-        const l = lines[i].toLowerCase();
-        if (keywords.some(kw => l.includes(kw))) {
-          targetLine = i + 1;
-          break;
+        sum += hits[i];
+        if (i >= span) sum -= hits[i - span];
+        if (i >= span - 1 || i === lines.length - 1) {
+          const s = Math.max(0, i - span + 1);
+          if (sum > best) { best = sum; bestStart = s; }
         }
       }
-      const start = Math.max(0, targetLine - 2);
-      const end = Math.min(lines.length, targetLine + 4);
+      const start = best > 0 ? bestStart : Math.max(0, (tf.file.symbols[0]?.line || 1) - 2);
+      const end = Math.min(lines.length, start + span);
       tf.snippet = lines.slice(start, end).join('\n');
+      tf.snippetStart = start + 1;
     } catch {
       // Ignore read error
     }
   }
+  return { files, topFiles };
+}
+
+async function answerFromRanked(
+  organizationId: string,
+  question: string,
+  repoName: string,
+  filesScanned: number,
+  topFiles: RankedFile[],
+  preferredModel?: string,
+): Promise<{ question: string; answer: string; citations: { file: string; line?: number; reason: string }[]; relatedSymbols: CodeSymbol[] }> {
+  const files = { length: filesScanned };
 
   const relatedSymbols: CodeSymbol[] = [];
   for (const item of topFiles) {
