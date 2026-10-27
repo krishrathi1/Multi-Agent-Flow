@@ -4,6 +4,25 @@ import { useAuthStore } from '../stores/auth-store';
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
 const BASE_URL = BACKEND_URL ? `${BACKEND_URL}/api` : '/api';
 
+let refreshing: Promise<string | null> | null = null;
+
+/**
+ * One refresh at a time. When a page loads, several requests can hit 401
+ * together; each used to rotate the refresh token separately, racing to
+ * replace the same cookie.
+ */
+function refreshAccessToken(): Promise<string | null> {
+  refreshing ??= fetch(`${BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Pinggy-No-Screen': 'true' },
+    credentials: 'include', // refresh token is in httpOnly cookie
+  })
+    .then(async (r) => (r.ok ? ((await r.json()) as { accessToken: string }).accessToken : null))
+    .catch(() => null)
+    .finally(() => { refreshing = null; });
+  return refreshing;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { accessToken, organization } = useAuthStore.getState();
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Pinggy-No-Screen': 'true' };
@@ -18,15 +37,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   // On 401, try to refresh token via httpOnly cookie and retry once
   if (res.status === 401) {
-    const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Pinggy-No-Screen': 'true' },
-      credentials: 'include', // refresh token is in httpOnly cookie
-    });
-    if (refreshRes.ok) {
-      const data = await refreshRes.json();
-      useAuthStore.getState().setAccessToken(data.accessToken);
-      headers['Authorization'] = `Bearer ${data.accessToken}`;
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      useAuthStore.getState().setAccessToken(newToken);
+      headers['Authorization'] = `Bearer ${newToken}`;
       res = await fetch(`${BASE_URL}${path}`, {
         ...options,
         credentials: 'include',
