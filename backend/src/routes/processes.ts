@@ -55,7 +55,7 @@ router.get('/stats', async (req, res) => {
 
 /** Dry run: returns the roster the planner would create, without saving. */
 router.post('/plan', validate(planSchema), async (req, res) => {
-  const plan = await processService.previewPlan(req.body.prompt, req.body.agentCount, req.body.model);
+  const plan = await processService.previewPlan(req.body.prompt, req.body.agentCount, req.body.model, req.organizationId!);
   res.json(plan);
 });
 

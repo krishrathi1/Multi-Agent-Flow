@@ -180,7 +180,7 @@ export async function run(
   model?: string,
   cwd?: string,
   timeoutMs?: number,
-  opts: { agent?: string } = {},
+  opts: { agent?: string; env?: Record<string, string> } = {},
 ): Promise<{ result: string; model: string | null; exitCode: number | null }> {
   const args = ['run', prompt];
   if (model?.trim()) args.push('--model', model.trim());
@@ -200,7 +200,8 @@ export async function run(
       stdio: ['ignore', 'pipe', 'pipe'],
       // OpenCode resolves its project directory from PWD, not the spawn cwd,
       // so an inherited PWD would point agents at the backend's own source.
-      env: { ...process.env, PWD: workingDirectory },
+      // opts.env carries a provider key (e.g. GROQ_API_KEY) for this run only.
+      env: { ...process.env, ...opts.env, PWD: workingDirectory },
     });
 
     let stdout = '';

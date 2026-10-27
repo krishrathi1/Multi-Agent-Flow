@@ -913,6 +913,19 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
   const [openaiLoading, setOpenaiLoading] = useState(false);
   const [openaiError, setOpenaiError] = useState<string | null>(null);
 
+  // Groq: also the fallback for chat, code Q&A and agents when OpenCode's
+  // free models hit their usage limit.
+  const [groqKey, setGroqKey] = useState('');
+  const [showGroqKey, setShowGroqKey] = useState(false);
+  const [groqModels, setGroqModels] = useState<LiveModelItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus:live_models_groq');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [groqLoading, setGroqLoading] = useState(false);
+  const [groqError, setGroqError] = useState<string | null>(null);
+
   // Local PC State
   const [localEndpoint, setLocalEndpoint] = useState(() => localStorage.getItem('nexus:local_llm_endpoint') || config.localLlmEndpoint);
   const [localModels, setLocalModels] = useState<LiveModelItem[]>(() => {
@@ -934,7 +947,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
   const [activeProvider, setActiveProvider] = useState(() => localStorage.getItem('nexus:active_llm_provider') || 'local');
 
   // Filter & Search
-  const [activeFilter, setActiveFilter] = useState<'all' | 'opencode' | 'google' | 'anthropic' | 'openai' | 'local'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'opencode' | 'google' | 'anthropic' | 'openai' | 'groq' | 'local'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
@@ -1030,6 +1043,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
     if (provName === 'google') setGeminiLoading(true);
     if (provName === 'anthropic') setClaudeLoading(true);
     if (provName === 'openai') setOpenaiLoading(true);
+    if (provName === 'groq') setGroqLoading(true);
 
     try {
       const res = await api.llmProviders.liveModels(provName, explicitKey);
@@ -1046,6 +1060,10 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
           setOpenaiModels(res.models);
           setOpenaiError(null);
           localStorage.setItem('nexus:live_models_openai', JSON.stringify(res.models));
+        } else if (provName === 'groq') {
+          setGroqModels(res.models);
+          setGroqError(null);
+          localStorage.setItem('nexus:live_models_groq', JSON.stringify(res.models));
         }
         return res;
       } else {
@@ -1053,6 +1071,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
         if (provName === 'google') setGeminiError(errMsg);
         if (provName === 'anthropic') setClaudeError(errMsg);
         if (provName === 'openai') setOpenaiError(errMsg);
+        if (provName === 'groq') setGroqError(errMsg);
         return res;
       }
     } catch (err: any) {
@@ -1060,11 +1079,13 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
       if (provName === 'google') setGeminiError(msg);
       if (provName === 'anthropic') setClaudeError(msg);
       if (provName === 'openai') setOpenaiError(msg);
+      if (provName === 'groq') setGroqError(msg);
       return { ok: false, models: [], message: msg };
     } finally {
       if (provName === 'google') setGeminiLoading(false);
       if (provName === 'anthropic') setClaudeLoading(false);
       if (provName === 'openai') setOpenaiLoading(false);
+      if (provName === 'groq') setGroqLoading(false);
     }
   };
 
@@ -1076,6 +1097,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
     if (provName === 'google') { setGeminiLoading(true); setGeminiError(null); }
     if (provName === 'anthropic') { setClaudeLoading(true); setClaudeError(null); }
     if (provName === 'openai') { setOpenaiLoading(true); setOpenaiError(null); }
+    if (provName === 'groq') { setGroqLoading(true); setGroqError(null); }
 
     try {
       // 1. Fetch live models to test the key and get latest available models
@@ -1100,6 +1122,10 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
         setOpenaiModels(liveRes.models);
         setOpenaiKey('');
         localStorage.setItem('nexus:live_models_openai', JSON.stringify(liveRes.models));
+      } else if (provName === 'groq') {
+        setGroqModels(liveRes.models);
+        setGroqKey('');
+        localStorage.setItem('nexus:live_models_groq', JSON.stringify(liveRes.models));
       }
 
       // 4. Refresh configured providers
@@ -1120,11 +1146,13 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
       if (provName === 'google') setGeminiError(msg);
       if (provName === 'anthropic') setClaudeError(msg);
       if (provName === 'openai') setOpenaiError(msg);
+      if (provName === 'groq') setGroqError(msg);
       setToastMessage({ type: 'error', text: msg });
     } finally {
       if (provName === 'google') setGeminiLoading(false);
       if (provName === 'anthropic') setClaudeLoading(false);
       if (provName === 'openai') setOpenaiLoading(false);
+      if (provName === 'groq') setGroqLoading(false);
     }
   };
 
@@ -1151,6 +1179,10 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
       setOpenaiModels([]);
       setOpenaiError(null);
       localStorage.removeItem('nexus:live_models_openai');
+    } else if (provName === 'groq') {
+      setGroqModels([]);
+      setGroqError(null);
+      localStorage.removeItem('nexus:live_models_groq');
     }
 
     if (activeProvider === provName) {
@@ -1466,6 +1498,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
               { id: 'google', label: 'Google Gemini' },
               { id: 'anthropic', label: 'Anthropic Claude' },
               { id: 'openai', label: 'OpenAI & Codex' },
+              { id: 'groq', label: 'Groq' },
               { id: 'local', label: 'Local PC Hardware' },
             ] as const
           ).map((tab) => (
@@ -1978,6 +2011,171 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
                         </div>
                         {isSelected && (
                           <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] uppercase font-bold text-emerald-600 shrink-0">
+                            Active Default
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-medium text-ink-muted line-clamp-1">{m.name}</div>
+                      {m.description && (
+                        <p className="text-[10px] text-ink-faint line-clamp-2 leading-relaxed">{m.description}</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* PROVIDER: Groq — fast hosted open models; also the fallback when OpenCode free models are exhausted */}
+      {(activeFilter === 'all' || activeFilter === 'groq') && (
+        <Card padding="md" className="border border-orange-500/20 bg-surface shadow-xs space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line-subtle pb-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-orange-600 text-white shadow-xs">
+                <Bot size={20} />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-base text-ink">Groq</h4>
+                  <Badge tone={isProviderConfigured('groq') || groqModels.length > 0 ? 'success' : 'neutral'} dot>
+                    {isProviderConfigured('groq') || groqModels.length > 0
+                      ? `Connected (${groqModels.length} Live Models)`
+                      : 'Not Configured'}
+                  </Badge>
+                </div>
+                <p className="text-2xs text-ink-muted">
+                  Fast hosted open models (GPT-OSS, Qwen) • Used for Mother Chat, Code Intelligence and agents when OpenCode free models are unavailable
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <a
+                href="https://console.groq.com/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-2xs font-bold text-orange-600 hover:text-orange-700"
+              >
+                <span>Get API Key</span>
+                <ExternalLink size={11} />
+              </a>
+              {(isProviderConfigured('groq') || groqModels.length > 0) && (
+                <>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    icon={RefreshCw}
+                    loading={groqLoading}
+                    onClick={() => fetchLiveProviderModels('groq')}
+                  >
+                    Refresh
+                  </Button>
+                  {isAdmin && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                      onClick={() => handleDisconnectProvider('groq')}
+                    >
+                      Disconnect
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {groqError && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-400">
+              <AlertCircle size={15} />
+              <span>{groqError}</span>
+            </div>
+          )}
+
+          {/* Connect API Key Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleConnectProvider('groq', groqKey);
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">
+                {isProviderConfigured('groq') ? 'Update Groq API Key' : 'Connect Groq API Key'}
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showGroqKey ? 'text' : 'password'}
+                    value={groqKey}
+                    onChange={(e) => setGroqKey(e.target.value)}
+                    placeholder={isProviderConfigured('groq') ? '••••••••••••••••••••••••••••••••••••' : 'gsk_...'}
+                    className="w-full rounded-xl border border-line bg-canvas px-3.5 py-2.5 font-mono text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-orange-500 focus:outline-none pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGroqKey(!showGroqKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                  >
+                    {showGroqKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  loading={groqLoading}
+                  disabled={!groqKey.trim()}
+                >
+                  Connect & Fetch Live Models
+                </Button>
+              </div>
+            </div>
+          </form>
+
+          {/* Live Models Display */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
+                Live Groq Models ({groqModels.length})
+              </label>
+              {groqModels.length > 0 && (
+                <span className="text-2xs font-semibold text-orange-600 dark:text-orange-400">
+                  Click any model card to set as Active Default
+                </span>
+              )}
+            </div>
+
+            {groqModels.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-line bg-canvas p-5 text-center text-xs text-ink-muted">
+                {groqLoading ? 'Fetching live models from Groq...' : 'No Groq models loaded. Connect your API key above to load live models.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {filterList(groqModels).map((m) => {
+                  const isSelected = activeModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleSelectModel(m.id, 'groq')}
+                      className={cn(
+                        'flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-all shadow-2xs',
+                        isSelected
+                          ? 'border-orange-500 bg-orange-500/15 text-orange-700 dark:text-orange-300 ring-1 ring-orange-500/50'
+                          : 'border-line bg-canvas text-ink-muted hover:border-line-strong hover:text-ink',
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Bot size={14} className={isSelected ? 'text-orange-600 shrink-0' : 'text-ink-faint shrink-0'} />
+                          <span className="font-mono text-xs font-bold text-ink truncate">{m.id}</span>
+                        </div>
+                        {isSelected && (
+                          <span className="rounded bg-orange-500/20 px-1.5 py-0.2 text-[9px] uppercase font-bold text-orange-600 shrink-0">
                             Active Default
                           </span>
                         )}

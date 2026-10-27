@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { ask as askOpenCode } from './opencode.service.js';
+import { getGroqApiKey, groqChat } from './llm-provider.service.js';
 import { readdir, readFile, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, relative, extname, basename, resolve } from 'path';
@@ -1018,8 +1019,24 @@ async function answerFromRanked(
     `Provide a clear, detailed, and technically accurate explanation in GitHub-flavored Markdown. ` +
     `Explain how the architecture works, reference specific files and symbols, and provide code guidance where applicable. Keep the tone professional, helpful, and concise.`;
 
+  // 0. Groq, when the org saved a key and no other provider was picked.
+  if (!preferredModel || /^(groq|opencode)\//i.test(preferredModel)) {
+    const groqKey = await getGroqApiKey(organizationId);
+    if (groqKey) {
+      const g = await groqChat({
+        apiKey: groqKey,
+        system: 'You answer questions about a code repository using only the excerpts provided.',
+        prompt,
+        model: preferredModel?.startsWith('groq/') ? preferredModel : undefined,
+        maxTokens: 2000,
+      });
+      if (g) aiAnswer = g.text;
+      else unavailableReason = 'Groq did not answer';
+    }
+  }
+
   // 1. Explicit OpenCode model selection
-  if (preferredModel && (preferredModel.startsWith('opencode/') || preferredModel.startsWith('nvidia/'))) {
+  if (!aiAnswer && preferredModel && (preferredModel.startsWith('opencode/') || preferredModel.startsWith('nvidia/'))) {
     try {
       const op = await askOpenCode(prompt, preferredModel);
       if (op.result && op.result.trim().length > 20) aiAnswer = op.result.trim();

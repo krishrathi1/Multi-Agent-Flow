@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { runClaudeCli, isClaudeCliEnabled } from '../lib/claude-cli.js';
 import { ask as askOpenCode } from './opencode.service.js';
+import { getGroqApiKey, groqChat } from './llm-provider.service.js';
 
 /**
  * Turns a plain-language goal into a staged agent roster.
@@ -497,7 +498,7 @@ Use exactly ${requested} agents.`
   return plan;
 }
 
-async function planWithLlm(prompt: string, requested?: number, preferredModel?: string): Promise<ProcessPlan | null> {
+async function planWithLlm(prompt: string, requested?: number, preferredModel?: string, organizationId?: string): Promise<ProcessPlan | null> {
   const ask = requested
     ? `${prompt}\n\nUse exactly ${requested} agents.`
     : prompt;
@@ -516,6 +517,21 @@ async function planWithLlm(prompt: string, requested?: number, preferredModel?: 
       }
     } catch (err) {
       logger.warn({ err, preferredModel }, 'OpenCode planner call failed, trying next candidate');
+    }
+  }
+
+  // 1b. The org's Groq key (Settings → AI Models), so planning still uses a
+  // model when OpenCode's free models hit their usage limit.
+  const groqKey = organizationId ? await getGroqApiKey(organizationId) : null;
+  if (groqKey) {
+    const g = await groqChat({ apiKey: groqKey, system: PLANNER_SYSTEM, prompt: `User Production Request:
+${ask}
+
+Respond ONLY with the raw JSON plan object:`, maxTokens: 4000, timeoutMs: 60_000 });
+    const plan = g ? parsePlanJson(g.text, prompt, `llm:${g.model}`) : null;
+    if (plan && plan.agents.length > 0) {
+      logger.info({ model: g!.model, agents: plan.agents.length }, 'Planned production chain via Groq');
+      return plan;
     }
   }
 
@@ -638,8 +654,8 @@ async function planWithLlm(prompt: string, requested?: number, preferredModel?: 
  * built-in heuristic. Each step degrades silently to the next, so planning
  * never fails outright.
  */
-export async function planProcess(prompt: string, requested?: number, preferredModel?: string): Promise<ProcessPlan> {
-  const viaApi = await planWithLlm(prompt, requested, preferredModel);
+export async function planProcess(prompt: string, requested?: number, preferredModel?: string, organizationId?: string): Promise<ProcessPlan> {
+  const viaApi = await planWithLlm(prompt, requested, preferredModel, organizationId);
   if (viaApi) return viaApi;
 
   const viaCli = await planWithCli(prompt, requested);

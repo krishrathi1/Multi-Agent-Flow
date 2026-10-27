@@ -14,6 +14,7 @@ import { retrieveCodeContext } from './code-intelligence.service.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getOrganizationIntegrationToken } from './org.service.js';
+import { getGroqApiKey, groqChat } from './llm-provider.service.js';
 
 const HISTORY_LIMIT = 30;
 
@@ -103,6 +104,23 @@ async function callChatLLM(params: {
   const isOpenAI = preferredLower.startsWith('openai/') || (!preferredLower.includes('/') && (preferredLower.startsWith('gpt-') || preferredLower.startsWith('o1') || preferredLower.startsWith('o3')));
   const isAnthropic = preferredLower.startsWith('anthropic/') || (!preferredLower.includes('/') && preferredLower.startsWith('claude-'));
   const isLocal = preferredLower.startsWith('local/') || preferredLower.startsWith('ollama/');
+
+  // 0. Groq, when the org saved a key and no other provider was asked for.
+  // A direct call answers in about a second; OpenCode's free models are
+  // also the ones that hit usage limits.
+  if (!preferred || /^(groq|opencode)\//i.test(preferred)) {
+    const groqKey = await getGroqApiKey(params.organizationId);
+    if (groqKey) {
+      const g = await groqChat({
+        apiKey: groqKey,
+        system: params.systemPrompt,
+        prompt: params.prompt,
+        model: preferredLower.startsWith('groq/') ? preferred : undefined,
+      });
+      if (g) return { text: g.text, model: g.model, inputTokens: g.inputTokens, outputTokens: g.outputTokens, costUsd: 0 };
+      unavailableReason = 'Groq did not answer';
+    }
+  }
 
   // 1. Nvidia API Direct Execution (Sub-second response)
   if (isNvidia) {

@@ -16,6 +16,73 @@ const PLATFORM_KEY_ENV: Record<string, string> = {
   openrouter: 'PLATFORM_OPENROUTER_API_KEY',
 };
 
+// ─── Groq ──────────────────────────────────────────────────────────────────
+// A key saved under Settings → AI Models & LLM is used for chat, code Q&A and,
+// through OpenCode, for agents and preview edits — so the platform keeps
+// working when OpenCode's free models hit their usage limit.
+
+/** Default Groq model; override with GROQ_MODEL. */
+export const groqModel = () => process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-120b';
+/** Tried in order when the preferred model is rejected (limits, size). */
+const GROQ_FALLBACKS = ['openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
+
+/** The org's Groq key from Settings, else the platform's, else null. */
+export async function getGroqApiKey(organizationId: string): Promise<string | null> {
+  try {
+    const row = await prisma.llmProvider.findFirst({
+      where: { organizationId, provider: { equals: 'groq', mode: 'insensitive' }, isActive: true },
+    });
+    if (row?.apiKey) return decryptField(row.apiKey);
+  } catch { /* fall through to the platform key */ }
+  return process.env.PLATFORM_GROQ_API_KEY?.trim() || process.env.GROQ_API_KEY?.trim() || null;
+}
+
+/**
+ * One chat completion from Groq (OpenAI-compatible). Tries the requested
+ * model, then smaller ones if Groq rejects the request (per-minute token
+ * limits on the free tier are the usual reason). Returns null on failure.
+ */
+export async function groqChat(params: {
+  apiKey: string;
+  system: string;
+  prompt: string;
+  model?: string;
+  maxTokens?: number;
+  timeoutMs?: number;
+}): Promise<{ text: string; model: string; inputTokens: number; outputTokens: number } | null> {
+  const first = (params.model || groqModel()).replace(/^groq\//, '');
+  for (const model of [first, ...GROQ_FALLBACKS.filter((m) => m !== first)]) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${params.apiKey}` },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'system', content: params.system }, { role: 'user', content: params.prompt }],
+          temperature: 0.3,
+          max_tokens: params.maxTokens ?? 1500,
+        }),
+        signal: AbortSignal.timeout(params.timeoutMs ?? 30_000),
+      });
+      const data = (await res.json().catch(() => null)) as any;
+      const text = data?.choices?.[0]?.message?.content;
+      if (res.ok && typeof text === 'string' && text.trim()) {
+        return {
+          text: text.trim(),
+          model: `groq/${model}`,
+          inputTokens: data?.usage?.prompt_tokens ?? 0,
+          outputTokens: data?.usage?.completion_tokens ?? 0,
+        };
+      }
+      logger.warn({ model, status: res.status, error: data?.error?.message }, 'Groq request rejected; trying next model');
+      if (res.status === 401) return null; // a bad key fails every model
+    } catch (err) {
+      logger.warn({ err, model }, 'Groq request failed; trying next model');
+    }
+  }
+  return null;
+}
+
 // Cost per token (in dollars) by model prefix — input/output pricing
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   // Local PC Models (0 Cost)

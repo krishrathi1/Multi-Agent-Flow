@@ -13,6 +13,7 @@ import { notify } from './insights.service.js';
 import { pushWorkspaceToGitHub, deployToVercel, snapshotWorkspace } from './git-deploy.service.js';
 import { run as runOpenCode, OpenCodeUnavailableError } from './opencode.service.js';
 import { getOrganizationIntegrationToken } from './org.service.js';
+import { getGroqApiKey, groqModel } from './llm-provider.service.js';
 
 import { config } from '../config.js';
 /**
@@ -50,13 +51,16 @@ async function executeAgentWork(params: {
     const isReviewer = /\b(qa|review|test|audit|verif)/i.test(`${params.agent.processRole ?? ''} ${params.agent.displayName}`);
     let promptText = basePrompt;
     let lastProblem = '';
+    let model = params.preferredModel;
+    let providerEnv: Record<string, string> | undefined;
+    let switchedToGroq = false;
     // A session that exits early (model error, rate limit, a stream that just
     // stops) used to count as done: the Frontend Developer of a real build
     // "completed" after 48s of reading the spec, without writing a line.
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const before = await workspaceSignature(params.workspace);
-        const opencodeRes = await runOpenCode(promptText, params.preferredModel, params.workspace);
+        const opencodeRes = await runOpenCode(promptText, model, params.workspace, undefined, { env: providerEnv });
         const changed = before !== (await workspaceSignature(params.workspace));
         const cleanExit = opencodeRes.exitCode === 0;
         if (opencodeRes.result && cleanExit && (changed || (attempt === 2 && isReviewer))) {
@@ -66,15 +70,25 @@ async function executeAgentWork(params: {
           const inputTokens = Math.max(380, Math.ceil(promptText.length / 4));
           const outputTokens = Math.max(650, Math.ceil(opencodeRes.result.length / 4));
           const costUsd = Number(((inputTokens * 0.00000015) + (outputTokens * 0.00000060) + 0.0012).toFixed(5));
-          return { text: opencodeRes.result, model: params.preferredModel, costUsd, inputTokens, outputTokens };
+          return { text: opencodeRes.result, model, costUsd, inputTokens, outputTokens };
         }
         lastProblem = !cleanExit
           ? `OpenCode exited with code ${opencodeRes.exitCode} before finishing`
           : 'the session ended without changing any files';
       } catch (err) {
         lastProblem = (err as Error).message;
-        // Quota or auth refusals won't change on a retry.
-        if (err instanceof OpenCodeUnavailableError) break;
+        // Quota or auth refusals won't change on a retry — but if the org has
+        // a Groq key in Settings, the same agent can carry on through it.
+        if (err instanceof OpenCodeUnavailableError) {
+          const groqKey = switchedToGroq ? null : await getGroqApiKey(params.organizationId);
+          if (!groqKey) break;
+          switchedToGroq = true;
+          model = `groq/${groqModel()}`;
+          providerEnv = { GROQ_API_KEY: groqKey };
+          logger.info({ agent: params.agent.displayName, model }, 'OpenCode model refused; continuing with Groq');
+          attempt--;
+          continue;
+        }
       }
       logger.warn({ agent: params.agent.displayName, attempt, problem: lastProblem }, 'OpenCode agent did not complete its work');
       promptText = `${basePrompt}\n\nIMPORTANT: a previous attempt at this task stopped early (${lastProblem}). Do not stop after reading the workspace — implement your deliverables now by creating and editing files, then summarise what you changed.`;
@@ -385,7 +399,17 @@ export async function startWorkspaceEdit(
       ].join('\n\n');
 
       const before = await workspaceStamps(workspace);
-      const res = await runOpenCode(prompt, model, workspace, 10 * 60_000);
+      let res: Awaited<ReturnType<typeof runOpenCode>>;
+      try {
+        res = await runOpenCode(prompt, model, workspace, 10 * 60_000);
+      } catch (err) {
+        // OpenCode's free models refused (usage limit): use the org's Groq key.
+        const groqKey = err instanceof OpenCodeUnavailableError ? await getGroqApiKey(organizationId) : null;
+        if (!groqKey) throw err;
+        job.model = `groq/${groqModel()}`;
+        emit('process:edit:updated', job);
+        res = await runOpenCode(prompt, job.model, workspace, 10 * 60_000, { env: { GROQ_API_KEY: groqKey } });
+      }
       const changed = changedFiles(before, await workspaceStamps(workspace));
       job.summary = closingParagraph(res.result) || null;
 
