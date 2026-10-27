@@ -1244,10 +1244,12 @@ function AskTab({ workspaceId, workspaceName }: { workspaceId: string; workspace
       const data = await codeIntelApi.ask(q, chatModel || undefined, workspaceId);
       setResult(data);
       if (qText) setQuestion(qText);
-    } catch {
+    } catch (err) {
       setResult({
         question: q,
-        answer: 'Failed to process codebase query. Ensure the backend server is running.',
+        // The real reason (an expired session, a refused model) used to be
+        // replaced by "Ensure the backend server is running".
+        answer: `The question couldn't be answered: ${(err as Error).message || 'request failed'}.`,
         citations: [],
         relatedSymbols: [],
       });

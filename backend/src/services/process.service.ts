@@ -117,8 +117,8 @@ export async function getProcessById(id: string, organizationId: string) {
 }
 
 /** Preview only — plans without writing anything. */
-export async function previewPlan(prompt: string, agentCount?: number, model?: string): Promise<ProcessPlan> {
-  return planProcess(prompt, agentCount, model);
+export async function previewPlan(prompt: string, agentCount?: number, model?: string, organizationId?: string): Promise<ProcessPlan> {
+  return planProcess(prompt, agentCount, model, organizationId);
 }
 
 export interface CreateProcessInput {
@@ -153,7 +153,7 @@ export async function createProcess(
 ) {
   // Plan once — re-planning on retry would spend a second LLM call and could
   // return an entirely different roster.
-  const plan = input.plan ?? (await planProcess(input.prompt, input.agentCount, input.model));
+  const plan = input.plan ?? (await planProcess(input.prompt, input.agentCount, input.model, organizationId));
 
   const ATTEMPTS = 4;
   for (let attempt = 1; ; attempt++) {

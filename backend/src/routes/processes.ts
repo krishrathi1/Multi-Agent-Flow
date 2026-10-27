@@ -55,7 +55,7 @@ router.get('/stats', async (req, res) => {
 
 /** Dry run: returns the roster the planner would create, without saving. */
 router.post('/plan', validate(planSchema), async (req, res) => {
-  const plan = await processService.previewPlan(req.body.prompt, req.body.agentCount, req.body.model);
+  const plan = await processService.previewPlan(req.body.prompt, req.body.agentCount, req.body.model, req.organizationId!);
   res.json(plan);
 });
 
@@ -116,6 +116,9 @@ router.post('/:id/run', async (req, res) => {
   if (runner.isRunning(id)) {
     return res.status(409).json({ error: 'This production is already running' });
   }
+  if (runner.isEditing(id)) {
+    return res.status(409).json({ error: 'A preview edit is still being applied; run again when it finishes' });
+  }
   if (await runner.atCapacityGlobal()) {
     return res.status(429).json({
       error: `Too many chains running at once (limit ${runner.capacityLimit()}). Wait for one to finish.`,
@@ -139,6 +142,9 @@ router.post('/:id/retry', async (req, res) => {
   if (!proc) return res.status(404).json({ error: 'Process not found' });
   if (runner.isRunning(id)) {
     return res.status(409).json({ error: 'This production is already running' });
+  }
+  if (runner.isEditing(id)) {
+    return res.status(409).json({ error: 'A preview edit is still being applied; run again when it finishes' });
   }
   if (await runner.atCapacityGlobal()) {
     return res.status(429).json({
@@ -566,6 +572,28 @@ router.post('/:id/auto-heal', async (req, res) => {
 });
 
 /** Ask AI: Analyzes error, recruits specialist agent if needed, applies zero-error fix & re-deploys */
+/**
+ * POST /:id/edits — apply a change the user asked for in the Watch Preview
+ * chat. Returns at once (202); poll GET /:id/edits/:jobId or listen for
+ * `process:edit:updated` until the state leaves "running".
+ */
+router.post('/:id/edits', async (req, res) => {
+  const id = paramId(req.params.id);
+  const instruction = typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : '';
+  if (!instruction || instruction.length > 4000) {
+    return res.status(400).json({ error: 'Describe the change (up to 4,000 characters)' });
+  }
+  const emit = (event: string, payload: unknown) => req.app.get('io')?.to(`org:${req.organizationId}`).emit(event, payload);
+  const job = await runner.startWorkspaceEdit(id, req.organizationId!, instruction, emit);
+  res.status(202).json(job);
+});
+
+router.get('/:id/edits/:jobId', async (req, res) => {
+  const job = runner.getWorkspaceEdit(paramId(req.params.jobId), req.organizationId!);
+  if (!job || job.processId !== paramId(req.params.id)) return res.status(404).json({ error: 'Edit not found' });
+  res.json(job);
+});
+
 router.post('/:id/ask-ai-fix', async (req, res) => {
   try {
     const result = await processService.askAiAndSpawnFixerAgent({

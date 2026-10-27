@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { config } from '../config.js';
@@ -146,13 +146,47 @@ const PROMPT_SANDBOX = path.join(os.tmpdir(), 'mycelium-chat-sandbox');
  */
 export async function ask(prompt: string, model?: string, timeoutMs = 45000) {
   await mkdir(PROMPT_SANDBOX, { recursive: true });
-  return run(prompt, model, PROMPT_SANDBOX, timeoutMs);
+  // A tool-free agent: the default "build" agent carries every tool schema
+  // in its prompt and may spend round trips listing a sandbox with nothing
+  // in it, which is most of what made chat answers slow.
+  await writeFile(path.join(PROMPT_SANDBOX, 'opencode.json'), CHAT_AGENT_CONFIG).catch(() => {});
+  return run(prompt, model, PROMPT_SANDBOX, timeoutMs, { agent: 'chat' });
 }
 
-export async function run(prompt: string, model?: string, cwd?: string, timeoutMs?: number): Promise<{ result: string; model: string | null; exitCode: number | null }> {
+const CHAT_AGENT_CONFIG = JSON.stringify({
+  $schema: 'https://opencode.ai/config.json',
+  agent: {
+    chat: {
+      description: 'Answers questions from the context it is given; never uses tools.',
+      mode: 'primary',
+      tools: Object.fromEntries(
+        ['bash', 'edit', 'write', 'read', 'grep', 'glob', 'list', 'patch', 'todowrite', 'todoread', 'webfetch', 'task'].map((t) => [t, false]),
+      ),
+    },
+  },
+}, null, 2);
+
+/** Thrown when the model provider refuses outright (quota, auth, billing). */
+export class OpenCodeUnavailableError extends Error {}
+
+/**
+ * Provider errors OpenCode keeps retrying silently. "Free usage limit
+ * reached" left every chat, Q&A and agent hanging until its timeout.
+ */
+const FATAL_PROVIDER_ERROR = /usage limit|quota|rate limit|insufficient|billing|subscribe|unauthori[sz]ed|invalid api key|api key|forbidden|\b40[13]\b/i;
+
+export async function run(
+  prompt: string,
+  model?: string,
+  cwd?: string,
+  timeoutMs?: number,
+  opts: { agent?: string; env?: Record<string, string> } = {},
+): Promise<{ result: string; model: string | null; exitCode: number | null }> {
   const args = ['run', prompt];
   if (model?.trim()) args.push('--model', model.trim());
-  args.push('--pure');
+  if (opts.agent) args.push('--agent', opts.agent);
+  // Error-level logs on stderr are how a refused request becomes visible.
+  args.push('--pure', '--print-logs', '--log-level', 'ERROR');
   const workingDirectory = cwd?.trim() || process.env.OPENCODE_WORKDIR || process.cwd();
   if (!existsSync(workingDirectory)) throw new Error(`OpenCode working directory does not exist: ${workingDirectory}`);
   if (cwd?.trim()) await ensureOwnProjectRoot(workingDirectory);
@@ -166,7 +200,8 @@ export async function run(prompt: string, model?: string, cwd?: string, timeoutM
       stdio: ['ignore', 'pipe', 'pipe'],
       // OpenCode resolves its project directory from PWD, not the spawn cwd,
       // so an inherited PWD would point agents at the backend's own source.
-      env: { ...process.env, PWD: workingDirectory },
+      // opts.env carries a provider key (e.g. GROQ_API_KEY) for this run only.
+      env: { ...process.env, ...opts.env, PWD: workingDirectory },
     });
 
     let stdout = '';
@@ -180,7 +215,19 @@ export async function run(prompt: string, model?: string, cwd?: string, timeoutM
     }, effectiveTimeout);
 
     child.stdout?.on('data', (d) => { stdout += d.toString(); });
-    child.stderr?.on('data', (d) => { stderr += d.toString(); });
+    child.stderr?.on('data', (d) => {
+      stderr += d.toString();
+      if (isTimedOut) return;
+      const fatal = stderr.match(/message="stream error"[^\n]*error\.error="([^"]+)/g)
+        ?.map((line) => line.replace(/^.*error\.error="/, ''))
+        .find((msg) => FATAL_PROVIDER_ERROR.test(msg));
+      if (fatal) {
+        isTimedOut = true; // reuse the flag: we've settled, ignore 'close'
+        clearTimeout(timer);
+        try { child.kill('SIGTERM'); } catch { /* ignore */ }
+        reject(new OpenCodeUnavailableError(`OpenCode model unavailable: ${fatal.replace(/^AI_\w+:\s*/, '').slice(0, 240)}`));
+      }
+    });
 
     child.on('error', (err) => {
       clearTimeout(timer);
@@ -190,8 +237,9 @@ export async function run(prompt: string, model?: string, cwd?: string, timeoutM
     child.on('close', (code) => {
       clearTimeout(timer);
       if (isTimedOut) return;
-      let cleanResult = (stdout || stderr).trim();
-      cleanResult = cleanResult.replace(/^>\s*build\s*·\s*[^\n\r]+\r?\n+/i, '').trim();
+      // stdout only: stderr now carries error logs, not the answer.
+      let cleanResult = stdout.replace(/\x1b\[[0-9;]*m/g, '').trim();
+      cleanResult = cleanResult.replace(/^>\s*\w+\s*·\s*[^\n\r]+\r?\n+/i, '').trim();
       if (cleanResult.length === 0 && code !== 0) {
         reject(new Error(`OpenCode exited with code ${code}`));
       } else {

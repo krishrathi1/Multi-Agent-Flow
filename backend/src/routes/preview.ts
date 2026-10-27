@@ -130,6 +130,24 @@ window.addEventListener('error', function (e) {
 </script>
 `;
 
+const TAILWIND_BROWSER_CDN = 'https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4';
+
+/** Drops Tailwind build directives from CSS; the in-browser build supplies them. */
+const tailwindDirectivesPlugin: esbuild.Plugin = {
+  name: 'strip-tailwind-directives',
+  setup(build) {
+    build.onLoad({ filter: /\.css$/ }, async (args) => {
+      const css = await fs.readFile(args.path, 'utf-8');
+      if (!/tailwind|@config|@plugin/.test(css)) return undefined;
+      const contents = css
+        .replace(/@import\s+(url\()?["']tailwindcss[^"']*["']\)?[^;]*;/g, '')
+        .replace(/@tailwind\s+[\w-]+\s*;/g, '')
+        .replace(/@(config|plugin)\s+["'][^"']+["']\s*;/g, '');
+      return { contents, loader: args.path.endsWith('.module.css') ? 'local-css' : 'css' };
+    });
+  },
+};
+
 async function workspaceMentions(wsDir: string, needle: string): Promise<boolean> {
   for (const f of ['package.json', 'tailwind.config.js', 'tailwind.config.ts', 'index.html']) {
     try {
@@ -241,6 +259,7 @@ export async function buildPreviewHtml(processId: string, absHtmlPath: string): 
         '.gif': 'dataurl',
         '.webp': 'dataurl',
       },
+      plugins: [tailwindDirectivesPlugin],
     });
 
     const outputs = buildRes.outputFiles ?? [];
@@ -249,10 +268,15 @@ export async function buildPreviewHtml(processId: string, absHtmlPath: string): 
     const bundledCss = outputs.find((o) => o.path.endsWith('.css'))?.text || '';
     const usesTailwind = await workspaceMentions(wsDir, 'tailwind');
 
+    // Tailwind needs its PostCSS build, which the preview doesn't run (and
+    // generated projects often never installed it): `@import "tailwindcss"`
+    // failed to resolve and the whole preview errored. Its in-browser build
+    // generates the utility classes instead, and reading the app's CSS as
+    // text/tailwindcss keeps @apply and @theme working.
     const headExtras =
-      (usesTailwind ? '<script src="https://cdn.tailwindcss.com"></script>\n' : '') +
+      (usesTailwind ? `<script src="${TAILWIND_BROWSER_CDN}"></script>\n` : '') +
       PREVIEW_RUNTIME_SHIM +
-      (bundledCss ? `<style>\n${bundledCss}\n</style>\n` : '');
+      (bundledCss ? `<style${usesTailwind ? ' type="text/tailwindcss"' : ''}>\n${bundledCss}\n</style>\n` : '');
     const inlineScript = `<script type="module">\n${bundledJs}\n</script>`;
 
     // Keep the project's own document. The old path replaced it with an empty
@@ -306,10 +330,14 @@ const installs = new Map<string, Promise<void>>();
  * scripts are disabled: the package list came from an agent.
  */
 async function ensureDependencies(wsDir: string): Promise<void> {
-  if (fsSync.existsSync(path.join(wsDir, 'node_modules'))) return;
   let pkg: any;
   try { pkg = JSON.parse(await fs.readFile(path.join(wsDir, 'package.json'), 'utf-8')); } catch { return; }
-  if (!Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).length) return;
+  // Agents often install only part of what they declare, so the presence of
+  // node_modules alone isn't enough: check each runtime dependency.
+  const missing = Object.keys(pkg.dependencies ?? {})
+    .filter((name) => !fsSync.existsSync(path.join(wsDir, 'node_modules', name, 'package.json')));
+  const declaresAny = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).length > 0;
+  if (!declaresAny || (fsSync.existsSync(path.join(wsDir, 'node_modules')) && missing.length === 0)) return;
   if (!installs.has(wsDir)) {
     installs.set(wsDir, execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
       ['install', '--no-audit', '--no-fund', '--ignore-scripts', '--loglevel=error'],

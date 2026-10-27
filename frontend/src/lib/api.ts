@@ -93,6 +93,19 @@ export async function downloadWithAuth(path: string, filename: string): Promise<
   URL.revokeObjectURL(url);
 }
 
+export interface PreviewEdit {
+  id: string;
+  state: 'running' | 'completed' | 'failed';
+  instruction: string;
+  startedAt: string;
+  finishedAt: string | null;
+  summary: string | null;
+  changedFiles: string[];
+  commit: string | null;
+  error: string | null;
+  model: string;
+}
+
 // For public endpoints (no auth needed)
 async function requestPublic<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -348,6 +361,10 @@ export const api = {
         deployResult?: any;
         message: string;
       }>(`/processes/${id}/auto-heal`, { method: 'POST' }),
+    /** Starts a live edit from the Watch Preview chat; poll getEdit until it finishes. */
+    startEdit: (id: string, instruction: string) =>
+      request<PreviewEdit>(`/processes/${id}/edits`, { method: 'POST', body: JSON.stringify({ instruction }) }),
+    getEdit: (id: string, jobId: string) => request<PreviewEdit>(`/processes/${id}/edits/${jobId}`),
     askAiFix: (id: string, instruction?: string) =>
       request<{
         success: boolean;

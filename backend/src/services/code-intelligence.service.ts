@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { ask as askOpenCode } from './opencode.service.js';
+import { getGroqApiKey, groqChat } from './llm-provider.service.js';
 import { readdir, readFile, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, relative, extname, basename, resolve } from 'path';
@@ -1004,6 +1005,7 @@ async function answerFromRanked(
   }
 
   let aiAnswer: string | null = null;
+  let unavailableReason: string | null = null;
   const contextBlock = topFiles.map(tf => (
     `File: ${tf.file.relativePath} (${tf.file.language}, ${tf.file.lineCount} lines)\n` +
     `Symbols: ${tf.file.symbols.slice(0, 6).map(s => `${s.kind} ${s.name}`).join(', ')}\n` +
@@ -1017,12 +1019,28 @@ async function answerFromRanked(
     `Provide a clear, detailed, and technically accurate explanation in GitHub-flavored Markdown. ` +
     `Explain how the architecture works, reference specific files and symbols, and provide code guidance where applicable. Keep the tone professional, helpful, and concise.`;
 
+  // 0. Groq, when the org saved a key and no other provider was picked.
+  if (!preferredModel || /^(groq|opencode)\//i.test(preferredModel)) {
+    const groqKey = await getGroqApiKey(organizationId);
+    if (groqKey) {
+      const g = await groqChat({
+        apiKey: groqKey,
+        system: 'You answer questions about a code repository using only the excerpts provided.',
+        prompt,
+        model: preferredModel?.startsWith('groq/') ? preferredModel : undefined,
+        maxTokens: 2000,
+      });
+      if (g) aiAnswer = g.text;
+      else unavailableReason = 'Groq did not answer';
+    }
+  }
+
   // 1. Explicit OpenCode model selection
-  if (preferredModel && (preferredModel.startsWith('opencode/') || preferredModel.startsWith('nvidia/'))) {
+  if (!aiAnswer && preferredModel && (preferredModel.startsWith('opencode/') || preferredModel.startsWith('nvidia/'))) {
     try {
       const op = await askOpenCode(prompt, preferredModel);
       if (op.result && op.result.trim().length > 20) aiAnswer = op.result.trim();
-    } catch { /* continue */ }
+    } catch (err) { unavailableReason = (err as Error).message; }
   }
 
   // 2. Try Gemini API (Default Cloud Intelligence)
@@ -1125,13 +1143,13 @@ async function answerFromRanked(
     try {
       const op = await askOpenCode(prompt, config.opencodeModel);
       if (op.result && op.result.trim().length > 20) aiAnswer = op.result.trim();
-    } catch { /* fall through to retrieval */ }
+    } catch (err) { unavailableReason = (err as Error).message; }
   }
 
   // Grounded truthful retrieval synthesis (no invented summaries)
   const finalAnswer = aiAnswer || (
     `### 🔍 Direct Retrieval Matches for: "${question}"\n\n` +
-    `No configured LLM was reachable to synthesize an answer. Below are the directly retrieved code passages grounded in the **${repoName}** workspace:\n\n` +
+    `No AI model answered${unavailableReason ? ` (${unavailableReason})` : ''}, so here are the matching code passages from the **${repoName}** workspace instead:\n\n` +
     topFiles.map((tf, idx) => {
       const lineStart = tf.file.symbols[0]?.line || 1;
       const lineEnd = lineStart + (tf.snippet ? tf.snippet.split('\n').length : 1) - 1;

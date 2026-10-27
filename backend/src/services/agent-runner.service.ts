@@ -11,8 +11,9 @@ import { safeFetch } from '../lib/url-validator.js';
 import { fireWebhooks } from './process-extras.service.js';
 import { notify } from './insights.service.js';
 import { pushWorkspaceToGitHub, deployToVercel, snapshotWorkspace } from './git-deploy.service.js';
-import { run as runOpenCode } from './opencode.service.js';
+import { run as runOpenCode, OpenCodeUnavailableError } from './opencode.service.js';
 import { getOrganizationIntegrationToken } from './org.service.js';
+import { getGroqApiKey, groqModel } from './llm-provider.service.js';
 
 import { config } from '../config.js';
 /**
@@ -50,13 +51,16 @@ async function executeAgentWork(params: {
     const isReviewer = /\b(qa|review|test|audit|verif)/i.test(`${params.agent.processRole ?? ''} ${params.agent.displayName}`);
     let promptText = basePrompt;
     let lastProblem = '';
+    let model = params.preferredModel;
+    let providerEnv: Record<string, string> | undefined;
+    let switchedToGroq = false;
     // A session that exits early (model error, rate limit, a stream that just
     // stops) used to count as done: the Frontend Developer of a real build
     // "completed" after 48s of reading the spec, without writing a line.
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const before = await workspaceSignature(params.workspace);
-        const opencodeRes = await runOpenCode(promptText, params.preferredModel, params.workspace);
+        const opencodeRes = await runOpenCode(promptText, model, params.workspace, undefined, { env: providerEnv });
         const changed = before !== (await workspaceSignature(params.workspace));
         const cleanExit = opencodeRes.exitCode === 0;
         if (opencodeRes.result && cleanExit && (changed || (attempt === 2 && isReviewer))) {
@@ -66,13 +70,25 @@ async function executeAgentWork(params: {
           const inputTokens = Math.max(380, Math.ceil(promptText.length / 4));
           const outputTokens = Math.max(650, Math.ceil(opencodeRes.result.length / 4));
           const costUsd = Number(((inputTokens * 0.00000015) + (outputTokens * 0.00000060) + 0.0012).toFixed(5));
-          return { text: opencodeRes.result, model: params.preferredModel, costUsd, inputTokens, outputTokens };
+          return { text: opencodeRes.result, model, costUsd, inputTokens, outputTokens };
         }
         lastProblem = !cleanExit
           ? `OpenCode exited with code ${opencodeRes.exitCode} before finishing`
           : 'the session ended without changing any files';
       } catch (err) {
         lastProblem = (err as Error).message;
+        // Quota or auth refusals won't change on a retry — but if the org has
+        // a Groq key in Settings, the same agent can carry on through it.
+        if (err instanceof OpenCodeUnavailableError) {
+          const groqKey = switchedToGroq ? null : await getGroqApiKey(params.organizationId);
+          if (!groqKey) break;
+          switchedToGroq = true;
+          model = `groq/${groqModel()}`;
+          providerEnv = { GROQ_API_KEY: groqKey };
+          logger.info({ agent: params.agent.displayName, model }, 'OpenCode model refused; continuing with Groq');
+          attempt--;
+          continue;
+        }
       }
       logger.warn({ agent: params.agent.displayName, attempt, problem: lastProblem }, 'OpenCode agent did not complete its work');
       promptText = `${basePrompt}\n\nIMPORTANT: a previous attempt at this task stopped early (${lastProblem}). Do not stop after reading the workspace — implement your deliverables now by creating and editing files, then summarise what you changed.`;
@@ -268,11 +284,11 @@ async function writeCodeBlocksToWorkspace(workspace: string, text: string, agent
   }
 }
 
-/** Cheap fingerprint of a workspace (paths, sizes, mtimes), for "did anything change?". */
-async function workspaceSignature(dir: string): Promise<string> {
-  const parts: string[] = [];
+/** Size and mtime of every workspace file (relative path → stamp). */
+async function workspaceStamps(dir: string): Promise<Map<string, string>> {
+  const stamps = new Map<string, string>();
   async function walk(d: string, depth: number): Promise<void> {
-    if (depth > 12 || parts.length > 5000) return;
+    if (depth > 12 || stamps.size > 5000) return;
     let entries;
     try { entries = await fs.readdir(d, { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
@@ -280,12 +296,165 @@ async function workspaceSignature(dir: string): Promise<string> {
       const p = path.join(d, e.name);
       if (e.isDirectory()) await walk(p, depth + 1);
       else if (e.isFile()) {
-        try { const st = await fs.stat(p); parts.push(`${p}:${st.size}:${st.mtimeMs}`); } catch { /* raced */ }
+        try { const st = await fs.stat(p); stamps.set(path.relative(dir, p).replace(/\\/g, '/'), `${st.size}:${st.mtimeMs}`); } catch { /* raced */ }
       }
     }
   }
   await walk(dir, 0);
-  return parts.sort().join('\n');
+  return stamps;
+}
+
+/** Cheap fingerprint of a workspace, for "did anything change?". */
+async function workspaceSignature(dir: string): Promise<string> {
+  return [...(await workspaceStamps(dir)).entries()].map(([p, s]) => `${p}:${s}`).sort().join('\n');
+}
+
+/** Files added, modified or removed between two stamp maps. */
+function changedFiles(before: Map<string, string>, after: Map<string, string>): string[] {
+  const out = new Set<string>();
+  for (const [p, s] of after) if (before.get(p) !== s) out.add(p);
+  for (const p of before.keys()) if (!after.has(p)) out.add(p);
+  return [...out].sort();
+}
+
+// ─── Live edits from the Watch Preview chat ────────────────────────────────
+
+export interface WorkspaceEdit {
+  id: string;
+  processId: string;
+  organizationId: string;
+  instruction: string;
+  state: 'running' | 'completed' | 'failed';
+  startedAt: string;
+  finishedAt: string | null;
+  summary: string | null;
+  changedFiles: string[];
+  commit: string | null;
+  error: string | null;
+  model: string;
+}
+
+const edits = new Map<string, WorkspaceEdit>();
+const editingProcesses = new Set<string>();
+
+/** Final paragraph of an agent transcript: its summary of what it did. */
+function closingParagraph(text: string): string {
+  const paras = text.replace(/\x1b\[[0-9;]*m/g, '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  return (paras[paras.length - 1] ?? '').slice(0, 1200);
+}
+
+/**
+ * Applies a change the user asked for while looking at the preview. The chat
+ * used to ignore the instruction entirely — it ran a fixed set of regex
+ * "heals", recruited a placeholder agent and replied "remediation applied
+ * with zero errors" whatever was asked. This runs an OpenCode agent in the
+ * project's workspace with the instruction, then reports the files it
+ * actually changed. It runs in the background: edits take longer than the
+ * proxies allow a request to stay open.
+ */
+export async function startWorkspaceEdit(
+  processId: string,
+  organizationId: string,
+  instruction: string,
+  emit: (event: string, payload: unknown) => void,
+): Promise<WorkspaceEdit> {
+  if (isRunning(processId)) {
+    throw Object.assign(new Error('A production run is in progress; wait for it to finish before editing.'), { statusCode: 409 });
+  }
+  if (editingProcesses.has(processId)) {
+    throw Object.assign(new Error('Another change is still being applied to this project.'), { statusCode: 409 });
+  }
+  const proc = await prisma.process.findFirst({
+    where: { id: processId, organizationId },
+    include: { agents: { select: { id: true }, orderBy: { processStage: 'asc' }, take: 1 } },
+  });
+  if (!proc) throw Object.assign(new Error('Process not found'), { statusCode: 404 });
+
+  const planned = proc.plannedBy?.includes(':') ? proc.plannedBy.slice(proc.plannedBy.indexOf(':') + 1) : '';
+  const model = planned.includes('/') ? planned : config.opencodeModel;
+  const job: WorkspaceEdit = {
+    id: `edit_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    processId, organizationId, instruction,
+    state: 'running', startedAt: new Date().toISOString(), finishedAt: null,
+    summary: null, changedFiles: [], commit: null, error: null, model,
+  };
+  edits.set(job.id, job);
+  editingProcesses.add(processId);
+  emit('process:edit:updated', job);
+
+  void (async () => {
+    const workspace = workspaceFor(processId);
+    try {
+      const files = (await listWorkspaceFiles(processId)).map((f) => f.path).filter((p) => !/-output\.md$/.test(p));
+      const prompt = [
+        `You are editing an existing web project in this workspace, "${proc.name}", which MyceliumOps agents built.`,
+        `Original goal (summary): ${proc.prompt.slice(0, 1500)}`,
+        `The user is looking at the live preview and asked for this change:\n"""\n${instruction}\n"""`,
+        'Rules:',
+        "- Make the smallest set of edits that fully implements the request. Don't rewrite unrelated files or restructure the project.",
+        '- Keep the app building and running: check imports, exports and types you touch. If a new package is needed, add it to package.json.',
+        '- The preview serves index.html and bundles its module script, so keep that entry working.',
+        '- Finish with 2-4 sentences saying exactly what you changed and in which files.',
+        `Project files:\n${files.slice(0, 200).join('\n')}`,
+      ].join('\n\n');
+
+      const before = await workspaceStamps(workspace);
+      let res: Awaited<ReturnType<typeof runOpenCode>>;
+      try {
+        res = await runOpenCode(prompt, model, workspace, 10 * 60_000);
+      } catch (err) {
+        // OpenCode's free models refused (usage limit): use the org's Groq key.
+        const groqKey = err instanceof OpenCodeUnavailableError ? await getGroqApiKey(organizationId) : null;
+        if (!groqKey) throw err;
+        job.model = `groq/${groqModel()}`;
+        emit('process:edit:updated', job);
+        res = await runOpenCode(prompt, job.model, workspace, 10 * 60_000, { env: { GROQ_API_KEY: groqKey } });
+      }
+      const changed = changedFiles(before, await workspaceStamps(workspace));
+      job.summary = closingParagraph(res.result) || null;
+
+      if (res.exitCode !== 0) {
+        job.state = 'failed';
+        job.error = `The agent stopped early (exit code ${res.exitCode}).`;
+      } else if (changed.length === 0) {
+        job.state = 'failed';
+        job.error = 'The agent finished without changing any files.';
+      } else {
+        job.state = 'completed';
+        job.changedFiles = changed;
+        job.commit = await snapshotWorkspace(workspace, `Preview edit: ${instruction.replace(/\s+/g, ' ').slice(0, 72)}`);
+        if (proc.agents[0]) {
+          await prisma.activity.create({
+            data: {
+              organizationId, processId, agentId: proc.agents[0].id, type: ActivityType.SYSTEM,
+              message: `Preview edit applied: "${instruction.slice(0, 120)}" (${changed.length} file${changed.length === 1 ? '' : 's'} changed)`,
+              metadata: { previewEdit: { jobId: job.id, changedFiles: changed, commit: job.commit } },
+            },
+          }).catch(() => {});
+        }
+      }
+    } catch (err) {
+      job.state = 'failed';
+      job.error = (err as Error).message;
+    } finally {
+      job.finishedAt = new Date().toISOString();
+      editingProcesses.delete(processId);
+      emit('process:edit:updated', job);
+      logger.info({ processId, jobId: job.id, state: job.state, files: job.changedFiles.length }, 'Preview edit finished');
+    }
+  })();
+
+  return job;
+}
+
+/** A run and an edit must not change the same workspace at once. */
+export function isEditing(processId: string): boolean {
+  return editingProcesses.has(processId);
+}
+
+export function getWorkspaceEdit(jobId: string, organizationId: string): WorkspaceEdit | null {
+  const job = edits.get(jobId);
+  return job && job.organizationId === organizationId ? job : null;
 }
 
 /** The agent's closing notes, read back by Mother Chat and the report. */
