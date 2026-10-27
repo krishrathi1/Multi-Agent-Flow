@@ -154,7 +154,7 @@ async function callChatLLM(params: {
     try {
       // Runs in an empty sandbox (it offered to "scaffold this repo" when it
       // ran in the backend's source); 12s used to cut most answers off.
-      const op = await askOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, preferred, 45000);
+      const op = await askOpenCode(`${params.systemPrompt}\n\n${params.prompt}`, preferred, 80000);
       if (op.result && op.result.length > 0) {
         const inputTokens = Math.max(100, Math.ceil((params.systemPrompt + params.prompt).length / 4));
         const outputTokens = Math.max(50, Math.ceil(op.result.length / 4));
@@ -536,7 +536,7 @@ export async function chatWithMother(
       // drift?") unanswerable; pull the most relevant excerpts for this one.
       let codeExcerpts = '';
       try {
-        const hits = await retrieveCodeContext(organizationId, message, processId, { maxFiles: 3, contextLines: 25 });
+        const hits = await retrieveCodeContext(organizationId, message, processId, { maxFiles: 3, contextLines: 25, wholeTopFileChars: 16000 });
         codeExcerpts = hits.map((h) => `[${h.file} from line ${h.startLine}]\n${h.snippet}`).join('\n\n');
       } catch { /* code index unavailable */ }
 
