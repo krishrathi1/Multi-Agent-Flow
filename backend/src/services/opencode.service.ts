@@ -149,7 +149,7 @@ export async function ask(prompt: string, model?: string, timeoutMs = 45000) {
   return run(prompt, model, PROMPT_SANDBOX, timeoutMs);
 }
 
-export async function run(prompt: string, model?: string, cwd?: string, timeoutMs?: number): Promise<{ result: string; model: string | null }> {
+export async function run(prompt: string, model?: string, cwd?: string, timeoutMs?: number): Promise<{ result: string; model: string | null; exitCode: number | null }> {
   const args = ['run', prompt];
   if (model?.trim()) args.push('--model', model.trim());
   args.push('--pure');
@@ -195,7 +195,9 @@ export async function run(prompt: string, model?: string, cwd?: string, timeoutM
       if (cleanResult.length === 0 && code !== 0) {
         reject(new Error(`OpenCode exited with code ${code}`));
       } else {
-        resolve({ result: cleanResult, model: model || config.opencodeModel || null });
+        // exitCode lets callers tell a finished session from one that died
+        // part-way but had already printed some of its transcript.
+        resolve({ result: cleanResult, model: model || config.opencodeModel || null, exitCode: code });
       }
     });
   });

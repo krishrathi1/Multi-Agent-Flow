@@ -46,26 +46,40 @@ async function executeAgentWork(params: {
 
   // 1. If an OpenCode CLI model is selected (e.g. "anthropic/claude-3-7-sonnet", "openai/gpt-4o", etc.)
   if (useOpenCode && params.preferredModel) {
-    try {
-      const promptText = `${params.systemPrompt}\n\nTask Goal: ${params.goal}\nRole: ${params.agent.processRole || params.agent.description}\n\n${params.userPrompt}\n\nPlease generate complete production-ready code files for this task. Format code blocks with filepath as: \`\`\`typescript:src/filename.ts\n...code...\n\`\`\``;
-      const opencodeRes = await runOpenCode(promptText, params.preferredModel, params.workspace);
-      if (opencodeRes && opencodeRes.result) {
-        await writeCodeBlocksToWorkspace(params.workspace, opencodeRes.result, params.agent);
-        const inputTokens = Math.max(380, Math.ceil(promptText.length / 4));
-        const outputTokens = Math.max(650, Math.ceil(opencodeRes.result.length / 4));
-        const costUsd = Number(((inputTokens * 0.00000015) + (outputTokens * 0.00000060) + 0.0012).toFixed(5));
-        return {
-          text: opencodeRes.result,
-          model: params.preferredModel,
-          costUsd,
-          inputTokens,
-          outputTokens,
-        };
+    const basePrompt = `${params.systemPrompt}\n\nTask Goal: ${params.goal}\nRole: ${params.agent.processRole || params.agent.description}\n\n${params.userPrompt}\n\nCreate and edit the actual project files in this workspace with your tools. Finish with a short summary of what you changed.`;
+    const isReviewer = /\b(qa|review|test|audit|verif)/i.test(`${params.agent.processRole ?? ''} ${params.agent.displayName}`);
+    let promptText = basePrompt;
+    let lastProblem = '';
+    // A session that exits early (model error, rate limit, a stream that just
+    // stops) used to count as done: the Frontend Developer of a real build
+    // "completed" after 48s of reading the spec, without writing a line.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const before = await workspaceSignature(params.workspace);
+        const opencodeRes = await runOpenCode(promptText, params.preferredModel, params.workspace);
+        const changed = before !== (await workspaceSignature(params.workspace));
+        const cleanExit = opencodeRes.exitCode === 0;
+        if (opencodeRes.result && cleanExit && (changed || (attempt === 2 && isReviewer))) {
+          // OpenCode writes files with its tools; keep its transcript as the
+          // agent's notes instead of mining it for code blocks it only read.
+          await writeAgentNotes(params.workspace, params.agent, opencodeRes.result);
+          const inputTokens = Math.max(380, Math.ceil(promptText.length / 4));
+          const outputTokens = Math.max(650, Math.ceil(opencodeRes.result.length / 4));
+          const costUsd = Number(((inputTokens * 0.00000015) + (outputTokens * 0.00000060) + 0.0012).toFixed(5));
+          return { text: opencodeRes.result, model: params.preferredModel, costUsd, inputTokens, outputTokens };
+        }
+        lastProblem = !cleanExit
+          ? `OpenCode exited with code ${opencodeRes.exitCode} before finishing`
+          : 'the session ended without changing any files';
+      } catch (err) {
+        lastProblem = (err as Error).message;
       }
-    } catch (err) {
-      logger.warn({ err, model: params.preferredModel }, 'OpenCode model execution failed, falling back to other engines');
+      logger.warn({ agent: params.agent.displayName, attempt, problem: lastProblem }, 'OpenCode agent did not complete its work');
+      promptText = `${basePrompt}\n\nIMPORTANT: a previous attempt at this task stopped early (${lastProblem}). Do not stop after reading the workspace — implement your deliverables now by creating and editing files, then summarise what you changed.`;
     }
-    await synthesize();
+    // The operator chose an OpenCode model; quietly switching to template
+    // files or another engine would report work that model never did.
+    throw new Error(`${params.agent.displayName} did not complete its work: ${lastProblem}`);
   }
 
   // 2. Try Claude CLI if enabled or if preferredModel specifies Claude CLI
@@ -252,6 +266,32 @@ async function writeCodeBlocksToWorkspace(workspace: string, text: string, agent
       await fs.writeFile(summaryFile, text, 'utf-8');
     } catch { /* ignore */ }
   }
+}
+
+/** Cheap fingerprint of a workspace (paths, sizes, mtimes), for "did anything change?". */
+async function workspaceSignature(dir: string): Promise<string> {
+  const parts: string[] = [];
+  async function walk(d: string, depth: number): Promise<void> {
+    if (depth > 12 || parts.length > 5000) return;
+    let entries;
+    try { entries = await fs.readdir(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name === 'node_modules' || e.name === '.git' || e.isSymbolicLink()) continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) await walk(p, depth + 1);
+      else if (e.isFile()) {
+        try { const st = await fs.stat(p); parts.push(`${p}:${st.size}:${st.mtimeMs}`); } catch { /* raced */ }
+      }
+    }
+  }
+  await walk(dir, 0);
+  return parts.sort().join('\n');
+}
+
+/** The agent's closing notes, read back by Mother Chat and the report. */
+async function writeAgentNotes(workspace: string, agent: { displayName: string }, text: string): Promise<void> {
+  const file = path.join(workspace, `${agent.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-output.md`);
+  try { await fs.writeFile(file, text, 'utf-8'); } catch { /* best effort */ }
 }
 
 /**
@@ -2271,7 +2311,8 @@ async function runStep(
   // own — a shared slot would let one finishing agent un-register a sibling
   // that is still running, making that sibling uncancellable.
   let untrack: () => void = () => {};
-  let res: Awaited<ReturnType<typeof executeAgentWork>>;
+  let res: Awaited<ReturnType<typeof executeAgentWork>> = null;
+  let failReason: string | null = null;
   try {
     res = await executeAgentWork({
       organizationId,
@@ -2286,6 +2327,9 @@ async function runStep(
         untrack = trackChild(processId, abort);
       },
     });
+  } catch (err) {
+    // The reason is shown on the step instead of a bare "Agent run failed".
+    failReason = (err as Error).message;
   } finally {
     // Runs even if the CLI throws, so a crashed step can't leak a dead handle
     // that a later cancel would try to call.
@@ -2347,7 +2391,7 @@ async function runStep(
         where: { id: stepRow.id },
         data: {
           state: isCancelled(processId) ? RunState.CANCELLED : RunState.FAILED,
-          error: isCancelled(processId) ? 'Cancelled' : 'Agent run failed',
+          error: isCancelled(processId) ? 'Cancelled' : (failReason ?? 'Agent run failed'),
           durationMs,
           finishedAt: new Date(),
         },
