@@ -48,14 +48,19 @@ interface RealTimeItem {
 }
 
 const AVAILABLE_MODELS = [
-  { id: 'grok-2-latest', name: 'xAI Grok 2', badge: 'Real-Time' },
+  { id: 'grok-2-latest', name: 'xAI Grok 2 Latest', badge: 'Flagship' },
+  { id: 'grok-2', name: 'xAI Grok 2', badge: 'xAI' },
+  { id: 'grok-2-1212', name: 'xAI Grok 2 (1212)', badge: 'Snapshot' },
+  { id: 'grok-2-vision-128k', name: 'xAI Grok 2 Vision (128k)', badge: 'Vision' },
+  { id: 'grok-2-vision', name: 'xAI Grok 2 Vision', badge: 'Vision' },
+  { id: 'grok-3', name: 'xAI Grok 3', badge: 'Next-Gen' },
+  { id: 'grok-3-mini', name: 'xAI Grok 3 Mini', badge: 'Fast' },
   { id: 'grok-beta', name: 'xAI Grok Beta', badge: 'xAI Reasoning' },
+  { id: 'grok-vision-beta', name: 'xAI Grok Vision Beta', badge: 'Vision Beta' },
   { id: 'gemini-2.5-flash', name: 'Google Gemini 2.5 Flash', badge: 'Low Latency' },
   { id: 'groq/llama-3.3-70b-versatile', name: 'Groq Llama 3.3 70B', badge: 'Ultra Fast' },
   { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', badge: 'Precision' },
   { id: 'gpt-4o', name: 'OpenAI GPT-4o', badge: 'Omni Reasoning' },
-  { id: 'nemotron-3-ultra', name: 'NVIDIA Nemotron 3 Ultra', badge: 'High Perf' },
-  { id: 'deepseek-r1', name: 'DeepSeek R1', badge: 'Deep Logic' },
   { id: 'local/ollama', name: 'Local Ollama', badge: 'Private Host' },
 ];
 
@@ -92,18 +97,49 @@ export function WatchPreviewModal({
   useEffect(() => {
     api.llmProviders.availableModels()
       .then((res) => {
-        if (res.models && res.models.length > 0) {
-          const list = res.models.map((m: any) => ({
-            id: m.id,
-            name: m.name || m.id,
-            badge: m.provider ? m.provider.toUpperCase() : 'Live',
-          }));
-          const existingIds = new Set(AVAILABLE_MODELS.map((m) => m.id));
-          const uniqueExtra = list.filter((m: any) => !existingIds.has(m.id));
-          setDynamicModels(uniqueExtra);
+        const list = (res.models || []).map((m: any) => ({
+          id: m.id,
+          name: m.name || m.id,
+          badge: m.provider ? m.provider.toUpperCase() : 'Live',
+        }));
+
+        let grokSaved: any[] = [];
+        try {
+          const raw = localStorage.getItem('nexus:live_models_grok');
+          if (raw) grokSaved = JSON.parse(raw);
+        } catch {}
+
+        for (const gm of grokSaved) {
+          if (!list.some((item) => item.id === gm.id)) {
+            list.push({
+              id: gm.id,
+              name: gm.name || gm.id,
+              badge: 'xAI Live',
+            });
+          }
         }
+
+        const existingIds = new Set(AVAILABLE_MODELS.map((m) => m.id));
+        const uniqueExtra = list.filter((m: any) => !existingIds.has(m.id));
+        setDynamicModels(uniqueExtra);
       })
-      .catch(() => {});
+      .catch(() => {
+        try {
+          const raw = localStorage.getItem('nexus:live_models_grok');
+          if (raw) {
+            const grokSaved = JSON.parse(raw);
+            const existingIds = new Set(AVAILABLE_MODELS.map((m) => m.id));
+            const unique = grokSaved
+              .filter((gm: any) => !existingIds.has(gm.id))
+              .map((gm: any) => ({
+                id: gm.id,
+                name: gm.name || gm.id,
+                badge: 'xAI Live',
+              }));
+            setDynamicModels(unique);
+          }
+        } catch {}
+      });
   }, []);
 
   const allAvailableModels = useMemo(() => {

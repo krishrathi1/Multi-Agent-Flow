@@ -25,8 +25,15 @@ const HISTORY_LIMIT = 30;
  */
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   // Grok
+  'grok-2-latest':            { input: 2.00,  output: 10.00 },
   'grok-2':                   { input: 2.00,  output: 10.00 },
+  'grok-2-1212':              { input: 2.00,  output: 10.00 },
+  'grok-2-vision-128k':       { input: 2.00,  output: 10.00 },
+  'grok-2-vision':            { input: 2.00,  output: 10.00 },
+  'grok-3':                   { input: 3.00,  output: 15.00 },
+  'grok-3-mini':              { input: 0.50,  output: 2.00  },
   'grok-beta':                { input: 5.00,  output: 15.00 },
+  'grok-vision-beta':         { input: 5.00,  output: 15.00 },
   'grok':                     { input: 2.00,  output: 10.00 },
   // Gemini
   'gemini-2.5-flash':         { input: 0.30,  output: 2.50  },

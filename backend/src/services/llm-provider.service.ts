@@ -191,8 +191,15 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   'gpt-4-turbo':       { input: 10.0 / 1_000_000, output: 30.0 / 1_000_000 },
 
   // xAI Grok Models
+  'grok-2-latest':     { input: 2.0 / 1_000_000,  output: 10.0 / 1_000_000 },
   'grok-2':            { input: 2.0 / 1_000_000,  output: 10.0 / 1_000_000 },
+  'grok-2-1212':       { input: 2.0 / 1_000_000,  output: 10.0 / 1_000_000 },
+  'grok-2-vision-128k':{ input: 2.0 / 1_000_000,  output: 10.0 / 1_000_000 },
+  'grok-2-vision':     { input: 2.0 / 1_000_000,  output: 10.0 / 1_000_000 },
+  'grok-3':            { input: 3.0 / 1_000_000,  output: 15.0 / 1_000_000 },
+  'grok-3-mini':       { input: 0.5 / 1_000_000,  output: 2.0 / 1_000_000 },
   'grok-beta':         { input: 5.0 / 1_000_000,  output: 15.0 / 1_000_000 },
+  'grok-vision-beta':  { input: 5.0 / 1_000_000,  output: 15.0 / 1_000_000 },
   'grok':              { input: 2.0 / 1_000_000,  output: 10.0 / 1_000_000 },
 
   'default':           { input: 0.5 / 1_000_000,  output: 1.5 / 1_000_000 },
@@ -1006,7 +1013,107 @@ export async function fetchLiveModels(
     }
   }
 
-  // 4. Generic OpenAI-compatible providers (Groq, Mistral, OpenRouter, xAI Grok)
+  // 4. xAI Grok
+  if (prov === 'grok' || prov === 'xai') {
+    try {
+      const res = await safeFetch('https://api.x.ai/v1/models', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        timeoutMs: 10_000,
+      });
+
+      if (!res.ok) {
+        let detail = '';
+        try {
+          const errBody = (await res.json()) as any;
+          detail = errBody?.error?.message || errBody?.error || errBody?.message || '';
+        } catch { /* empty */ }
+        return {
+          ok: false,
+          provider: 'grok',
+          models: [],
+          message: detail || `xAI API returned status ${res.status}`,
+        };
+      }
+
+      const data = (await res.json()) as any;
+      let rawList: any[] = [];
+      if (Array.isArray(data?.data)) {
+        rawList = data.data;
+      } else if (Array.isArray(data?.models)) {
+        rawList = data.models;
+      } else if (Array.isArray(data)) {
+        rawList = data;
+      }
+
+      // If xAI endpoint returns an empty array or no models, fallback to full known Grok suite
+      if (rawList.length === 0) {
+        rawList = [
+          { id: 'grok-2-latest', name: 'Grok 2 Latest', context_length: 131072, description: 'Flagship reasoning & conversation model' },
+          { id: 'grok-2', name: 'Grok 2', context_length: 131072, description: 'State-of-the-art Grok 2 model' },
+          { id: 'grok-2-1212', name: 'Grok 2 (1212 snapshot)', context_length: 131072, description: 'Grok 2 snapshot release' },
+          { id: 'grok-2-vision-128k', name: 'Grok 2 Vision (128k)', context_length: 131072, description: 'Multimodal vision & document reasoning' },
+          { id: 'grok-2-vision', name: 'Grok 2 Vision', context_length: 32768, description: 'High-speed multimodal vision model' },
+          { id: 'grok-2-vision-1212', name: 'Grok 2 Vision (1212 snapshot)', context_length: 32768, description: 'Multimodal vision snapshot' },
+          { id: 'grok-3', name: 'Grok 3', context_length: 131072, description: 'Next-generation Grok 3 model' },
+          { id: 'grok-3-mini', name: 'Grok 3 Mini', context_length: 131072, description: 'High-efficiency fast Grok 3 model' },
+          { id: 'grok-beta', name: 'Grok Beta', context_length: 131072, description: 'xAI public beta model' },
+          { id: 'grok-vision-beta', name: 'Grok Vision Beta', context_length: 8192, description: 'xAI multimodal vision beta' },
+        ];
+      }
+
+      const formatFriendlyName = (id: string, origName?: string) => {
+        if (origName && origName !== id) return origName;
+        return id
+          .split(/[-_]/)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(' ');
+      };
+
+      const models: LiveProviderModel[] = rawList.map((m: any) => {
+        const id = String(m.id || m.name || '').trim();
+        const ctx = m.context_length ? ` • Context: ${Math.round(m.context_length / 1024)}k` : '';
+        const desc = m.description || (m.context_length ? `xAI Grok${ctx}` : 'xAI Multimodal Reasoning Model');
+        return {
+          id,
+          name: formatFriendlyName(id, m.name),
+          description: desc,
+          provider: 'grok',
+          created: m.created ? String(m.created) : undefined,
+        };
+      });
+
+      // Prioritize flagship / latest models first
+      models.sort((a, b) => {
+        const score = (id: string) => {
+          if (id === 'grok-2-latest') return 120;
+          if (id === 'grok-3') return 115;
+          if (id === 'grok-3-mini') return 110;
+          if (id === 'grok-2') return 105;
+          if (id === 'grok-beta') return 100;
+          if (id.includes('vision')) return 95;
+          return 50;
+        };
+        return score(b.id) - score(a.id);
+      });
+
+      return {
+        ok: true,
+        provider: 'grok',
+        models,
+        message: `Fetched ${models.length} live models from xAI Grok API`,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        provider: 'grok',
+        models: [],
+        message: `Failed to connect to xAI Grok API: ${(err as Error).message}`,
+      };
+    }
+  }
+
+  // 5. Generic OpenAI-compatible providers (Groq, Mistral, OpenRouter)
   const genericEndpoints: Record<string, { url: string; headers: Record<string, string> }> = {
     groq: {
       url: 'https://api.groq.com/openai/v1/models',
@@ -1018,14 +1125,6 @@ export async function fetchLiveModels(
     },
     openrouter: {
       url: 'https://openrouter.ai/api/v1/models',
-      headers: { Authorization: `Bearer ${apiKey}` },
-    },
-    grok: {
-      url: 'https://api.x.ai/v1/models',
-      headers: { Authorization: `Bearer ${apiKey}` },
-    },
-    xai: {
-      url: 'https://api.x.ai/v1/models',
       headers: { Authorization: `Bearer ${apiKey}` },
     },
   };

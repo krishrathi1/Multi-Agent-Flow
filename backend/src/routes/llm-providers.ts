@@ -57,6 +57,22 @@ router.get('/available-models', async (req, res) => {
     for (const id of ids) {
       const modelId = `${provider}/${id}`;
       models.set(modelId, { id: modelId, name: id, provider, source: 'nexus-config' });
+      models.set(id, { id, name: id, provider, source: 'nexus-config' });
+    }
+  }
+
+  // Live Grok / xAI models if configured
+  if (configuredDbProviders.has('grok') || configuredDbProviders.has('xai') || hasPlatformKey('grok')) {
+    try {
+      const liveGrok = await llmService.fetchLiveModels('grok', undefined, req.organizationId);
+      if (liveGrok.ok && Array.isArray(liveGrok.models)) {
+        for (const m of liveGrok.models) {
+          models.set(m.id, { id: m.id, name: m.name || m.id, provider: 'grok', source: 'xai-live' });
+          models.set(`grok/${m.id}`, { id: `grok/${m.id}`, name: m.name || m.id, provider: 'grok', source: 'xai-live' });
+        }
+      }
+    } catch {
+      /* fallback to static promptModels */
     }
   }
 

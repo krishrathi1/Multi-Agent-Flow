@@ -1113,6 +1113,17 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
     }
   };
 
+  // Auto-fetch Grok live models as soon as user enters/pastes an xAI API key
+  useEffect(() => {
+    const trimmed = grokKey.trim();
+    if (trimmed.length >= 15 && (trimmed.startsWith('xai-') || trimmed.length > 25)) {
+      const timer = setTimeout(() => {
+        fetchLiveProviderModels('grok', trimmed);
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [grokKey]);
+
   // Connect and save key
   const handleConnectProvider = async (provName: string, apiKey: string) => {
     const trimmed = apiKey.trim();
@@ -2170,6 +2181,12 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
                 </Button>
               </div>
             </div>
+            {grokError && (
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400 flex items-start gap-2 mt-2">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                <span>{grokError}</span>
+              </div>
+            )}
           </form>
 
           {/* Live Models Display */}
@@ -2178,11 +2195,24 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
               <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
                 Live xAI Grok Models ({grokModels.length})
               </label>
-              {grokModels.length > 0 && (
-                <span className="text-2xs font-semibold text-sky-600 dark:text-sky-400">
-                  Click any model card to set as Active Default
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {isProviderConfigured('grok') && (
+                  <button
+                    type="button"
+                    onClick={() => fetchLiveProviderModels('grok')}
+                    disabled={grokLoading}
+                    className="flex items-center gap-1 text-2xs font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 disabled:opacity-50 transition-colors"
+                  >
+                    <RefreshCw size={11} className={cn(grokLoading && 'animate-spin')} />
+                    <span>Refresh Models</span>
+                  </button>
+                )}
+                {grokModels.length > 0 && (
+                  <span className="text-2xs font-semibold text-sky-600 dark:text-sky-400">
+                    Click any model card to set as Active Default
+                  </span>
+                )}
+              </div>
             </div>
 
             {grokModels.length === 0 ? (
