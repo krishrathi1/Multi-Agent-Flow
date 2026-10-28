@@ -874,7 +874,7 @@ export async function chatWithMother(
               where: { agentId: a.id, organizationId },
               orderBy: { createdAt: 'desc' },
             });
-            workDetail = lastAct ? lastAct.message.slice(0, 160) : (a.status === 'RUNNING' ? 'Executing assigned deliverables' : 'Ready for stage assignment');
+            workDetail = lastAct ? lastAct.message.slice(0, 160) : (a.status === 'ONLINE' ? 'Executing assigned deliverables' : 'Ready for stage assignment');
           }
           return `- ${a.avatar || '🤖'} **${a.displayName}** (Stage ${a.processStage ?? 1}: ${a.processRole || 'Specialist'}) — **${a.status}**: ${workDetail}`;
         })
