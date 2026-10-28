@@ -847,11 +847,34 @@ export async function askCodebase(
   }
 
   const repoName = indexed.ws.name;
-  const { files, topFiles } = await rankFilesForQuestion(indexed.cache.files, question, 5, 3);
+  // Seven-line excerpts left the model guessing at the code around them; a
+  // small top file is shown whole. Sized for Groq's 8,000 tokens a minute.
+  const { files, topFiles } = await rankFilesForQuestion(indexed.cache.files, question, 4, 20);
+  const top = topFiles[0];
+  if (top) {
+    try {
+      const whole = await readFile(top.file.path, 'utf-8');
+      if (whole.length <= 8000) { top.snippet = whole; top.snippetStart = 1; }
+    } catch { /* keep the excerpt */ }
+  }
   return answerFromRanked(organizationId, question, repoName, files.length, topFiles, preferredModel);
 }
 
 type RankedFile = { file: FileInfo; score: number; matchedReasons: string[]; snippet?: string; snippetStart?: number };
+
+/** Prefixes each line with its number, so answers can cite lines and quote exactly. */
+export function numberLines(snippet: string, startLine: number): string {
+  return snippet.split('\n').map((l, i) => `${startLine + i}| ${l}`).join('\n');
+}
+
+/**
+ * Models filled gaps in the excerpts with plausible code (a storage key of
+ * "focusflow-tasks" where the file says "focusflow:v1") and presented it as a
+ * quote, which reads as fact in a code block.
+ */
+export const CODE_QUOTING_RULE =
+  'When you show code, copy it exactly from the numbered excerpts (without the "N| " prefixes) and name its file and line. ' +
+  'Never reconstruct or paraphrase code inside a code block. If what the question needs is not in the excerpts, say which file to look in instead of guessing values or names.';
 
 /**
  * Files most relevant to a natural-language question, with the excerpt that
@@ -1009,7 +1032,7 @@ async function answerFromRanked(
   const contextBlock = topFiles.map(tf => (
     `File: ${tf.file.relativePath} (${tf.file.language}, ${tf.file.lineCount} lines)\n` +
     `Symbols: ${tf.file.symbols.slice(0, 6).map(s => `${s.kind} ${s.name}`).join(', ')}\n` +
-    (tf.snippet ? `Snippet:\n${tf.snippet}\n` : '')
+    (tf.snippet ? `Snippet (from line ${tf.snippetStart ?? 1}):\n${numberLines(tf.snippet, tf.snippetStart ?? 1)}\n` : '')
   )).join('\n---\n');
 
   const prompt = `You are the MyceliumOps AI Code Intelligence Assistant. A developer asked the following question about the MyceliumOps-engineered repository "${repoName}":\n\n` +
@@ -1017,7 +1040,8 @@ async function answerFromRanked(
     `Here is the indexed repository context with relevant files and code excerpts:\n\n` +
     `${contextBlock}\n\n` +
     `Provide a clear, detailed, and technically accurate explanation in GitHub-flavored Markdown. ` +
-    `Explain how the architecture works, reference specific files and symbols, and provide code guidance where applicable. Keep the tone professional, helpful, and concise.`;
+    `Explain how the architecture works, reference specific files and symbols, and provide code guidance where applicable. Keep the tone professional, helpful, and concise.\n\n` +
+    CODE_QUOTING_RULE;
 
   // 0. Groq, when the org saved a key and no other provider was picked.
   if (!preferredModel || /^(groq|opencode)\//i.test(preferredModel)) {
