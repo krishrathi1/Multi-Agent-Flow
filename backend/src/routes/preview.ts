@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 const execFileAsync = promisify(execFile);
-import { resolveWorkspaceFile, listWorkspaceFiles, ensureWorkspaceDeliverables } from '../services/agent-runner.service.js';
+import { resolveWorkspaceFile, listWorkspaceFiles, ensureWorkspaceDeliverables, workspaceFor } from '../services/agent-runner.service.js';
 import { canViewPreview } from '../services/insights.service.js';
 import { prisma } from '../lib/prisma.js';
 import { verifyAccessToken } from '../lib/jwt.js';
@@ -163,46 +163,8 @@ async function workspaceMentions(wsDir: string, needle: string): Promise<boolean
  */
 export async function buildPreviewHtml(processId: string, absHtmlPath: string): Promise<{ html: string; bundled: boolean }> {
   const wsDir = path.dirname(absHtmlPath);
-  let scriptSrcEntry: string | null = null;
-  let rawHtml = '';
-  try {
-    rawHtml = await fs.readFile(absHtmlPath, 'utf-8');
-    const scriptMatch =
-      rawHtml.match(/<script[^>]+type=["']module["'][^>]+src=["']([^"']+)["']/i) ||
-      rawHtml.match(/<script[^>]+src=["']([^"']+)["'][^>]+type=["']module["']/i);
-    if (scriptMatch && scriptMatch[1]) {
-      const cleanSrc = scriptMatch[1].replace(/^\//, '');
-      const candidatePath = path.join(wsDir, cleanSrc);
-      if (fsSync.existsSync(candidatePath)) {
-        scriptSrcEntry = candidatePath;
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  const candidates = [
-    ...(scriptSrcEntry ? [scriptSrcEntry] : []),
-    path.join(wsDir, 'src', 'main.tsx'),
-    path.join(wsDir, 'src', 'main.jsx'),
-    path.join(wsDir, 'src', 'main.js'),
-    path.join(wsDir, 'src', 'index.tsx'),
-    path.join(wsDir, 'src', 'index.jsx'),
-    path.join(wsDir, 'src', 'index.js'),
-    path.join(wsDir, 'src', 'App.tsx'),
-    path.join(wsDir, 'src', 'App.jsx'),
-    path.join(wsDir, 'frontend', 'src', 'main.tsx'),
-    path.join(wsDir, 'frontend', 'src', 'main.jsx'),
-    path.join(wsDir, 'frontend', 'src', 'App.tsx'),
-    path.join(wsDir, 'frontend', 'src', 'App.jsx'),
-  ];
-  const entry = candidates.find((c) => {
-    try {
-      return fsSync.existsSync(c);
-    } catch {
-      return false;
-    }
-  });
+  const rawHtml = await fs.readFile(absHtmlPath, 'utf-8').catch(() => '');
+  const { entry, scriptSrcEntry } = findBundleEntry(wsDir, rawHtml);
 
   if (!entry) {
     return { html: rawHtml || (await fs.readFile(absHtmlPath, 'utf-8')), bundled: false };
@@ -210,57 +172,7 @@ export async function buildPreviewHtml(processId: string, absHtmlPath: string): 
 
   try {
     await ensureDependencies(wsDir);
-    // Resolved from this file, not process.cwd(): under pm2 the cwd is
-    // backend/, so these became backend/backend/node_modules and never
-    // reached the repo-root packages (react, recharts, …).
-    const rootNodeModules = path.join(REPO_DIR, 'node_modules');
-    const backendNodeModules = path.join(BACKEND_DIR, 'node_modules');
-    const frontendNodeModules = path.join(REPO_DIR, 'frontend', 'node_modules');
-
-    const buildRes = await esbuild.build({
-      entryPoints: [entry],
-      bundle: true,
-      write: false,
-      // outdir only names the outputs; with write:false nothing touches disk.
-      // It lets CSS imported from the app come out as its own file.
-      outdir: path.join(wsDir, '.preview-out'),
-      format: 'esm',
-      target: 'es2022',
-      nodePaths: [rootNodeModules, backendNodeModules, frontendNodeModules],
-      // Match what Vite gives generated apps, so any React/Vite project
-      // previews without per-project fixes: the automatic JSX runtime (no
-      // `import React` needed), import.meta.env, and the common "@/" alias.
-      jsx: 'automatic',
-      alias: fsSync.existsSync(path.join(wsDir, 'src')) ? { '@': path.join(wsDir, 'src') } : {},
-      define: {
-        'process.env.NODE_ENV': JSON.stringify('production'),
-        'process.env.PREVIEW_BASE_URL': JSON.stringify(''),
-        'process.env': JSON.stringify({ NODE_ENV: 'production' }),
-        'import.meta.env': JSON.stringify({ MODE: 'production', DEV: false, PROD: true, SSR: false, BASE_URL: '/' }),
-      },
-      loader: {
-        '.tsx': 'tsx',
-        '.ts': 'ts',
-        '.jsx': 'jsx',
-        // JSX in .js files is common in generated React code.
-        '.js': 'jsx',
-        '.css': 'css',
-        '.module.css': 'local-css',
-        '.json': 'json',
-        '.woff': 'dataurl',
-        '.woff2': 'dataurl',
-        '.ttf': 'dataurl',
-        '.mp3': 'dataurl',
-        '.wav': 'dataurl',
-        '.svg': 'dataurl',
-        '.png': 'dataurl',
-        '.jpg': 'dataurl',
-        '.jpeg': 'dataurl',
-        '.gif': 'dataurl',
-        '.webp': 'dataurl',
-      },
-      plugins: [tailwindDirectivesPlugin],
-    });
+    const buildRes = await esbuild.build(bundleOptions(entry, wsDir));
 
     const outputs = buildRes.outputFiles ?? [];
     // A literal "</script>" inside the bundle would end the inline tag early.
@@ -300,9 +212,7 @@ export async function buildPreviewHtml(processId: string, absHtmlPath: string): 
   } catch (err: any) {
     // The raw HTML points at /src/main.jsx, which a browser can't run, so
     // falling back to it showed a blank page. Say what failed instead.
-    const messages: string[] = (err?.errors ?? []).slice(0, 8).map((e: any) =>
-      `${e.location ? `${path.relative(wsDir, e.location.file)}:${e.location.line} — ` : ''}${e.text}`);
-    if (messages.length === 0) messages.push(String(err?.message ?? err));
+    const messages = buildErrors(err, wsDir);
     const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     return {
       html: `<!doctype html><html><head><meta charset="utf-8"><title>Preview build failed</title></head>
@@ -314,6 +224,132 @@ export async function buildPreviewHtml(processId: string, absHtmlPath: string): 
       bundled: false,
     };
   }
+}
+
+/**
+ * Bundles a workspace the way the preview does, without rendering it: which
+ * source files the preview is built from (workspace-relative), and the errors
+ * if it no longer builds. Preview-chat edits use it to show the model the
+ * files that are actually on screen and to undo an edit that breaks the build.
+ */
+export async function checkPreviewBuild(processId: string): Promise<{ index: string | null; inputs: string[]; errors: string[] }> {
+  const index = await findIndex(processId);
+  const abs = index ? await resolveWorkspaceFile(processId, index) : null;
+  if (!index || !abs) return { index: null, inputs: [], errors: [] };
+  const root = workspaceFor(processId);
+  const wsDir = path.dirname(abs);
+  const rawHtml = await fs.readFile(abs, 'utf-8').catch(() => '');
+  const { entry } = findBundleEntry(wsDir, rawHtml);
+  if (!entry) return { index, inputs: [], errors: [] };
+  try {
+    await ensureDependencies(wsDir);
+    const res = await esbuild.build({ ...bundleOptions(entry, wsDir), metafile: true, logLevel: 'silent' });
+    const inputs = Object.keys(res.metafile?.inputs ?? {})
+      .map((p) => path.relative(root, path.resolve(p)).replace(/\\/g, '/'))
+      .filter((p) => !p.startsWith('..') && !p.includes('node_modules/'));
+    return { index, inputs, errors: [] };
+  } catch (err) {
+    return { index, inputs: [], errors: buildErrors(err, root) };
+  }
+}
+
+/** esbuild's errors as "file:line — message" lines. */
+function buildErrors(err: any, baseDir: string): string[] {
+  const messages: string[] = (err?.errors ?? []).slice(0, 8).map((e: any) =>
+    `${e.location ? `${path.relative(baseDir, e.location.file).replace(/\\/g, '/')}:${e.location.line} — ` : ''}${e.text}`);
+  if (messages.length === 0) messages.push(String(err?.message ?? err));
+  return messages;
+}
+
+/** The script the preview bundles: the page's module script, else a conventional entry. */
+function findBundleEntry(wsDir: string, rawHtml: string): { entry: string | null; scriptSrcEntry: string | null } {
+  let scriptSrcEntry: string | null = null;
+  const scriptMatch =
+    rawHtml.match(/<script[^>]+type=["']module["'][^>]+src=["']([^"']+)["']/i) ||
+    rawHtml.match(/<script[^>]+src=["']([^"']+)["'][^>]+type=["']module["']/i);
+  if (scriptMatch && scriptMatch[1]) {
+    const candidatePath = path.join(wsDir, scriptMatch[1].replace(/^\//, ''));
+    if (fsSync.existsSync(candidatePath)) scriptSrcEntry = candidatePath;
+  }
+
+  const candidates = [
+    ...(scriptSrcEntry ? [scriptSrcEntry] : []),
+    path.join(wsDir, 'src', 'main.tsx'),
+    path.join(wsDir, 'src', 'main.jsx'),
+    path.join(wsDir, 'src', 'main.js'),
+    path.join(wsDir, 'src', 'index.tsx'),
+    path.join(wsDir, 'src', 'index.jsx'),
+    path.join(wsDir, 'src', 'index.js'),
+    path.join(wsDir, 'src', 'App.tsx'),
+    path.join(wsDir, 'src', 'App.jsx'),
+    path.join(wsDir, 'frontend', 'src', 'main.tsx'),
+    path.join(wsDir, 'frontend', 'src', 'main.jsx'),
+    path.join(wsDir, 'frontend', 'src', 'App.tsx'),
+    path.join(wsDir, 'frontend', 'src', 'App.jsx'),
+  ];
+  const entry = candidates.find((c) => {
+    try {
+      return fsSync.existsSync(c);
+    } catch {
+      return false;
+    }
+  }) ?? null;
+  return { entry, scriptSrcEntry };
+}
+
+/** The esbuild settings the preview bundles a workspace with. */
+function bundleOptions(entry: string, wsDir: string): esbuild.BuildOptions & { write: false } {
+  // Resolved from this file, not process.cwd(): under pm2 the cwd is
+  // backend/, so these became backend/backend/node_modules and never
+  // reached the repo-root packages (react, recharts, …).
+  const rootNodeModules = path.join(REPO_DIR, 'node_modules');
+  const backendNodeModules = path.join(BACKEND_DIR, 'node_modules');
+  const frontendNodeModules = path.join(REPO_DIR, 'frontend', 'node_modules');
+
+  return {
+    entryPoints: [entry],
+    bundle: true,
+    write: false,
+    // outdir only names the outputs; with write:false nothing touches disk.
+    // It lets CSS imported from the app come out as its own file.
+    outdir: path.join(wsDir, '.preview-out'),
+    format: 'esm',
+    target: 'es2022',
+    nodePaths: [rootNodeModules, backendNodeModules, frontendNodeModules],
+    // Match what Vite gives generated apps, so any React/Vite project
+    // previews without per-project fixes: the automatic JSX runtime (no
+    // `import React` needed), import.meta.env, and the common "@/" alias.
+    jsx: 'automatic',
+    alias: fsSync.existsSync(path.join(wsDir, 'src')) ? { '@': path.join(wsDir, 'src') } : {},
+    define: {
+      'process.env.NODE_ENV': JSON.stringify('production'),
+      'process.env.PREVIEW_BASE_URL': JSON.stringify(''),
+      'process.env': JSON.stringify({ NODE_ENV: 'production' }),
+      'import.meta.env': JSON.stringify({ MODE: 'production', DEV: false, PROD: true, SSR: false, BASE_URL: '/' }),
+    },
+    loader: {
+      '.tsx': 'tsx',
+      '.ts': 'ts',
+      '.jsx': 'jsx',
+      // JSX in .js files is common in generated React code.
+      '.js': 'jsx',
+      '.css': 'css',
+      '.module.css': 'local-css',
+      '.json': 'json',
+      '.woff': 'dataurl',
+      '.woff2': 'dataurl',
+      '.ttf': 'dataurl',
+      '.mp3': 'dataurl',
+      '.wav': 'dataurl',
+      '.svg': 'dataurl',
+      '.png': 'dataurl',
+      '.jpg': 'dataurl',
+      '.jpeg': 'dataurl',
+      '.gif': 'dataurl',
+      '.webp': 'dataurl',
+    },
+    plugins: [tailwindDirectivesPlugin],
+  };
 }
 
 /** Where the backend's own dependencies live, regardless of the process cwd. */
