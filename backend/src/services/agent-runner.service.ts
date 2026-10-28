@@ -2280,7 +2280,8 @@ export async function deploySkillsToWorkspace(
   agentSkills?: Array<{
     enabled: boolean;
     customName?: string | null;
-    skill: { id: string; name: string; metadata?: any };
+    customDescription?: string | null;
+    skill: { id?: string; name: string; description?: string; category?: string; risk?: string; metadata?: any };
   }>
 ): Promise<string[]> {
   const deployedSkills: string[] = [];
@@ -2292,6 +2293,7 @@ export async function deploySkillsToWorkspace(
 
   for (const item of active) {
     const skillId = item.skill.id;
+    if (!skillId) continue;
     const skillName = item.customName || item.skill.name;
     const safeName = skillName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
     const repoPath = repoService.getRepoPath(organizationId, 'skills', skillId);
@@ -2322,7 +2324,7 @@ function systemPromptFor(agent: {
     enabled: boolean;
     customName?: string | null;
     customDescription?: string | null;
-    skill: { name: string; description: string; category: string; risk?: string; metadata?: any };
+    skill: { id?: string; name: string; description: string; category: string; risk?: string; metadata?: any };
   }>;
 }): string {
   const parts = [
@@ -2432,7 +2434,7 @@ async function runStep(
       enabled: boolean;
       customName?: string | null;
       customDescription?: string | null;
-      skill: { name: string; description: string; category: string; risk?: string; metadata?: any };
+      skill: { id?: string; name: string; description: string; category: string; risk?: string; metadata?: any };
     }>;
   },
   organizationId: string,
