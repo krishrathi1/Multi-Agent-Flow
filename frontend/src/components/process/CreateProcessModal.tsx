@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { config } from '../../config';
 import {
   Sparkles,
@@ -32,6 +32,7 @@ import {
   Radio,
   Sliders,
   Send,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Badge, Chip } from '../ui/Badge';
@@ -64,39 +65,6 @@ export interface AdditionalApiEndpoint {
   testMessage: string;
   saved: boolean;
 }
-
-const AI_TEMPLATES = [
-  {
-    title: '🌐 End-to-End Full-Stack Web & App Builder',
-    desc: 'Generates responsive React/Tailwind UI, Express API routes, PostgreSQL schema, and live deployment preview.',
-    prompt: 'Build an end-to-end web application with responsive UI, Express REST endpoints, Prisma database models, and build verification.',
-  },
-  {
-    title: '⚡ Vercel & Cloud Log Reviewer & Auto-Fixer',
-    desc: 'Fetches Vercel/Cloud deployment build logs, parses stack traces, isolates exceptions, and auto-generates code patches.',
-    prompt: 'Inspect Vercel, Netlify, and Docker deployment build logs, isolate root cause errors, auto-generate fix patches, and verify build.',
-  },
-  {
-    title: '🔌 Model Context Protocol (MCP) Tool Orchestrator',
-    desc: 'Connects external MCP tool servers (PostgreSQL DB, Filesystem, Memory, Custom HTTP/SSE) to execute agent tool chains.',
-    prompt: 'Connect to external MCP tool servers via SSE/HTTP transports, discover remote tools, and execute multi-tool agent workflows.',
-  },
-  {
-    title: '🛡️ Security Vulnerability & OWASP Penetration Audit',
-    desc: 'Scans repository for OWASP Top 10 vulnerabilities, hardcoded secret leaks, and dependency risks.',
-    prompt: 'Perform OWASP Top 10 security audit, scan for hardcoded secret leaks, analyze third-party packages, and generate security patches.',
-  },
-  {
-    title: '🔧 Auto-Bug Resolver & Code Refactoring',
-    desc: 'Parses error logs, isolates root cause, generates candidate fix diffs, and runs regression unit tests.',
-    prompt: 'Analyze error stack traces, reproduce defects with unit tests, generate refactored code diffs, and verify zero regression.',
-  },
-  {
-    title: '📄 API Specification & Documentation Generator',
-    desc: 'Inspects API endpoints, produces OpenAPI/Swagger specs, Postman collections, and developer guides.',
-    prompt: 'Generate OpenAPI 3.0 specs, Postman collections, SDK usage snippets, and system architecture docs from codebase routes.',
-  },
-];
 
 function parseCurlCommand(raw: string): ParsedCurl | null {
   if (!raw || !raw.trim()) return null;
@@ -145,6 +113,30 @@ export function CreateProcessModal({
   // Wizard Step State: 1 = prompt, 2 = curl, 3 = github, 4 = review
   const [step, setStep] = useState<WizardStep>('prompt');
   const [prompt, setPrompt] = useState('');
+  const [promptMode, setPromptMode] = useState<'chat' | 'prompt'>('chat');
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<Array<{
+    id: string;
+    sender: 'user' | 'assistant';
+    text: string;
+    timestamp: string;
+    suggestedPrompt?: string;
+  }>>([
+    {
+      id: 'welcome',
+      sender: 'assistant',
+      text: 'Hello! What application, tool, or autonomous agent workflow do you want to build? Chat with me here to brainstorm and structure your requirements, or switch to the Prompt Editor to write your prompt directly.',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    },
+  ]);
+  const [isChatSending, setIsChatSending] = useState(false);
+  const chatMessagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (promptMode === 'chat') {
+      chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, promptMode]);
 
   // cURL & API State
   const [curlInput, setCurlInput] = useState('');
@@ -378,6 +370,91 @@ export function CreateProcessModal({
       console.error('Failed to expand prompt with AI:', err);
     } finally {
       setIsExpandingPrompt(false);
+    }
+  };
+
+  const handleSendChatMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || isChatSending) return;
+
+    const userMsg = {
+      id: String(Date.now()),
+      sender: 'user' as const,
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setChatMessages((prev) => [...prev, userMsg]);
+    setChatInput('');
+    setIsChatSending(true);
+
+    try {
+      const effectiveModel =
+        selectedModel && selectedModel !== 'auto'
+          ? selectedModel
+          : (localStorage.getItem('nexus:process_model') || localStorage.getItem('nexus:default_model') || undefined);
+
+      // Attempt to chat with Mother AI for systems architecture
+      const res = await api.chat.sendToMother(
+        `[User is in Process Creation Wizard] The user wants to design an autonomous multi-agent workflow. User message: "${text}". Please provide clear architectural guidance, suggest technical deliverables, and formulate a production-grade prompt.`,
+        undefined,
+        effectiveModel
+      );
+
+      const replyText =
+        res?.result || res?.summary || (res as any)?.text || 'I have analyzed your objective and prepared the workflow specification.';
+
+      // Automatically keep prompt up-to-date if empty
+      if (!prompt.trim()) {
+        setPrompt(text);
+      }
+
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: String(Date.now() + 1),
+          sender: 'assistant' as const,
+          text: replyText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          suggestedPrompt: text,
+        },
+      ]);
+    } catch (err: any) {
+      console.error('Chat error:', err);
+      try {
+        const res = await api.processes.expandPrompt({
+          prompt: text,
+          model: selectedModel && selectedModel !== 'auto' ? selectedModel : undefined,
+        });
+        if (res?.expandedPrompt) {
+          setPrompt(res.expandedPrompt);
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: String(Date.now() + 1),
+              sender: 'assistant' as const,
+              text: `Here is the structured multi-agent specification based on your objective:\n\n${res.expandedPrompt}`,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              suggestedPrompt: res.expandedPrompt,
+            },
+          ]);
+          return;
+        }
+      } catch {}
+
+      if (!prompt.trim()) setPrompt(text);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: String(Date.now() + 1),
+          sender: 'assistant' as const,
+          text: `Objective received. Your prompt has been set in the editor.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          suggestedPrompt: text,
+        },
+      ]);
+    } finally {
+      setIsChatSending(false);
     }
   };
 
@@ -890,58 +967,221 @@ export function CreateProcessModal({
         {/* ========================================================================= */}
         {step === 'prompt' && (
           <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-bold text-ink flex items-center gap-1.5">
-                  <Sparkles size={13} className="text-amber-500" />
-                  What should your AI agents do?
-                </label>
-                <button
-                  type="button"
-                  onClick={handleExpandPromptWithAI}
-                  disabled={isExpandingPrompt}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-1 text-2xs font-semibold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
-                  title="Enhance objective using default configured AI model"
-                >
-                  {isExpandingPrompt ? (
-                    <Loader2 size={12} className="animate-spin text-brand-600 dark:text-brand-400 shrink-0" />
-                  ) : (
-                    <Sparkles size={12} className="text-amber-500 shrink-0" />
-                  )}
-                  <span>{isExpandingPrompt ? 'Enhancing with AI…' : 'Expand Prompt with AI'}</span>
-                </button>
-              </div>
-              <textarea
-                rows={3.5}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. Review the selected repository, build a full-stack responsive dashboard, and generate production deliverables..."
-                className="w-full rounded-xl border border-line bg-surface p-3 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed"
-              />
-            </div>
-
-            {/* Quick 1-Click Templates */}
-            <div>
-              <span className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-2">
-                Or pick a 1-click template:
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {AI_TEMPLATES.map((tmpl) => (
+            {/* ========================================================= */}
+            {/* CHAT & PROMPT STUDIO (REPLACES TEMPLATES)                 */}
+            {/* ========================================================= */}
+            <div className="space-y-3">
+              {/* Header with Mode Toggle & Status */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1 bg-inset p-1 rounded-xl border border-line shadow-2xs">
                   <button
-                    key={tmpl.title}
                     type="button"
-                    onClick={() => setPrompt(tmpl.prompt)}
-                    className="rounded-xl border border-line-subtle bg-surface p-2.5 text-left hover:border-brand-500/50 hover:bg-hover transition-all shadow-2xs group cursor-pointer"
+                    onClick={() => setPromptMode('chat')}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer',
+                      promptMode === 'chat'
+                        ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-2xs border border-line-subtle'
+                        : 'text-ink-muted hover:text-ink hover:bg-hover'
+                    )}
                   >
-                    <span className="block text-xs font-bold text-ink group-hover:text-brand-600 dark:group-hover:text-brand-400">
-                      {tmpl.title}
-                    </span>
-                    <span className="block text-2xs text-ink-muted mt-0.5 line-clamp-2">
-                      {tmpl.desc}
-                    </span>
+                    <Bot size={13} className="text-amber-500" />
+                    <span>Chat & Brainstorm</span>
+                    {chatMessages.length > 1 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+                    )}
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setPromptMode('prompt')}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer',
+                      promptMode === 'prompt'
+                        ? 'bg-surface text-brand-600 dark:text-brand-400 shadow-2xs border border-line-subtle'
+                        : 'text-ink-muted hover:text-ink hover:bg-hover'
+                    )}
+                  >
+                    <Code2 size={13} />
+                    <span>Prompt Editor</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {prompt.trim() ? (
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      <Check size={11} className="stroke-[2.5]" />
+                      <span className="hidden sm:inline">Active Prompt:</span>
+                      <span>{prompt.length} chars</span>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-ink-muted italic hidden sm:inline">
+                      Write or chat to set prompt
+                    </span>
+                  )}
+                </div>
               </div>
+
+              {/* Chat Mode View */}
+              {promptMode === 'chat' ? (
+                <div className="rounded-2xl border border-line bg-surface overflow-hidden shadow-2xs flex flex-col">
+                  {/* Chat Messages Stream */}
+                  <div className="p-4 space-y-3 max-h-72 min-h-48 overflow-y-auto bg-inset/30">
+                    {chatMessages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={cn(
+                          'flex gap-2.5 items-start',
+                          msg.sender === 'user' ? 'justify-end' : 'justify-start'
+                        )}
+                      >
+                        {msg.sender === 'assistant' && (
+                          <div className="w-6 h-6 rounded-lg bg-brand-500/15 border border-brand-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                            <Bot size={13} className="text-brand-600 dark:text-brand-400" />
+                          </div>
+                        )}
+                        <div
+                          className={cn(
+                            'rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed max-w-[85%] shadow-2xs space-y-2',
+                            msg.sender === 'user'
+                              ? 'bg-brand-500 text-white font-medium rounded-tr-xs'
+                              : 'bg-surface border border-line text-ink rounded-tl-xs'
+                          )}
+                        >
+                          <p className="whitespace-pre-wrap">{msg.text}</p>
+                          {msg.suggestedPrompt && (
+                            <div className="pt-2 border-t border-line-subtle flex items-center justify-between gap-2">
+                              <span className="text-[10px] text-ink-muted truncate">
+                                {prompt === msg.suggestedPrompt ? '✓ Applied as production prompt' : 'Ready to use as prompt'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setPrompt(msg.suggestedPrompt!)}
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer shrink-0"
+                              >
+                                <Check size={11} />
+                                <span>{prompt === msg.suggestedPrompt ? 'Applied' : 'Use as Prompt'}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {isChatSending && (
+                      <div className="flex gap-2.5 items-start justify-start">
+                        <div className="w-6 h-6 rounded-lg bg-brand-500/15 border border-brand-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                          <Bot size={13} className="text-brand-600 dark:text-brand-400" />
+                        </div>
+                        <div className="rounded-2xl rounded-tl-xs px-3.5 py-2.5 bg-surface border border-line text-xs text-ink-muted shadow-2xs flex items-center gap-2">
+                          <Loader2 size={13} className="animate-spin text-brand-500" />
+                          <span>AI Architect is designing your workflow requirements…</span>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={chatMessagesEndRef} />
+                  </div>
+
+                  {/* Chat Input Bar */}
+                  <div className="p-3 border-t border-line bg-surface">
+                    <div className="flex items-end gap-2">
+                      <textarea
+                        rows={2}
+                        value={chatInput}
+                        onChange={(e) => {
+                          setChatInput(e.target.value);
+                          if (!prompt.trim() || chatMessages.length <= 1) {
+                            setPrompt(e.target.value);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendChatMessage();
+                          }
+                        }}
+                        placeholder="Type your prompt or chat with AI to design the workflow... (Enter to send, Shift+Enter for new line)"
+                        className="flex-1 bg-inset border border-line rounded-xl px-3.5 py-2 text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none resize-none leading-relaxed shadow-2xs"
+                      />
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        icon={Send}
+                        loading={isChatSending}
+                        disabled={!chatInput.trim()}
+                        onClick={handleSendChatMessage}
+                        className="shrink-0 h-10 px-4"
+                      >
+                        Send
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-[10px] text-ink-muted px-1">
+                      <span>Chat with AI to refine requirements, or type prompt directly</span>
+                      {prompt.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => setPromptMode('prompt')}
+                          className="text-brand-600 dark:text-brand-400 font-semibold hover:underline cursor-pointer"
+                        >
+                          Open Prompt Editor ({prompt.length} chars) →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Direct Prompt Editor Mode */
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-ink flex items-center gap-1.5">
+                      <Sparkles size={13} className="text-amber-500" />
+                      Production Prompt & Objective
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleExpandPromptWithAI}
+                      disabled={isExpandingPrompt || !prompt.trim()}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-1 text-2xs font-semibold text-brand-600 dark:text-brand-400 border border-brand-500/25 hover:bg-brand-500/20 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
+                      title="Enhance objective using configured AI model"
+                    >
+                      {isExpandingPrompt ? (
+                        <Loader2 size={12} className="animate-spin text-brand-600 dark:text-brand-400 shrink-0" />
+                      ) : (
+                        <Sparkles size={12} className="text-amber-500 shrink-0" />
+                      )}
+                      <span>{isExpandingPrompt ? 'Enhancing with AI…' : 'Expand Prompt with AI'}</span>
+                    </button>
+                  </div>
+                  <textarea
+                    rows={8}
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Describe what you want your autonomous team of agents to build, analyze, or automate in detail... e.g.:&#10;&#10;Review the repository, build responsive UI components, connect Express API routes with Prisma models, and generate live deployment deliverables."
+                    className="w-full rounded-2xl border border-line bg-surface p-4 text-xs text-ink placeholder:text-ink-faint shadow-inner focus:outline-none focus:ring-1 focus:ring-brand-500 leading-relaxed font-sans min-h-[180px]"
+                  />
+                  <div className="flex items-center justify-between text-2xs text-ink-muted px-1">
+                    <span>
+                      {prompt.trim() ? prompt.trim().split(/\s+/).filter(Boolean).length : 0} words · {prompt.length} characters
+                    </span>
+                    <div className="flex items-center gap-3">
+                      {prompt.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => setPrompt('')}
+                          className="text-rose-500 hover:underline cursor-pointer"
+                        >
+                          Clear prompt
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPromptMode('chat')}
+                        className="text-brand-600 dark:text-brand-400 font-semibold hover:underline cursor-pointer"
+                      >
+                        ← Back to Chat & Brainstorm
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Model Engine & Team Size Options */}
