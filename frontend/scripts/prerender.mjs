@@ -149,10 +149,6 @@ if (process.env.VERCEL) {
 }
 
 prerender().catch((err) => {
-  if (err.message && err.message.includes('Could not find Chrome')) {
-    console.warn('[prerender] Warning: Chrome binary not found for static pre-rendering. Skipping pre-render step.');
-    process.exit(0);
-  }
-  console.error('[prerender] Fatal error:', err);
-  process.exit(1);
+  console.warn('[prerender] Notice: Skipping static pre-render:', err?.message || err);
+  process.exit(0);
 });

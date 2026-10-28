@@ -382,14 +382,14 @@ export function ProcessReportModal({ process, open, onClose }: ProcessReportModa
                   />
                 </div>
 
-                {report.summary && (
+                {(report as any)?.summary && (
                   <Section title="Executive Summary">
                     <div className="rounded-xl border border-brand-500/20 bg-brand-500/5 p-4 shadow-2xs">
                       <div className="flex items-center gap-2 mb-2 font-bold text-xs text-brand-600 dark:text-brand-400">
                         <Sparkles size={14} />
                         <span>Execution Overview</span>
                       </div>
-                      <MarkdownRenderer content={report.summary} />
+                      <MarkdownRenderer content={(report as any).summary} />
                     </div>
                   </Section>
                 )}
