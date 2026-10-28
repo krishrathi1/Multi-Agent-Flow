@@ -182,7 +182,7 @@ export async function groqChat(params: {
   }
   messages.push({ role: 'user', content: params.prompt });
 
-  const first = (params.model || groqModel()).replace(/^(groq|openai)\//i, '');
+  const first = (params.model || groqModel()).replace(/^groq\//i, '');
   const modelCandidates = [
     first,
     params.model ? params.model : undefined,
