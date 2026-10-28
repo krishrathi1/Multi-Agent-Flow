@@ -459,6 +459,13 @@ async function rankEditSources(workspace: string, inputs: string[], index: strin
       .concat(byPath.get(lead.path.replace(/\.(tsx?|jsx?)$/, '.test.$1')) ?? null);
     for (const r of related) if (r && r !== lead) r.score = Math.max(r.score, lead.score * 0.6);
   }
+  // A broken file's callers show what it has to export.
+  for (const broken of errorFiles) {
+    const stem = path.posix.basename(broken).replace(/\.[a-z]+$/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const s of sources) {
+      if (s.path !== broken && new RegExp(`from\\s+['"][./]+(?:[^'"]*/)?${stem}['"]`).test(s.content)) s.score = Math.max(s.score, 30);
+    }
+  }
   return sources.sort((a, b) => b.score - a.score);
 }
 
@@ -543,7 +550,9 @@ export async function applyDirectWorkspaceEdit(params: {
   const basePrompt = [
     `Project: "${params.projectName}". The user is watching its live preview and asked:`,
     `"""${params.instruction}"""`,
-    before.errors.length ? `The preview currently fails to build:\n${before.errors.join('\n')}` : '',
+    before.errors.length
+      ? `The preview currently fails to build:\n${before.errors.join('\n')}\nA file that fails like this is often truncated or corrupted: rebuild its complete, working implementation from what its callers import, the types it uses and its tests, rather than the least code that compiles.`
+      : '',
     'Relevant project files:',
     ...blocks,
     otherFiles.length ? `Other files in the project (not shown): ${otherFiles.join(', ')}` : '',
