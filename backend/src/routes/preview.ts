@@ -320,7 +320,11 @@ function bundleOptions(entry: string, wsDir: string): esbuild.BuildOptions & { w
     // previews without per-project fixes: the automatic JSX runtime (no
     // `import React` needed), import.meta.env, and the common "@/" alias.
     jsx: 'automatic',
-    alias: fsSync.existsSync(path.join(wsDir, 'src')) ? { '@': path.join(wsDir, 'src') } : {},
+    alias: fsSync.existsSync(path.join(wsDir, 'src'))
+      ? { '@': path.join(wsDir, 'src'), '~': path.join(wsDir, 'src') }
+      : fsSync.existsSync(path.join(wsDir, 'frontend', 'src'))
+        ? { '@': path.join(wsDir, 'frontend', 'src'), '~': path.join(wsDir, 'frontend', 'src') }
+        : {},
     define: {
       'process.env.NODE_ENV': JSON.stringify('production'),
       'process.env.PREVIEW_BASE_URL': JSON.stringify(''),

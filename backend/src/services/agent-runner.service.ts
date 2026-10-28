@@ -447,14 +447,19 @@ async function rankEditSources(workspace: string, inputs: string[], index: strin
   // the code must fit together; without them a repair came back as a stub.
   const byPath = new Map(sources.map((s) => [s.path, s]));
   const resolveImport = (from: string, spec: string) => {
-    const base = path.posix.join(path.posix.dirname(from), spec);
-    for (const ext of ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js']) {
-      if (byPath.has(base + ext)) return byPath.get(base + ext)!;
+    const isAlias = spec.startsWith('@/') || spec.startsWith('~/');
+    const base = isAlias ? spec.slice(2) : path.posix.join(path.posix.dirname(from.replace(/\\/g, '/')), spec);
+    const prefixes = isAlias ? ['src/', 'frontend/src/', ''] : [''];
+    for (const prefix of prefixes) {
+      const candidateBase = prefix ? path.posix.join(prefix, base) : base;
+      for (const ext of ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js']) {
+        if (byPath.has(candidateBase + ext)) return byPath.get(candidateBase + ext)!;
+      }
     }
     return null;
   };
   for (const lead of sources.slice(0, 2).filter((s) => s.score > 0)) {
-    const related = [...lead.content.matchAll(/from\s+['"](\.{1,2}\/[^'"]+)['"]/g)]
+    const related = [...lead.content.matchAll(/from\s+['"]((?:\.{1,2}|[@~])\/[^'"]+)['"]/g)]
       .map((m) => resolveImport(lead.path, m[1]))
       .concat(byPath.get(lead.path.replace(/\.(tsx?|jsx?)$/, '.test.$1')) ?? null);
     for (const r of related) if (r && r !== lead) r.score = Math.max(r.score, lead.score * 0.6);

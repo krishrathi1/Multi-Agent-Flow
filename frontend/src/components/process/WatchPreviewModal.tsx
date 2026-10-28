@@ -494,7 +494,10 @@ export function WatchPreviewModal({
           // Immediately reload iframe in real time with cache buster
           if (iframeRef.current) {
             try {
-              const url = new URL(iframeRef.current.src, window.location.origin);
+              const baseSrc = (iframeRef.current.src && !iframeRef.current.src.startsWith('about:'))
+                ? iframeRef.current.src
+                : (previewUrl || `/preview/${currentProcess.id}`);
+              const url = new URL(baseSrc, window.location.origin);
               // `t` is the preview's access token; overwriting it as a cache
               // buster made every edit reload to "This preview is not shared".
               url.searchParams.set('_r', Date.now().toString());
