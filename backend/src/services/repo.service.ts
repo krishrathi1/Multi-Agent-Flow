@@ -8,6 +8,9 @@ const execFileAsync = promisify(execFile);
 
 // Base directory for cloned repositories
 const BASE_REPOS_DIR = process.env.REPOS_STORAGE_PATH || path.join(process.cwd(), 'data', 'repos');
+try {
+  fs.mkdirSync(BASE_REPOS_DIR, { recursive: true });
+} catch { /* ignore */ }
 
 export interface RepoFileInfo {
   name: string;
@@ -22,6 +25,168 @@ export interface RepoDetails {
   commitMessage?: string;
   filesCount?: number;
   clonedAt?: string;
+  localPath?: string;
+  skillDoc?: string;
+  subPath?: string;
+}
+
+export interface ParsedGitUrl {
+  cleanUrl: string;
+  branch?: string;
+  subPath?: string;
+}
+
+/**
+ * Normalizes and extracts git clone information from varied URL forms
+ * (e.g. GitHub tree URLs, missing https, trailing .git).
+ */
+export function parseGitUrl(rawUrl: string): ParsedGitUrl {
+  let trimmed = rawUrl.trim();
+  if (!trimmed) throw new Error('Repository URL is required');
+
+  // Prepend https:// if user pasted github.com/user/repo
+  if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\//.test(trimmed) && !trimmed.includes('://') && !trimmed.startsWith('git@')) {
+    trimmed = `https://${trimmed}`;
+  }
+
+  // GitHub tree URL support: https://github.com/owner/repo/tree/branch/subpath
+  const ghMatch = trimmed.match(/^https?:\/\/github\.com\/([^/]+)\/([^/#?]+)(?:\/tree\/([^/#?]+)(?:\/(.*))?)?/i);
+  if (ghMatch) {
+    const owner = ghMatch[1];
+    let repo = ghMatch[2];
+    if (repo.endsWith('.git')) repo = repo.slice(0, -4);
+    const branch = ghMatch[3] || undefined;
+    const subPath = ghMatch[4] ? ghMatch[4].replace(/\/+$/, '') : undefined;
+    return {
+      cleanUrl: `https://github.com/${owner}/${repo}.git`,
+      branch,
+      subPath,
+    };
+  }
+
+  // GitLab tree URL support: https://gitlab.com/owner/repo/-/tree/branch/subpath
+  const glMatch = trimmed.match(/^https?:\/\/gitlab\.com\/([^/]+)\/([^/#?]+)(?:\/-\/tree\/([^/#?]+)(?:\/(.*))?)?/i);
+  if (glMatch) {
+    const owner = glMatch[1];
+    let repo = glMatch[2];
+    if (repo.endsWith('.git')) repo = repo.slice(0, -4);
+    const branch = glMatch[3] || undefined;
+    const subPath = glMatch[4] ? glMatch[4].replace(/\/+$/, '') : undefined;
+    return {
+      cleanUrl: `https://gitlab.com/${owner}/${repo}.git`,
+      branch,
+      subPath,
+    };
+  }
+
+  let cleanUrl = trimmed;
+  if (!cleanUrl.endsWith('.git') && (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))) {
+    if (!cleanUrl.includes('?') && !cleanUrl.includes('#')) {
+      cleanUrl = `${cleanUrl}.git`;
+    }
+  }
+
+  // Standard git protocol validation
+  const isHttp = /^https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=]+$/.test(cleanUrl);
+  const isSsh = /^(git@[a-zA-Z0-9\-._]+:[a-zA-Z0-9\-._~/-]+|ssh:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=]+)$/.test(cleanUrl);
+
+  if (!isHttp && !isSsh) {
+    throw new Error('Invalid repository URL format. Please use a valid HTTPS or SSH Git URL.');
+  }
+
+  return { cleanUrl };
+}
+
+/**
+ * Validates that a git URL is safe and well-formed.
+ */
+export function validateGitUrl(rawUrl: string): string {
+  const parsed = parseGitUrl(rawUrl);
+  return parsed.cleanUrl;
+}
+
+/**
+ * Extracts instructions or documentation from SKILL.md or README.md in a repo directory.
+ */
+export function extractSkillDoc(repoDir: string, subPath?: string, maxLength: number = 4000): string | undefined {
+  if (!fs.existsSync(repoDir)) return undefined;
+
+  const searchDir = subPath ? path.join(repoDir, subPath) : repoDir;
+  if (!fs.existsSync(searchDir)) return undefined;
+
+  const candidateFiles = [
+    'SKILL.md',
+    'skill.md',
+    'README.md',
+    'readme.md',
+    'INSTRUCTIONS.md',
+    'PROMPT.md',
+    'rules.md',
+  ];
+
+  for (const filename of candidateFiles) {
+    const fullPath = path.join(searchDir, filename);
+    if (fs.existsSync(fullPath)) {
+      try {
+        const content = fs.readFileSync(fullPath, 'utf-8').trim();
+        if (content.length > 0) {
+          if (content.length > maxLength) {
+            return content.slice(0, maxLength) + '\n\n...[Skill documentation truncated for efficiency]';
+          }
+          return content;
+        }
+      } catch { /* ignore read error */ }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Copies a cloned repository folder into a target directory (e.g. project workspace),
+ * skipping .git, node_modules, and build outputs.
+ */
+export function copyRepoToWorkspace(sourceDir: string, targetDir: string): number {
+  if (!fs.existsSync(sourceDir)) return 0;
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  let copiedCount = 0;
+  try {
+    const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (
+        entry.name === '.git' ||
+        entry.name === 'node_modules' ||
+        entry.name === '.next' ||
+        entry.name === 'dist' ||
+        entry.name === '.cache'
+      ) {
+        continue;
+      }
+
+      const srcPath = path.join(sourceDir, entry.name);
+      const destPath = path.join(targetDir, entry.name);
+
+      if (entry.isDirectory()) {
+        copiedCount += copyRepoToWorkspace(srcPath, destPath);
+      } else if (entry.isFile()) {
+        try {
+          const stat = fs.statSync(srcPath);
+          // Skip files larger than 15MB
+          if (stat.size > 15 * 1024 * 1024) continue;
+          fs.copyFileSync(srcPath, destPath);
+          copiedCount++;
+        } catch (err: any) {
+          logger.warn({ srcPath, destPath, err: err?.message }, 'Failed to copy repo file to workspace');
+        }
+      }
+    }
+  } catch (err: any) {
+    logger.warn({ sourceDir, targetDir, err: err?.message }, 'Failed reading repository directory for copy');
+  }
+
+  return copiedCount;
 }
 
 /**
@@ -35,24 +200,6 @@ export function getRepoPath(orgId: string, category: 'packs' | 'skills', id: str
 }
 
 /**
- * Validates that a git URL is safe and well-formed.
- */
-export function validateGitUrl(rawUrl: string): string {
-  const trimmed = rawUrl.trim();
-  if (!trimmed) throw new Error('Repository URL is required');
-
-  // Allow standard git protocols: https://, http://, git@, ssh://
-  const isHttp = /^https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=]+$/.test(trimmed);
-  const isSsh = /^(git@[a-zA-Z0-9\-._]+:[a-zA-Z0-9\-._~/-]+|ssh:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=]+)$/.test(trimmed);
-
-  if (!isHttp && !isSsh) {
-    throw new Error('Invalid repository URL format. Please use a valid HTTPS or SSH Git URL.');
-  }
-
-  return trimmed;
-}
-
-/**
  * Clones or updates a Git repository into local VPS storage.
  */
 export async function cloneOrPullRepo(
@@ -62,29 +209,35 @@ export async function cloneOrPullRepo(
   repoUrl: string,
   branch: string = 'main'
 ): Promise<RepoDetails> {
-  const safeUrl = validateGitUrl(repoUrl);
+  const parsed = parseGitUrl(repoUrl);
+  const safeUrl = parsed.cleanUrl;
   const targetDir = getRepoPath(orgId, category, id);
-  const safeBranch = branch.trim().replace(/[^a-zA-Z0-9._/-]/g, '') || 'main';
+  const effectiveBranch = (branch && branch !== 'main' ? branch : parsed.branch) || 'main';
+  const safeBranch = effectiveBranch.trim().replace(/[^a-zA-Z0-9._/-]/g, '') || 'main';
 
   fs.mkdirSync(path.dirname(targetDir), { recursive: true });
 
   const isAlreadyCloned = fs.existsSync(path.join(targetDir, '.git'));
+  const gitExecEnv = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_ASKPASS: 'echo',
+  };
 
   try {
     if (!isAlreadyCloned) {
-      // Clean up targetDir if partially created
       if (fs.existsSync(targetDir)) {
         fs.rmSync(targetDir, { recursive: true, force: true });
       }
 
       logger.info({ orgId, id, safeUrl, safeBranch, targetDir }, 'Cloning git repository to VPS storage');
 
-      // Shallow clone for rapid download
+      // Shallow clone for rapid download without interactive terminal hang
       try {
         await execFileAsync(
           'git',
           ['clone', '--depth', '1', '--branch', safeBranch, safeUrl, targetDir],
-          { timeout: 60000 }
+          { env: gitExecEnv, timeout: 75000 }
         );
       } catch (err: any) {
         // Fallback: If specified branch doesn't exist, clone default branch
@@ -93,13 +246,13 @@ export async function cloneOrPullRepo(
         await execFileAsync(
           'git',
           ['clone', '--depth', '1', safeUrl, targetDir],
-          { timeout: 60000 }
+          { env: gitExecEnv, timeout: 75000 }
         );
       }
     } else {
       logger.info({ orgId, id, targetDir }, 'Pulling latest updates for existing git repo on VPS');
-      await execFileAsync('git', ['fetch', '--depth', '1', 'origin'], { cwd: targetDir, timeout: 45000 });
-      await execFileAsync('git', ['reset', '--hard', 'FETCH_HEAD'], { cwd: targetDir, timeout: 30000 });
+      await execFileAsync('git', ['fetch', '--depth', '1', 'origin'], { cwd: targetDir, env: gitExecEnv, timeout: 45000 });
+      await execFileAsync('git', ['reset', '--hard', 'FETCH_HEAD'], { cwd: targetDir, env: gitExecEnv, timeout: 30000 });
     }
 
     // Inspect commit details
@@ -116,13 +269,17 @@ export async function cloneOrPullRepo(
     }
 
     const filesCount = countFilesInDir(targetDir);
+    const skillDoc = extractSkillDoc(targetDir, parsed.subPath);
 
-    logger.info({ targetDir, commitHash, filesCount }, 'Successfully saved repo to VPS storage');
+    logger.info({ targetDir, commitHash, filesCount, hasDoc: Boolean(skillDoc) }, 'Successfully saved repo to VPS storage');
 
     return {
       commitHash,
       commitMessage,
       filesCount,
+      localPath: targetDir,
+      skillDoc,
+      subPath: parsed.subPath,
       clonedAt: new Date().toISOString(),
     };
   } catch (error: any) {

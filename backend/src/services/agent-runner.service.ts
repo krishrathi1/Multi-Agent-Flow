@@ -14,6 +14,7 @@ import { pushWorkspaceToGitHub, deployToVercel, snapshotWorkspace } from './git-
 import { run as runOpenCode, OpenCodeUnavailableError } from './opencode.service.js';
 import { getOrganizationIntegrationToken } from './org.service.js';
 import { getGroqApiKey, groqModel, getGrokApiKey, grokModel } from './llm-provider.service.js';
+import * as repoService from './repo.service.js';
 
 import { config } from '../config.js';
 /**
@@ -2270,6 +2271,48 @@ function crc32(buf: Buffer): number {
   return (c ^ 0xffffffff) >>> 0;
 }
 
+/**
+ * Deploys cloned skill repositories to the project workspace directory (<workspace>/skills/<safeName>/).
+ */
+export async function deploySkillsToWorkspace(
+  processId: string,
+  organizationId: string,
+  agentSkills?: Array<{
+    enabled: boolean;
+    customName?: string | null;
+    skill: { id: string; name: string; metadata?: any };
+  }>
+): Promise<string[]> {
+  const deployedSkills: string[] = [];
+  const active = agentSkills?.filter((s) => s.enabled) || [];
+  if (active.length === 0) return deployedSkills;
+
+  const workspace = workspaceFor(processId);
+  const skillsDir = path.join(workspace, 'skills');
+
+  for (const item of active) {
+    const skillId = item.skill.id;
+    const skillName = item.customName || item.skill.name;
+    const safeName = skillName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const repoPath = repoService.getRepoPath(organizationId, 'skills', skillId);
+
+    if (existsSync(repoPath)) {
+      try {
+        const destPath = path.join(skillsDir, safeName);
+        const count = repoService.copyRepoToWorkspace(repoPath, destPath);
+        if (count > 0) {
+          deployedSkills.push(safeName);
+          logger.info({ processId, skillName, destPath, count }, 'Deployed skill repository to project workspace');
+        }
+      } catch (err: any) {
+        logger.warn({ processId, skillName, error: err?.message }, 'Failed to copy skill repository to workspace');
+      }
+    }
+  }
+
+  return deployedSkills;
+}
+
 function systemPromptFor(agent: {
   displayName: string;
   description: string;
@@ -2295,10 +2338,25 @@ function systemPromptFor(agent: {
       ...activeSkills.map((s) => {
         const name = s.customName || s.skill.name;
         const desc = s.customDescription || s.skill.description;
-        return `- **${name}** [${s.skill.category.toUpperCase()}]: ${desc}`;
+        const safeName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+        const meta =
+          typeof s.skill.metadata === 'object' && s.skill.metadata !== null
+            ? (s.skill.metadata as Record<string, any>)
+            : undefined;
+
+        let skillEntry = `- **${name}** [${s.skill.category.toUpperCase()}]: ${desc}`;
+        if (meta?.cloneStatus === 'SUCCESS') {
+          skillEntry += `\n  - Local repository deployed in workspace at: \`./skills/${safeName}/\``;
+          if (meta.commitHash) skillEntry += ` (commit ${meta.commitHash})`;
+        }
+        if (meta?.skillDoc) {
+          skillEntry += `\n  - Skill Instructions & Guidelines:\n\`\`\`markdown\n${meta.skillDoc.slice(0, 2000)}\n\`\`\``;
+        }
+        return skillEntry;
       }),
       '',
       'Incorporate these skill methodologies, safety protocols, and implementation standards into all code generation and stage tasks.',
+      'When a skill provides local code, templates, or scripts in `./skills/<name>/`, reference, import, or adapt them directly in the project.',
     );
   }
 
@@ -2397,6 +2455,9 @@ async function runStep(
       })) as any;
     } catch { /* ignore */ }
   }
+
+  // Deploy cloned skill repositories to project workspace
+  await deploySkillsToWorkspace(processId, organizationId, agent.agentSkills);
 
   const session = await prisma.session.create({
     data: {
@@ -3320,6 +3381,10 @@ export async function runProcessChain(
 
   const started = Date.now();
   cancelled.delete(processId);
+
+  // Deploy all active skills configured on agents in this process to the workspace
+  const allProcessSkills = proc.agents.flatMap((a) => a.agentSkills || []);
+  await deploySkillsToWorkspace(processId, organizationId, allProcessSkills);
 
   const runRow = await prisma.processRun.create({
     data: {

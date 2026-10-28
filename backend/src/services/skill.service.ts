@@ -25,53 +25,73 @@ export async function createSkill(organizationId: string, data: {
   metadata?: Record<string, unknown>;
 }) {
   const initialMeta: Record<string, any> = { ...(data.metadata || {}) };
-  if (data.sourceUrl?.trim()) {
+  const rawUrl = data.sourceUrl?.trim();
+  if (rawUrl) {
     initialMeta.cloneStatus = 'CLONING';
   }
 
   const skill = await prisma.marketplaceSkill.create({
     data: {
       organizationId,
-      name: data.name,
-      description: data.description,
-      category: data.category,
-      risk: data.risk,
-      sourceUrl: data.sourceUrl?.trim() || null,
+      name: data.name.trim(),
+      description: data.description?.trim(),
+      category: data.category?.trim() || 'general',
+      risk: data.risk?.trim() || 'low',
+      sourceUrl: rawUrl || null,
       metadata: initialMeta as Prisma.InputJsonValue,
     },
   });
 
-  // Asynchronously clone repo if URL is present
-  if (data.sourceUrl?.trim()) {
-    repoService.cloneOrPullRepo(organizationId, 'skills', skill.id, data.sourceUrl.trim(), 'main')
-      .then(async (details) => {
-        await prisma.marketplaceSkill.update({
-          where: { id: skill.id },
-          data: {
-            metadata: {
-              ...initialMeta,
-              cloneStatus: 'SUCCESS',
-              ...details,
-            } as Prisma.InputJsonValue,
-          },
-        });
-      })
-      .catch(async (err) => {
-        logger.error({ skillId: skill.id, error: err.message }, 'Failed background git clone for skill');
-        await prisma.marketplaceSkill.update({
-          where: { id: skill.id },
-          data: {
-            metadata: {
-              ...initialMeta,
-              cloneStatus: 'FAILED',
-              lastError: err.message,
-            } as Prisma.InputJsonValue,
-          },
-        });
+  // If a Git URL was provided, immediately download and store repository on VPS
+  if (rawUrl) {
+    try {
+      const details = await repoService.cloneOrPullRepo(
+        organizationId,
+        'skills',
+        skill.id,
+        rawUrl,
+        'main'
+      );
+      const updatedSkill = await prisma.marketplaceSkill.update({
+        where: { id: skill.id },
+        data: {
+          metadata: {
+            ...initialMeta,
+            cloneStatus: 'SUCCESS',
+            ...details,
+          } as Prisma.InputJsonValue,
+        },
       });
+      return {
+        ...updatedSkill,
+        installedGatewayIds: [],
+        isInstalled: false,
+      };
+    } catch (err: any) {
+      logger.error({ skillId: skill.id, error: err.message }, 'Failed initial git clone for skill');
+      const updatedSkill = await prisma.marketplaceSkill.update({
+        where: { id: skill.id },
+        data: {
+          metadata: {
+            ...initialMeta,
+            cloneStatus: 'FAILED',
+            lastError: err.message,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      return {
+        ...updatedSkill,
+        installedGatewayIds: [],
+        isInstalled: false,
+      };
+    }
   }
 
-  return skill;
+  return {
+    ...skill,
+    installedGatewayIds: [],
+    isInstalled: false,
+  };
 }
 
 export async function listPacks(organizationId: string) {
@@ -162,6 +182,64 @@ export async function syncPack(packId: string, organizationId: string) {
       where: { id: packId },
       data: {
         metadata: {
+          cloneStatus: 'FAILED',
+          lastError: err.message,
+        } as Prisma.InputJsonValue,
+      },
+    });
+    throw err;
+  }
+}
+
+export async function syncSkill(skillId: string, organizationId: string) {
+  const skill = await prisma.marketplaceSkill.findFirst({
+    where: { id: skillId, organizationId },
+    include: { installedOn: { select: { gatewayId: true } } },
+  });
+  if (!skill) throw new Error('Skill not found');
+  if (!skill.sourceUrl) throw new Error('Skill has no source repository URL configured');
+
+  const existingMeta =
+    typeof skill.metadata === 'object' && skill.metadata !== null
+      ? (skill.metadata as Record<string, any>)
+      : {};
+
+  try {
+    const details = await repoService.cloneOrPullRepo(
+      organizationId,
+      'skills',
+      skill.id,
+      skill.sourceUrl,
+      'main'
+    );
+
+    const updated = await prisma.marketplaceSkill.update({
+      where: { id: skillId },
+      data: {
+        metadata: {
+          ...existingMeta,
+          cloneStatus: 'SUCCESS',
+          lastSyncedAt: new Date().toISOString(),
+          ...details,
+        } as Prisma.InputJsonValue,
+      },
+      include: { installedOn: { select: { gatewayId: true } } },
+    });
+
+    return {
+      synced: true,
+      skill: {
+        ...updated,
+        installedGatewayIds: updated.installedOn.map((i) => i.gatewayId),
+      },
+    };
+  } catch (err: any) {
+    logger.error({ skillId, error: err.message }, 'Failed manual sync for skill');
+    await prisma.marketplaceSkill.update({
+      where: { id: skillId },
+      data: {
+        metadata: {
+          ...existingMeta,
           cloneStatus: 'FAILED',
           lastError: err.message,
         } as Prisma.InputJsonValue,

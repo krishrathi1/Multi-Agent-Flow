@@ -30,6 +30,16 @@ router.get('/marketplace/:id/files', async (req, res) => {
   }
 });
 
+router.post('/marketplace/:id/sync', async (req, res) => {
+  try {
+    const result = await skillService.syncSkill(req.params.id, req.organizationId!);
+    req.app.get('io')?.to(`org:${req.organizationId}`).emit('skill:synced', { skillId: req.params.id, skill: result.skill });
+    res.json(result);
+  } catch (err: any) {
+    sendError(res, err, 400);
+  }
+});
+
 router.get('/marketplace/:id/file', async (req, res) => {
   try {
     const filePath = (req.query.path as string) || '';

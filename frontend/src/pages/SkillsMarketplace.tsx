@@ -45,6 +45,7 @@ export function SkillsMarketplace() {
   });
   const [creatingSkill, setCreatingSkill] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [syncingSkillId, setSyncingSkillId] = useState<string | null>(null);
 
   const [packForm, setPackForm] = useState({ name: '', description: '', sourceUrl: '', branch: 'main' });
   const [creatingPack, setCreatingPack] = useState(false);
@@ -57,6 +58,19 @@ export function SkillsMarketplace() {
     itemId: string;
     metadata?: any;
   } | null>(null);
+
+  async function handleSyncSkill(skillId: string) {
+    setSyncingSkillId(skillId);
+    try {
+      const res = await api.skills.syncSkill(skillId);
+      setSkills((prev) => prev.map((s) => (s.id === skillId ? res.skill : s)));
+    } catch (err: any) {
+      console.error('Failed to sync skill:', err);
+      alert(err?.message || 'Failed to sync skill repository');
+    } finally {
+      setSyncingSkillId(null);
+    }
+  }
 
   useEffect(() => {
     Promise.all([
@@ -306,29 +320,68 @@ export function SkillsMarketplace() {
                     <p className="text-xs text-ink-muted leading-relaxed line-clamp-2">
                       {skill.description || 'No description provided'}
                     </p>
-                    {skill.sourceUrl && (
-                      <div className="pt-1">
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          icon={Folder}
-                          onClick={() => {
-                            setActiveRepoModal({
-                              isOpen: true,
-                              title: skill.name,
-                              sourceUrl: skill.sourceUrl || undefined,
-                              branch: 'main',
-                              itemType: 'skill',
-                              itemId: skill.id,
-                              metadata: skill.metadata,
-                            });
-                          }}
-                          className="text-brand-500 hover:text-brand-600 hover:bg-brand-500/10 text-2xs"
-                        >
-                          Browse Cloned Files
-                        </Button>
-                      </div>
-                    )}
+                    {skill.sourceUrl && (() => {
+                      const meta = (skill.metadata || {}) as Record<string, any>;
+                      return (
+                        <div className="pt-1 space-y-2">
+                          {meta.cloneStatus === 'SUCCESS' && (
+                            <div className="flex items-center gap-1.5 text-2xs text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">
+                              <Check size={11} className="shrink-0 stroke-[2.5]" />
+                              <span className="truncate">
+                                Stored on VPS ({meta.filesCount ?? 0} files{meta.commitHash ? ` · ${meta.commitHash}` : ''})
+                              </span>
+                            </div>
+                          )}
+                          {meta.cloneStatus === 'CLONING' && (
+                            <div className="flex items-center gap-1.5 text-2xs text-amber-600 dark:text-amber-400 font-medium bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20">
+                              <RefreshCw size={11} className="shrink-0 animate-spin" />
+                              <span>Downloading to VPS storage...</span>
+                            </div>
+                          )}
+                          {meta.cloneStatus === 'FAILED' && (
+                            <div
+                              className="flex items-center gap-1.5 text-2xs text-rose-600 dark:text-rose-400 font-medium bg-rose-500/10 px-2 py-1 rounded-lg border border-rose-500/20"
+                              title={meta.lastError || 'Clone failed'}
+                            >
+                              <ShieldAlert size={11} className="shrink-0" />
+                              <span className="truncate">Download failed: {meta.lastError || 'Check repository URL'}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              icon={Folder}
+                              onClick={() => {
+                                setActiveRepoModal({
+                                  isOpen: true,
+                                  title: skill.name,
+                                  sourceUrl: skill.sourceUrl || undefined,
+                                  branch: 'main',
+                                  itemType: 'skill',
+                                  itemId: skill.id,
+                                  metadata: skill.metadata,
+                                });
+                              }}
+                              className="text-brand-500 hover:text-brand-600 hover:bg-brand-500/10 text-2xs"
+                            >
+                              Browse Files
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              icon={RefreshCw}
+                              loading={syncingSkillId === skill.id}
+                              onClick={() => handleSyncSkill(skill.id)}
+                              className="text-ink-muted hover:text-ink text-2xs"
+                              title="Pull latest repository changes to VPS storage"
+                            >
+                              Sync
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {selectedGateway && (
@@ -453,6 +506,10 @@ export function SkillsMarketplace() {
               await api.skills.syncPack(activeRepoModal.itemId);
               const updatedPacks = await api.skills.packs();
               setPacks(updatedPacks);
+            } else if (activeRepoModal.itemType === 'skill') {
+              await api.skills.syncSkill(activeRepoModal.itemId);
+              const updatedSkills = await api.skills.marketplace();
+              setSkills(updatedSkills);
             }
           }}
         />
@@ -541,9 +598,12 @@ export function SkillsMarketplace() {
                   type="text"
                   value={form.sourceUrl}
                   onChange={(e) => setForm((f) => ({ ...f, sourceUrl: e.target.value }))}
-                  placeholder="https://github.com/..."
+                  placeholder="https://github.com/owner/repo"
                   className="w-full h-10 px-3.5 bg-inset border border-line rounded-xl text-xs text-ink placeholder:text-ink-muted focus:border-brand-500 focus:outline-none shadow-2xs font-mono"
                 />
+                <p className="text-2xs text-ink-muted mt-1 leading-normal">
+                  💡 Clones repository code to VPS storage so agents can directly use its scripts, toolkits, and docs in projects.
+                </p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-line-subtle">
@@ -562,7 +622,7 @@ export function SkillsMarketplace() {
                   loading={creatingSkill}
                   disabled={!form.name.trim()}
                 >
-                  Add Skill
+                  {creatingSkill ? (form.sourceUrl.trim() ? 'Downloading to VPS...' : 'Adding Skill...') : 'Add Skill'}
                 </Button>
               </div>
             </form>

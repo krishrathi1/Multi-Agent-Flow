@@ -770,6 +770,8 @@ export const api = {
     marketplace: (gatewayId?: string) => request<MarketplaceSkill[]>(`/skills/marketplace${gatewayId ? `?gatewayId=${gatewayId}` : ''}`),
     createSkill: (data: { name: string; description?: string; category?: string; risk?: string; sourceUrl?: string }) =>
       request<MarketplaceSkill>('/skills/marketplace', { method: 'POST', body: JSON.stringify(data) }),
+    syncSkill: (skillId: string) =>
+      request<{ synced: boolean; skill: MarketplaceSkill }>('/skills/marketplace/' + skillId + '/sync', { method: 'POST' }),
     install: (skillId: string, gatewayId: string) =>
       request('/skills/marketplace/' + skillId + '/install', { method: 'POST', body: JSON.stringify({ gatewayId }) }),
     uninstall: (skillId: string, gatewayId: string) =>
