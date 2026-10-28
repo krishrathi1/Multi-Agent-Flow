@@ -52,6 +52,13 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'claude-3-5-sonnet':        { input: 3.00,  output: 15.00 },
   'claude-3-5-haiku':         { input: 0.80,  output: 4.00  },
   'claude-3-opus':            { input: 15.00, output: 75.00 },
+  // Groq
+  'openai/gpt-oss-120b':      { input: 0.15,  output: 0.60  },
+  'openai/gpt-oss-20b':       { input: 0.075, output: 0.30  },
+  'qwen/qwen3.8-27b':         { input: 0.80,  output: 4.00  },
+  'llama-3.3-70b-versatile':  { input: 0.59,  output: 0.79  },
+  'llama-3.1-8b-instant':     { input: 0.05,  output: 0.08  },
+  'mixtral-8x7b-32768':       { input: 0.24,  output: 0.24  },
 };
 
 /** Calculate real USD cost from token counts and model name. */

@@ -58,6 +58,8 @@ const AVAILABLE_MODELS = [
   { id: 'grok-beta', name: 'xAI Grok Beta', badge: 'xAI Reasoning' },
   { id: 'grok-vision-beta', name: 'xAI Grok Vision Beta', badge: 'Vision Beta' },
   { id: 'gemini-2.5-flash', name: 'Google Gemini 2.5 Flash', badge: 'Low Latency' },
+  { id: 'groq/openai/gpt-oss-120b', name: 'Groq GPT OSS 120B', badge: 'Groq Speed' },
+  { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B', badge: 'Groq Speed' },
   { id: 'groq/llama-3.3-70b-versatile', name: 'Groq Llama 3.3 70B', badge: 'Ultra Fast' },
   { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', badge: 'Precision' },
   { id: 'gpt-4o', name: 'OpenAI GPT-4o', badge: 'Omni Reasoning' },

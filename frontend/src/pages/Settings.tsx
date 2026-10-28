@@ -1142,8 +1142,13 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
         throw new Error(liveRes.message || `The ${provName} API key is invalid.`);
       }
 
-      // 2. Persist encrypted key in database
+      // 2. Persist encrypted key in database (auto-associate for cross-entered Grok/Groq keys)
       await api.llmProviders.upsert({ provider: provName, mode: 'byok', apiKey: trimmed });
+      if ((provName === 'grok' || provName === 'xai') && trimmed.startsWith('gsk_')) {
+        await api.llmProviders.upsert({ provider: 'groq', mode: 'byok', apiKey: trimmed }).catch(() => {});
+      } else if (provName === 'groq' && trimmed.startsWith('xai-')) {
+        await api.llmProviders.upsert({ provider: 'grok', mode: 'byok', apiKey: trimmed }).catch(() => {});
+      }
 
       // 3. Store models in state
       if (provName === 'google') {
@@ -1162,10 +1167,18 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
         setGrokModels(liveRes.models);
         setGrokKey('');
         localStorage.setItem('nexus:live_models_grok', JSON.stringify(liveRes.models));
+        if (trimmed.startsWith('gsk_')) {
+          setGroqModels(liveRes.models);
+          localStorage.setItem('nexus:live_models_groq', JSON.stringify(liveRes.models));
+        }
       } else if (provName === 'groq') {
         setGroqModels(liveRes.models);
         setGroqKey('');
         localStorage.setItem('nexus:live_models_groq', JSON.stringify(liveRes.models));
+        if (trimmed.startsWith('xai-')) {
+          setGrokModels(liveRes.models);
+          localStorage.setItem('nexus:live_models_grok', JSON.stringify(liveRes.models));
+        }
       }
 
       // 4. Refresh configured providers
@@ -2181,6 +2194,12 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
                 </Button>
               </div>
             </div>
+            {grokKey.trim().startsWith('gsk_') && (
+              <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-2.5 text-xs text-sky-700 dark:text-sky-300 flex items-center gap-2 mt-2">
+                <CheckCircle2 size={14} className="shrink-0 text-sky-500" />
+                <span>Groq API Key detected (<code className="font-mono">gsk_...</code>) — live Groq models suite will be connected automatically!</span>
+              </div>
+            )}
             {grokError && (
               <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400 flex items-start gap-2 mt-2">
                 <AlertCircle size={15} className="shrink-0 mt-0.5" />
@@ -2365,6 +2384,12 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
                 </Button>
               </div>
             </div>
+            {groqKey.trim().startsWith('xai-') && (
+              <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 p-2.5 text-xs text-orange-700 dark:text-orange-300 flex items-center gap-2 mt-2">
+                <CheckCircle2 size={14} className="shrink-0 text-orange-500" />
+                <span>xAI Grok API Key detected (<code className="font-mono">xai-...</code>) — live xAI Grok models suite will be connected automatically!</span>
+              </div>
+            )}
           </form>
 
           {/* Live Models Display */}

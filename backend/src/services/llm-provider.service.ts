@@ -30,7 +30,7 @@ export async function getGrokApiKey(organizationId: string): Promise<string | nu
     const row = await prisma.llmProvider.findFirst({
       where: {
         organizationId,
-        provider: { in: ['grok', 'xai'], mode: 'insensitive' },
+        provider: { in: ['grok', 'xai', 'groq'], mode: 'insensitive' },
         isActive: true,
       },
     });
@@ -41,6 +41,8 @@ export async function getGrokApiKey(organizationId: string): Promise<string | nu
     process.env.GROK_API_KEY?.trim() ||
     process.env.XAI_API_KEY?.trim() ||
     process.env.PLATFORM_XAI_API_KEY?.trim() ||
+    process.env.PLATFORM_GROQ_API_KEY?.trim() ||
+    process.env.GROQ_API_KEY?.trim() ||
     null
   );
 }
@@ -50,13 +52,31 @@ export async function getGrokApiKey(organizationId: string): Promise<string | nu
  */
 export async function grokChat(params: {
   apiKey: string;
-  system: string;
+  system?: string;
   prompt: string;
   model?: string;
   maxTokens?: number;
   timeoutMs?: number;
 }): Promise<{ text: string; model: string; inputTokens: number; outputTokens: number } | null> {
+  // If user passed a Groq API key (starts with gsk_), seamlessly execute with Groq
+  if (params.apiKey?.trim().startsWith('gsk_')) {
+    return groqChat({
+      apiKey: params.apiKey,
+      system: params.system || '',
+      prompt: params.prompt,
+      model: params.model,
+      maxTokens: params.maxTokens,
+      timeoutMs: params.timeoutMs,
+    });
+  }
+
   const first = (params.model || grokModel()).replace(/^(grok|xai)\//i, '');
+  const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
+  if (params.system && params.system.trim()) {
+    messages.push({ role: 'system', content: params.system.trim() });
+  }
+  messages.push({ role: 'user', content: params.prompt });
+
   for (const model of [first, ...GROK_FALLBACKS.filter((m) => m !== first)]) {
     try {
       const res = await fetch('https://api.x.ai/v1/chat/completions', {
@@ -67,10 +87,7 @@ export async function grokChat(params: {
         },
         body: JSON.stringify({
           model,
-          messages: [
-            { role: 'system', content: params.system },
-            { role: 'user', content: params.prompt },
-          ],
+          messages,
           temperature: 0.3,
           max_tokens: params.maxTokens ?? 2048,
         }),
@@ -101,19 +118,37 @@ export async function grokChat(params: {
 // working when OpenCode's free models hit their usage limit.
 
 /** Default Groq model; override with GROQ_MODEL. */
-export const groqModel = () => process.env.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile';
+export const groqModel = () => process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-120b';
 /** Tried in order when the preferred model is rejected (limits, size). */
-const GROQ_FALLBACKS = ['llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+const GROQ_FALLBACKS = [
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.8-27b',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'mixtral-8x7b-32768',
+];
 
 /** The org's Groq key from Settings, else the platform's, else null. */
 export async function getGroqApiKey(organizationId: string): Promise<string | null> {
   try {
     const row = await prisma.llmProvider.findFirst({
-      where: { organizationId, provider: { equals: 'groq', mode: 'insensitive' }, isActive: true },
+      where: {
+        organizationId,
+        provider: { in: ['groq', 'grok', 'xai'], mode: 'insensitive' },
+        isActive: true,
+      },
     });
     if (row?.apiKey) return decryptField(row.apiKey);
   } catch { /* fall through to the platform key */ }
-  return process.env.PLATFORM_GROQ_API_KEY?.trim() || process.env.GROQ_API_KEY?.trim() || null;
+  return (
+    process.env.PLATFORM_GROQ_API_KEY?.trim() ||
+    process.env.GROQ_API_KEY?.trim() ||
+    process.env.PLATFORM_GROK_API_KEY?.trim() ||
+    process.env.GROK_API_KEY?.trim() ||
+    process.env.XAI_API_KEY?.trim() ||
+    null
+  );
 }
 
 /**
@@ -123,21 +158,47 @@ export async function getGroqApiKey(organizationId: string): Promise<string | nu
  */
 export async function groqChat(params: {
   apiKey: string;
-  system: string;
+  system?: string;
   prompt: string;
   model?: string;
   maxTokens?: number;
   timeoutMs?: number;
 }): Promise<{ text: string; model: string; inputTokens: number; outputTokens: number } | null> {
-  const first = (params.model || groqModel()).replace(/^groq\//, '');
-  for (const model of [first, ...GROQ_FALLBACKS.filter((m) => m !== first)]) {
+  // If user passed an xAI API key (starts with xai-), seamlessly execute with Grok
+  if (params.apiKey?.trim().startsWith('xai-')) {
+    return grokChat({
+      apiKey: params.apiKey,
+      system: params.system || '',
+      prompt: params.prompt,
+      model: params.model,
+      maxTokens: params.maxTokens,
+      timeoutMs: params.timeoutMs,
+    });
+  }
+
+  const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
+  if (params.system && params.system.trim()) {
+    messages.push({ role: 'system', content: params.system.trim() });
+  }
+  messages.push({ role: 'user', content: params.prompt });
+
+  const first = (params.model || groqModel()).replace(/^(groq|openai)\//i, '');
+  const modelCandidates = [
+    first,
+    params.model ? params.model : undefined,
+    ...GROQ_FALLBACKS,
+  ].filter(Boolean) as string[];
+
+  const uniqueModels = Array.from(new Set(modelCandidates));
+
+  for (const model of uniqueModels) {
     try {
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${params.apiKey}` },
         body: JSON.stringify({
           model,
-          messages: [{ role: 'system', content: params.system }, { role: 'user', content: params.prompt }],
+          messages,
           temperature: 0.3,
           max_tokens: params.maxTokens ?? 1500,
         }),
@@ -201,6 +262,14 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   'grok-beta':         { input: 5.0 / 1_000_000,  output: 15.0 / 1_000_000 },
   'grok-vision-beta':  { input: 5.0 / 1_000_000,  output: 15.0 / 1_000_000 },
   'grok':              { input: 2.0 / 1_000_000,  output: 10.0 / 1_000_000 },
+
+  // Groq Models
+  'openai/gpt-oss-120b':{ input: 0.15 / 1_000_000, output: 0.60 / 1_000_000 },
+  'openai/gpt-oss-20b': { input: 0.075 / 1_000_000, output: 0.30 / 1_000_000 },
+  'qwen/qwen3.8-27b':   { input: 0.80 / 1_000_000, output: 4.00 / 1_000_000 },
+  'llama-3.3-70b':     { input: 0.59 / 1_000_000, output: 0.79 / 1_000_000 },
+  'llama-3.1-8b':      { input: 0.05 / 1_000_000, output: 0.08 / 1_000_000 },
+  'mixtral-8x7b':      { input: 0.24 / 1_000_000, output: 0.24 / 1_000_000 },
 
   'default':           { input: 0.5 / 1_000_000,  output: 1.5 / 1_000_000 },
 };
@@ -379,7 +448,14 @@ export async function testProvider(
     },
   };
 
-  const target = endpoints[prov];
+  let targetProv = prov;
+  if ((prov === 'grok' || prov === 'xai') && apiKey.startsWith('gsk_')) {
+    targetProv = 'groq';
+  } else if (prov === 'groq' && apiKey.startsWith('xai-')) {
+    targetProv = 'grok';
+  }
+
+  const target = endpoints[targetProv];
   if (!target) {
     return {
       ok: true,
@@ -801,6 +877,28 @@ export async function fetchLiveModels(
     };
   }
 
+  // Cross-provider key auto-detection (prevents confusion between Grok and Groq)
+  if ((prov === 'grok' || prov === 'xai') && apiKey.startsWith('gsk_')) {
+    const groqRes = await fetchLiveModels('groq', apiKey, organizationId);
+    return {
+      ...groqRes,
+      provider: 'grok',
+      message: groqRes.ok
+        ? `Groq API Key detected (gsk_...) — loaded ${groqRes.models.length} live Groq models!`
+        : groqRes.message,
+    };
+  }
+  if (prov === 'groq' && apiKey.startsWith('xai-')) {
+    const grokRes = await fetchLiveModels('grok', apiKey, organizationId);
+    return {
+      ...grokRes,
+      provider: 'groq',
+      message: grokRes.ok
+        ? `xAI Grok API Key detected (xai-...) — loaded ${grokRes.models.length} live Grok models!`
+        : grokRes.message,
+    };
+  }
+
   // 1. Google Gemini
   if (prov === 'google' || prov === 'gemini') {
     try {
@@ -1166,6 +1264,22 @@ export async function fetchLiveModels(
         description: `${prov.toUpperCase()} Model`,
         provider: prov,
       }));
+
+      if (prov === 'groq') {
+        models.sort((a, b) => {
+          const score = (id: string) => {
+            if (id.includes('gpt-oss-120b')) return 120;
+            if (id.includes('qwen3.8-27b')) return 115;
+            if (id.includes('gpt-oss-20b')) return 110;
+            if (id.includes('llama-3.3-70b')) return 105;
+            if (id.includes('llama-3.1-8b')) return 100;
+            if (id.includes('prompt-guard')) return 10;
+            if (id.includes('whisper')) return 5;
+            return 50;
+          };
+          return score(b.id) - score(a.id);
+        });
+      }
       return {
         ok: true,
         provider: prov,
