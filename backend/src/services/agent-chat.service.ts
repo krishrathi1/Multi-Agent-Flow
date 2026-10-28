@@ -10,7 +10,7 @@ import { getVercelDeploymentLogs, autoHealWorkspace, pushWorkspaceToGitHub, depl
 import { askAiAndSpawnFixerAgent } from './process.service.js';
 import { ask as askOpenCode } from './opencode.service.js';
 import { outcomeOf } from './project-report.service.js';
-import { retrieveCodeContext } from './code-intelligence.service.js';
+import { retrieveCodeContext, numberLines, CODE_QUOTING_RULE } from './code-intelligence.service.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getOrganizationIntegrationToken } from './org.service.js';
@@ -942,8 +942,11 @@ export async function chatWithMother(
 
       let codeExcerpts = '';
       try {
-        const hits = await retrieveCodeContext(organizationId, message, processId, { maxFiles: 3, contextLines: 25, wholeTopFileChars: 16000 });
-        codeExcerpts = hits.map((h) => `[${h.file} from line ${h.startLine}]\n${h.snippet}`).join('\n\n');
+        // Sized for Groq's free tier (8,000 tokens a minute): a 16 KB file left
+        // no budget for a second question, which then fell to a smaller model.
+        const hits = await retrieveCodeContext(organizationId, message, processId, { maxFiles: 3, contextLines: 25, wholeTopFileChars: 9000 });
+        codeExcerpts = hits.map((h) => `[${h.file} from line ${h.startLine}]\n${numberLines(h.snippet, h.startLine)}`).join('\n\n');
+        if (codeExcerpts) codeExcerpts += `\n\n${CODE_QUOTING_RULE}`;
       } catch { /* code index unavailable */ }
 
       processContext = `
