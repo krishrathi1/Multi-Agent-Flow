@@ -582,7 +582,8 @@ Finish with: <<<SUMMARY>>>one or two sentences on what you changed<<<END>>>`,
         await fs.writeFile(abs, body.replace(/^```[a-z0-9_-]*\n|\n```\s*$/gi, '').replace(/\s+$/, '') + '\n', 'utf-8');
         continue;
       }
-      const parts = body.match(/^\s*<<<FIND>>>\s*\n([\s\S]*?)\n?<<<REPLACE>>>\s*\n?([\s\S]*?)\s*$/);
+      // Only the newline after a marker is dropped: the first line's indentation is part of the code.
+      const parts = body.match(/^\s*<<<FIND>>>[ \t]*\r?\n([\s\S]*?)\r?\n?<<<REPLACE>>>[ \t]*\r?\n?([\s\S]*?)\s*$/);
       if (!parts || current === null) { failures.push(`${relClean}: ${current === null ? 'no such file' : 'malformed edit block'}`); continue; }
       const next = replaceOnce(current, parts[1].replace(/\s+$/, ''), parts[2].replace(/\s+$/, ''));
       if (next === null) { failures.push(`${relClean}: the FIND text is not in the file`); continue; }
