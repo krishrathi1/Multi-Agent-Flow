@@ -48,6 +48,7 @@ interface Report {
   goal: string;
   status: string;
   models: string[];
+  summary?: string;
   run: { state: string; startedAt: string; finishedAt: string | null; durationMs: number | null; totalTokens: number; totalCostUsd: number; error: string | null } | null;
   runsTotal: number;
   runsCompleted: number;
