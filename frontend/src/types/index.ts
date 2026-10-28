@@ -289,6 +289,7 @@ export interface ChatResponse {
   status: string;
   result?: string;
   summary?: string;
+  model?: string;
 }
 
 // Workspace Files

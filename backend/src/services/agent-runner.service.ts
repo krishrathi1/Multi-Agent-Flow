@@ -13,7 +13,7 @@ import { notify } from './insights.service.js';
 import { pushWorkspaceToGitHub, deployToVercel, snapshotWorkspace } from './git-deploy.service.js';
 import { run as runOpenCode, OpenCodeUnavailableError } from './opencode.service.js';
 import { getOrganizationIntegrationToken } from './org.service.js';
-import { getGroqApiKey, groqModel } from './llm-provider.service.js';
+import { getGroqApiKey, groqModel, getGrokApiKey, grokModel } from './llm-provider.service.js';
 
 import { config } from '../config.js';
 /**
@@ -357,6 +357,7 @@ export async function startWorkspaceEdit(
   organizationId: string,
   instruction: string,
   emit: (event: string, payload: unknown) => void,
+  requestedModel?: string,
 ): Promise<WorkspaceEdit> {
   if (isRunning(processId)) {
     throw Object.assign(new Error('A production run is in progress; wait for it to finish before editing.'), { statusCode: 409 });
@@ -371,7 +372,7 @@ export async function startWorkspaceEdit(
   if (!proc) throw Object.assign(new Error('Process not found'), { statusCode: 404 });
 
   const planned = proc.plannedBy?.includes(':') ? proc.plannedBy.slice(proc.plannedBy.indexOf(':') + 1) : '';
-  const model = planned.includes('/') ? planned : config.opencodeModel;
+  const model = requestedModel?.trim() || (planned.includes('/') ? planned : config.opencodeModel);
   const job: WorkspaceEdit = {
     id: `edit_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     processId, organizationId, instruction,
@@ -403,12 +404,20 @@ export async function startWorkspaceEdit(
       try {
         res = await runOpenCode(prompt, model, workspace, 10 * 60_000);
       } catch (err) {
-        // OpenCode's free models refused (usage limit): use the org's Groq key.
+        // Fallbacks when OpenCode free models hit limits
+        const grokKey = err instanceof OpenCodeUnavailableError ? await getGrokApiKey(organizationId) : null;
         const groqKey = err instanceof OpenCodeUnavailableError ? await getGroqApiKey(organizationId) : null;
-        if (!groqKey) throw err;
-        job.model = `groq/${groqModel()}`;
-        emit('process:edit:updated', job);
-        res = await runOpenCode(prompt, job.model, workspace, 10 * 60_000, { env: { GROQ_API_KEY: groqKey } });
+        if (grokKey) {
+          job.model = `grok/${grokModel()}`;
+          emit('process:edit:updated', job);
+          res = await runOpenCode(prompt, job.model, workspace, 10 * 60_000, { env: { XAI_API_KEY: grokKey, GROK_API_KEY: grokKey } });
+        } else if (groqKey) {
+          job.model = `groq/${groqModel()}`;
+          emit('process:edit:updated', job);
+          res = await runOpenCode(prompt, job.model, workspace, 10 * 60_000, { env: { GROQ_API_KEY: groqKey } });
+        } else {
+          throw err;
+        }
       }
       const changed = changedFiles(before, await workspaceStamps(workspace));
       job.summary = closingParagraph(res.result) || null;

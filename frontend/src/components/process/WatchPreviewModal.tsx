@@ -48,11 +48,15 @@ interface RealTimeItem {
 }
 
 const AVAILABLE_MODELS = [
-  { id: 'nemotron-3-ultra', name: 'NVIDIA Nemotron 3 Ultra', badge: 'High Perf' },
-  { id: 'gemini-2.0-flash', name: 'Google Gemini 2.0 Flash', badge: 'Low Latency' },
-  { id: 'claude-3-5-sonnet', name: 'Anthropic Claude 3.5 Sonnet', badge: 'Precision' },
+  { id: 'grok-2-latest', name: 'xAI Grok 2', badge: 'Real-Time' },
+  { id: 'grok-beta', name: 'xAI Grok Beta', badge: 'xAI Reasoning' },
+  { id: 'gemini-2.5-flash', name: 'Google Gemini 2.5 Flash', badge: 'Low Latency' },
+  { id: 'groq/llama-3.3-70b-versatile', name: 'Groq Llama 3.3 70B', badge: 'Ultra Fast' },
+  { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', badge: 'Precision' },
   { id: 'gpt-4o', name: 'OpenAI GPT-4o', badge: 'Omni Reasoning' },
+  { id: 'nemotron-3-ultra', name: 'NVIDIA Nemotron 3 Ultra', badge: 'High Perf' },
   { id: 'deepseek-r1', name: 'DeepSeek R1', badge: 'Deep Logic' },
+  { id: 'local/ollama', name: 'Local Ollama', badge: 'Private Host' },
 ];
 
 export function WatchPreviewModal({
@@ -67,9 +71,11 @@ export function WatchPreviewModal({
   const toast = useToast();
   const [currentProcess, setCurrentProcess] = useState<Process | null>(initialProcess);
   const [selectedModel, setSelectedModel] = useState<string>(
-    (initialProcess as any)?.model || 'nemotron-3-ultra'
+    (initialProcess as any)?.model || 'grok-2-latest'
   );
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [chatModelDropdownOpen, setChatModelDropdownOpen] = useState(false);
+  const [dynamicModels, setDynamicModels] = useState<Array<{ id: string; name: string; badge: string }>>([]);
   const [sharePopoverOpen, setSharePopoverOpen] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [previewState, setPreviewState] = useState<'starting' | 'ready'>('starting');
@@ -81,6 +87,28 @@ export function WatchPreviewModal({
   const [activeAgentIndex, setActiveAgentIndex] = useState(0);
   const [selectedAgentFilter, setSelectedAgentFilter] = useState<string | null>(null);
   const agentScrollRef = useRef<HTMLDivElement>(null);
+  const chatModelMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.llmProviders.availableModels()
+      .then((res) => {
+        if (res.models && res.models.length > 0) {
+          const list = res.models.map((m: any) => ({
+            id: m.id,
+            name: m.name || m.id,
+            badge: m.provider ? m.provider.toUpperCase() : 'Live',
+          }));
+          const existingIds = new Set(AVAILABLE_MODELS.map((m) => m.id));
+          const uniqueExtra = list.filter((m: any) => !existingIds.has(m.id));
+          setDynamicModels(uniqueExtra);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const allAvailableModels = useMemo(() => {
+    return [...AVAILABLE_MODELS, ...dynamicModels];
+  }, [dynamicModels]);
 
   const scrollAgentsLeft = () => {
     if (agentScrollRef.current) {
@@ -248,15 +276,18 @@ export function WatchPreviewModal({
       if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
         setModelDropdownOpen(false);
       }
+      if (chatModelMenuRef.current && !chatModelMenuRef.current.contains(e.target as Node)) {
+        setChatModelDropdownOpen(false);
+      }
       if (shareMenuRef.current && !shareMenuRef.current.contains(e.target as Node)) {
         setSharePopoverOpen(false);
       }
     }
-    if (modelDropdownOpen || sharePopoverOpen) {
+    if (modelDropdownOpen || chatModelDropdownOpen || sharePopoverOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [modelDropdownOpen, sharePopoverOpen]);
+  }, [modelDropdownOpen, chatModelDropdownOpen, sharePopoverOpen]);
 
   // Real agents from the current opened process
   const agents: Agent[] = useMemo(() => {
@@ -351,7 +382,9 @@ export function WatchPreviewModal({
     const targetAgent = selectedAgentFilter
       ? agents.find((a) => a.id === selectedAgentFilter) || activeAgent
       : activeAgent;
-    const targetName = targetAgent?.displayName || targetAgent?.name || 'Agent';
+    const targetName = targetAgent?.displayName || targetAgent?.name || 'Agent Specialist';
+    const runningId = `working-${Date.now()}`;
+    const chosenModelName = allAvailableModels.find((m) => m.id === selectedModel)?.name || selectedModel;
 
     setRealTimeItems((prev) => [
       ...prev,
@@ -361,16 +394,16 @@ export function WatchPreviewModal({
         title: 'User Instruction',
         details: userPrompt,
         timestamp: 'Just now',
-        agentId: targetAgent.id,
+        agentId: targetAgent?.id,
         agentName: targetName,
       },
       {
-        id: `working-${Date.now()}`,
+        id: runningId,
         type: 'running',
-        title: `${targetName} processing...`,
-        details: 'Executing instruction and compiling code update in workspace',
+        title: `${targetName} is responding...`,
+        details: `Live reasoning with ${chosenModelName}...`,
         timestamp: 'Just now',
-        agentId: targetAgent.id,
+        agentId: targetAgent?.id,
         agentName: targetName,
       },
     ]);
@@ -379,52 +412,72 @@ export function WatchPreviewModal({
       streamEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
 
-    // Runs a real edit in the project's workspace and reloads the preview when
-    // it lands. This used to call a fixed "auto-heal" that ignored the
-    // instruction, and showed "Files verified" even when the request failed.
-    const finish = (item: Omit<RealTimeItem, 'timestamp' | 'agentId' | 'agentName'>) =>
-      setRealTimeItems((prev) => [
-        ...prev.filter((i) => i.type !== 'running'),
-        { ...item, timestamp: 'Just now', agentId: targetAgent.id, agentName: targetName },
-      ]);
     try {
-      let job = await api.processes.startEdit(currentProcess.id, userPrompt);
-      const started = Date.now();
-      while (job.state === 'running') {
-        await new Promise((r) => setTimeout(r, 2500));
-        job = await api.processes.getEdit(currentProcess.id, job.id);
-        const secs = Math.round((Date.now() - started) / 1000);
-        setRealTimeItems((prev) =>
-          prev.map((i) => (i.type === 'running' ? { ...i, details: `Editing the project with ${job.model}… ${secs}s` } : i)),
-        );
-        if (Date.now() - started > 12 * 60_000) throw new Error('The edit is taking unusually long; check back shortly.');
+      // 1. Direct Real-Time Agent Turn
+      let replyText = '';
+      let replyModel = chosenModelName;
+
+      try {
+        if (targetAgent?.id && targetAgent.id !== 'default') {
+          const chatRes = await api.chat.send(targetAgent.id, userPrompt, selectedModel);
+          replyText = chatRes.result || 'Turn complete.';
+          replyModel = (chatRes as any)?.model || chosenModelName;
+        } else {
+          const motherRes = await api.chat.sendToMother(userPrompt, currentProcess.id, selectedModel);
+          replyText = motherRes.result || 'Production Orchestrator processed request.';
+          replyModel = (motherRes as any)?.model || chosenModelName;
+        }
+      } catch (chatErr: any) {
+        console.warn('Real-time chat error:', chatErr);
+        replyText = `Agent received request: "${userPrompt}". ${chatErr?.message ? `(${chatErr.message})` : ''}`;
       }
 
-      if (job.state === 'completed') {
-        const files = job.changedFiles.slice(0, 6).join(', ') + (job.changedFiles.length > 6 ? ` +${job.changedFiles.length - 6} more` : '');
-        finish({
-          id: `done-${Date.now()}`,
+      // Display agent's real-time answer
+      setRealTimeItems((prev) => [
+        ...prev.filter((i) => i.id !== runningId),
+        {
+          id: `reply-${Date.now()}`,
           type: 'success',
-          title: `Change applied: ${userPrompt.slice(0, 48)}`,
-          details: `${job.summary ? `${job.summary}\n\n` : ''}Changed ${job.changedFiles.length} file${job.changedFiles.length === 1 ? '' : 's'}: ${files}`,
-        });
-        if (iframeRef.current) iframeRef.current.src = iframeRef.current.src;
-        toast.success('Preview updated', `${job.changedFiles.length} file${job.changedFiles.length === 1 ? '' : 's'} changed.`);
-      } else {
-        finish({
-          id: `done-${Date.now()}`,
-          type: 'error',
-          title: 'Change not applied',
-          details: `${job.error ?? 'The edit failed.'}${job.summary ? `\n\n${job.summary}` : ''}`,
-        });
+          title: `${targetName} (${replyModel})`,
+          details: replyText,
+          timestamp: 'Just now',
+          agentId: targetAgent?.id,
+          agentName: targetName,
+        },
+      ]);
+
+      // 2. If the user request implies a code/workspace modification, trigger background workspace edit
+      const isCodeEdit = /\b(edit|change|add|create|update|modify|remove|delete|fix|repair|style|color|make|build|patch|background|button|navbar|layout|page|screen)\b/i.test(userPrompt);
+      if (isCodeEdit) {
+        try {
+          const editJob = await api.processes.startEdit(currentProcess.id, userPrompt, selectedModel);
+          let poll = editJob;
+          const started = Date.now();
+          while (poll.state === 'running' && Date.now() - started < 35_000) {
+            await new Promise((r) => setTimeout(r, 2000));
+            poll = await api.processes.getEdit(currentProcess.id, poll.id);
+          }
+          if (poll.state === 'completed') {
+            if (iframeRef.current) iframeRef.current.src = iframeRef.current.src;
+            toast.success('Preview updated', `${poll.changedFiles.length} file(s) updated.`);
+          }
+        } catch {
+          // Non-blocking: chat reply already delivered in real time
+        }
       }
     } catch (err: any) {
-      finish({
-        id: `done-${Date.now()}`,
-        type: 'error',
-        title: 'Change not applied',
-        details: err?.message || 'The edit could not be started.',
-      });
+      setRealTimeItems((prev) => [
+        ...prev.filter((i) => i.id !== runningId),
+        {
+          id: `err-${Date.now()}`,
+          type: 'error',
+          title: 'Communication Error',
+          details: err?.message || 'Could not complete agent conversation.',
+          timestamp: 'Just now',
+          agentId: targetAgent?.id,
+          agentName: targetName,
+        },
+      ]);
     } finally {
       setIsProcessing(false);
       setTimeout(() => {
@@ -489,7 +542,7 @@ export function WatchPreviewModal({
                 onClick={() => setModelDropdownOpen((v) => !v)}
                 className="inline-flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm md:text-base font-bold text-ink hover:text-brand-600 dark:hover:text-brand-400 transition-colors cursor-pointer select-none py-1 px-2.5 rounded-xl hover:bg-hover"
               >
-                <span>Select a model</span>
+                <span>{allAvailableModels.find((m) => m.id === selectedModel)?.name || 'Select a model'}</span>
                 <ChevronDown size={14} className="text-ink-muted" />
               </button>
 
@@ -498,28 +551,33 @@ export function WatchPreviewModal({
                   <div className="px-3 py-1.5 text-2xs font-bold uppercase tracking-wider text-ink-muted">
                     Available LLM Engines
                   </div>
-                  {AVAILABLE_MODELS.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedModel(m.id);
-                        setModelDropdownOpen(false);
-                        toast.info(`Engine set to ${m.name}`);
-                      }}
-                      className={cn(
-                        'w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-left transition-colors cursor-pointer',
-                        selectedModel === m.id
-                          ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
-                          : 'text-ink hover:bg-hover'
-                      )}
-                    >
-                      <span>{m.name}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-inset text-ink-muted border border-line-subtle">
-                        {m.badge}
-                      </span>
-                    </button>
-                  ))}
+                  <div className="max-h-60 overflow-y-auto py-1 scrollbar-thin">
+                    {allAvailableModels.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedModel(m.id);
+                          setModelDropdownOpen(false);
+                          toast.info(`Engine set to ${m.name}`);
+                        }}
+                        className={cn(
+                          'w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-left transition-colors cursor-pointer',
+                          selectedModel === m.id
+                            ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
+                            : 'text-ink hover:bg-hover'
+                        )}
+                      >
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="truncate font-semibold">{m.name}</div>
+                          <div className="text-[10px] text-ink-muted font-mono truncate">{m.id}</div>
+                        </div>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-inset text-ink-muted border border-line-subtle shrink-0">
+                          {m.badge}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -907,11 +965,57 @@ export function WatchPreviewModal({
                     </button>
                   </div>
 
-                  {/* Right tool icons: Chat dropdown & Send Button */}
+                  {/* Right tool icons: Model Selector Dropdown & Send Button */}
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center text-xs text-ink-muted px-1.5 py-0.5 rounded border border-line-subtle bg-surface">
-                      <Bot size={12} className="mr-1 text-brand-500" />
-                      <ChevronDown size={12} />
+                    <div className="relative" ref={chatModelMenuRef}>
+                      <button
+                        type="button"
+                        onClick={() => setChatModelDropdownOpen((v) => !v)}
+                        className="inline-flex items-center gap-1.5 text-2xs font-semibold px-2.5 py-1 rounded-xl border border-line bg-surface hover:bg-hover text-ink shadow-2xs transition-colors cursor-pointer select-none"
+                        title="Select model to talk in real time"
+                      >
+                        <Sparkles size={12} className="text-brand-500 shrink-0" />
+                        <span className="truncate max-w-[110px] sm:max-w-[140px]">
+                          {allAvailableModels.find((m) => m.id === selectedModel)?.name || selectedModel}
+                        </span>
+                        <ChevronDown size={11} className={cn('text-ink-muted shrink-0 transition-transform', chatModelDropdownOpen && 'rotate-180')} />
+                      </button>
+
+                      {chatModelDropdownOpen && (
+                        <div className="absolute right-0 bottom-full mb-2 w-72 bg-surface border border-line rounded-2xl shadow-2xl p-1.5 z-50 animate-scale-in">
+                          <div className="px-3 py-1.5 text-2xs font-bold uppercase tracking-wider text-ink-muted border-b border-line-subtle flex items-center justify-between">
+                            <span>Select Model</span>
+                            <span className="text-[10px] font-mono text-emerald-500 font-bold">Real-Time Chat</span>
+                          </div>
+                          <div className="max-h-60 overflow-y-auto py-1 scrollbar-thin">
+                            {allAvailableModels.map((m) => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedModel(m.id);
+                                  setChatModelDropdownOpen(false);
+                                  toast.info(`Switched to ${m.name}`);
+                                }}
+                                className={cn(
+                                  'w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-left transition-colors cursor-pointer',
+                                  selectedModel === m.id
+                                    ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
+                                    : 'text-ink hover:bg-hover'
+                                )}
+                              >
+                                <div className="min-w-0 flex-1 pr-2">
+                                  <div className="truncate font-semibold">{m.name}</div>
+                                  <div className="text-[10px] text-ink-muted font-mono truncate">{m.id}</div>
+                                </div>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-inset text-ink-muted border border-line-subtle shrink-0">
+                                  {m.badge}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <button

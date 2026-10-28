@@ -913,6 +913,18 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
   const [openaiLoading, setOpenaiLoading] = useState(false);
   const [openaiError, setOpenaiError] = useState<string | null>(null);
 
+  // xAI Grok
+  const [grokKey, setGrokKey] = useState('');
+  const [showGrokKey, setShowGrokKey] = useState(false);
+  const [grokModels, setGrokModels] = useState<LiveModelItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus:live_models_grok');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [grokLoading, setGrokLoading] = useState(false);
+  const [grokError, setGrokError] = useState<string | null>(null);
+
   // Groq: also the fallback for chat, code Q&A and agents when OpenCode's
   // free models hit their usage limit.
   const [groqKey, setGroqKey] = useState('');
@@ -947,7 +959,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
   const [activeProvider, setActiveProvider] = useState(() => localStorage.getItem('nexus:active_llm_provider') || 'local');
 
   // Filter & Search
-  const [activeFilter, setActiveFilter] = useState<'all' | 'opencode' | 'google' | 'anthropic' | 'openai' | 'groq' | 'local'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'opencode' | 'google' | 'anthropic' | 'openai' | 'grok' | 'groq' | 'local'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
@@ -1021,6 +1033,10 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
             fetchLiveProviderModels('anthropic');
           } else if (pName === 'openai' || pName === 'codex') {
             fetchLiveProviderModels('openai');
+          } else if (pName === 'grok' || pName === 'xai') {
+            fetchLiveProviderModels('grok');
+          } else if (pName === 'groq') {
+            fetchLiveProviderModels('groq');
           }
         }
       } catch {
@@ -1043,6 +1059,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
     if (provName === 'google') setGeminiLoading(true);
     if (provName === 'anthropic') setClaudeLoading(true);
     if (provName === 'openai') setOpenaiLoading(true);
+    if (provName === 'grok' || provName === 'xai') setGrokLoading(true);
     if (provName === 'groq') setGroqLoading(true);
 
     try {
@@ -1060,6 +1077,10 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
           setOpenaiModels(res.models);
           setOpenaiError(null);
           localStorage.setItem('nexus:live_models_openai', JSON.stringify(res.models));
+        } else if (provName === 'grok' || provName === 'xai') {
+          setGrokModels(res.models);
+          setGrokError(null);
+          localStorage.setItem('nexus:live_models_grok', JSON.stringify(res.models));
         } else if (provName === 'groq') {
           setGroqModels(res.models);
           setGroqError(null);
@@ -1071,6 +1092,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
         if (provName === 'google') setGeminiError(errMsg);
         if (provName === 'anthropic') setClaudeError(errMsg);
         if (provName === 'openai') setOpenaiError(errMsg);
+        if (provName === 'grok' || provName === 'xai') setGrokError(errMsg);
         if (provName === 'groq') setGroqError(errMsg);
         return res;
       }
@@ -1079,12 +1101,14 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
       if (provName === 'google') setGeminiError(msg);
       if (provName === 'anthropic') setClaudeError(msg);
       if (provName === 'openai') setOpenaiError(msg);
+      if (provName === 'grok' || provName === 'xai') setGrokError(msg);
       if (provName === 'groq') setGroqError(msg);
       return { ok: false, models: [], message: msg };
     } finally {
       if (provName === 'google') setGeminiLoading(false);
       if (provName === 'anthropic') setClaudeLoading(false);
       if (provName === 'openai') setOpenaiLoading(false);
+      if (provName === 'grok' || provName === 'xai') setGrokLoading(false);
       if (provName === 'groq') setGroqLoading(false);
     }
   };
@@ -1097,6 +1121,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
     if (provName === 'google') { setGeminiLoading(true); setGeminiError(null); }
     if (provName === 'anthropic') { setClaudeLoading(true); setClaudeError(null); }
     if (provName === 'openai') { setOpenaiLoading(true); setOpenaiError(null); }
+    if (provName === 'grok' || provName === 'xai') { setGrokLoading(true); setGrokError(null); }
     if (provName === 'groq') { setGroqLoading(true); setGroqError(null); }
 
     try {
@@ -1122,6 +1147,10 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
         setOpenaiModels(liveRes.models);
         setOpenaiKey('');
         localStorage.setItem('nexus:live_models_openai', JSON.stringify(liveRes.models));
+      } else if (provName === 'grok' || provName === 'xai') {
+        setGrokModels(liveRes.models);
+        setGrokKey('');
+        localStorage.setItem('nexus:live_models_grok', JSON.stringify(liveRes.models));
       } else if (provName === 'groq') {
         setGroqModels(liveRes.models);
         setGroqKey('');
@@ -1146,12 +1175,14 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
       if (provName === 'google') setGeminiError(msg);
       if (provName === 'anthropic') setClaudeError(msg);
       if (provName === 'openai') setOpenaiError(msg);
+      if (provName === 'grok' || provName === 'xai') setGrokError(msg);
       if (provName === 'groq') setGroqError(msg);
       setToastMessage({ type: 'error', text: msg });
     } finally {
       if (provName === 'google') setGeminiLoading(false);
       if (provName === 'anthropic') setClaudeLoading(false);
       if (provName === 'openai') setOpenaiLoading(false);
+      if (provName === 'grok' || provName === 'xai') setGrokLoading(false);
       if (provName === 'groq') setGroqLoading(false);
     }
   };
@@ -1179,6 +1210,10 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
       setOpenaiModels([]);
       setOpenaiError(null);
       localStorage.removeItem('nexus:live_models_openai');
+    } else if (provName === 'grok' || provName === 'xai') {
+      setGrokModels([]);
+      setGrokError(null);
+      localStorage.removeItem('nexus:live_models_grok');
     } else if (provName === 'groq') {
       setGroqModels([]);
       setGroqError(null);
@@ -1498,6 +1533,7 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
               { id: 'google', label: 'Google Gemini' },
               { id: 'anthropic', label: 'Anthropic Claude' },
               { id: 'openai', label: 'OpenAI & Codex' },
+              { id: 'grok', label: 'xAI Grok' },
               { id: 'groq', label: 'Groq' },
               { id: 'local', label: 'Local PC Hardware' },
             ] as const
@@ -2011,6 +2047,171 @@ function LlmProvidersTab({ isAdmin }: { isAdmin: boolean }) {
                         </div>
                         {isSelected && (
                           <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] uppercase font-bold text-emerald-600 shrink-0">
+                            Active Default
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-medium text-ink-muted line-clamp-1">{m.name}</div>
+                      {m.description && (
+                        <p className="text-[10px] text-ink-faint line-clamp-2 leading-relaxed">{m.description}</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* PROVIDER: xAI Grok — advanced reasoning & intelligence models */}
+      {(activeFilter === 'all' || activeFilter === 'grok') && (
+        <Card padding="md" className="border border-sky-500/20 bg-surface shadow-xs space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line-subtle pb-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs font-black text-sm">
+                𝕏
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-base text-ink">xAI Grok</h4>
+                  <Badge tone={isProviderConfigured('grok') || grokModels.length > 0 ? 'success' : 'neutral'} dot>
+                    {isProviderConfigured('grok') || grokModels.length > 0
+                      ? `Connected (${grokModels.length} Live Models)`
+                      : 'Not Configured'}
+                  </Badge>
+                </div>
+                <p className="text-2xs text-ink-muted">
+                  High-speed real-time reasoning and generative models (grok-2, grok-beta) by xAI
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <a
+                href="https://console.x.ai/"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-2xs font-bold text-sky-600 hover:text-sky-700"
+              >
+                <span>Get API Key</span>
+                <ExternalLink size={11} />
+              </a>
+              {(isProviderConfigured('grok') || grokModels.length > 0) && (
+                <>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    icon={RefreshCw}
+                    loading={grokLoading}
+                    onClick={() => fetchLiveProviderModels('grok')}
+                  >
+                    Refresh
+                  </Button>
+                  {isAdmin && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                      onClick={() => handleDisconnectProvider('grok')}
+                    >
+                      Disconnect
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {grokError && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-400">
+              <AlertCircle size={15} />
+              <span>{grokError}</span>
+            </div>
+          )}
+
+          {/* Connect API Key Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleConnectProvider('grok', grokKey);
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted mb-1.5">
+                {isProviderConfigured('grok') ? 'Update xAI Grok API Key' : 'Connect xAI Grok API Key'}
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showGrokKey ? 'text' : 'password'}
+                    value={grokKey}
+                    onChange={(e) => setGrokKey(e.target.value)}
+                    placeholder={isProviderConfigured('grok') ? '••••••••••••••••••••••••••••••••••••' : 'xai-...'}
+                    className="w-full rounded-xl border border-line bg-canvas px-3.5 py-2.5 font-mono text-xs text-ink placeholder:text-ink-faint shadow-2xs focus:border-sky-500 focus:outline-none pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGrokKey(!showGrokKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                  >
+                    {showGrokKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  loading={grokLoading}
+                  disabled={!grokKey.trim()}
+                >
+                  Connect & Fetch Live Models
+                </Button>
+              </div>
+            </div>
+          </form>
+
+          {/* Live Models Display */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-2xs font-bold uppercase tracking-wider text-ink-muted">
+                Live xAI Grok Models ({grokModels.length})
+              </label>
+              {grokModels.length > 0 && (
+                <span className="text-2xs font-semibold text-sky-600 dark:text-sky-400">
+                  Click any model card to set as Active Default
+                </span>
+              )}
+            </div>
+
+            {grokModels.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-line bg-canvas p-5 text-center text-xs text-ink-muted">
+                {grokLoading ? 'Fetching live models from xAI...' : 'No Grok models loaded. Connect your API key above to load live models.'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {filterList(grokModels).map((m) => {
+                  const isSelected = activeModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleSelectModel(m.id, 'grok')}
+                      className={cn(
+                        'flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-all shadow-2xs',
+                        isSelected
+                          ? 'border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300 ring-1 ring-sky-500/50'
+                          : 'border-line bg-canvas text-ink-muted hover:border-line-strong hover:text-ink',
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Bot size={14} className={isSelected ? 'text-sky-600 shrink-0' : 'text-ink-faint shrink-0'} />
+                          <span className="font-mono text-xs font-bold text-ink truncate">{m.id}</span>
+                        </div>
+                        {isSelected && (
+                          <span className="rounded bg-sky-500/20 px-1.5 py-0.2 text-[9px] uppercase font-bold text-sky-600 shrink-0">
                             Active Default
                           </span>
                         )}

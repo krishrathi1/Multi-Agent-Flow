@@ -580,11 +580,12 @@ router.post('/:id/auto-heal', async (req, res) => {
 router.post('/:id/edits', async (req, res) => {
   const id = paramId(req.params.id);
   const instruction = typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : '';
+  const model = typeof req.body?.model === 'string' ? req.body.model.trim() : undefined;
   if (!instruction || instruction.length > 4000) {
     return res.status(400).json({ error: 'Describe the change (up to 4,000 characters)' });
   }
   const emit = (event: string, payload: unknown) => req.app.get('io')?.to(`org:${req.organizationId}`).emit(event, payload);
-  const job = await runner.startWorkspaceEdit(id, req.organizationId!, instruction, emit);
+  const job = await runner.startWorkspaceEdit(id, req.organizationId!, instruction, emit, model);
   res.status(202).json(job);
 });
 

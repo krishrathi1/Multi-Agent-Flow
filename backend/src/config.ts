@@ -34,6 +34,8 @@ const DEFAULT_PROVIDER_MODEL_MAP: Record<string, string> = {
   google: 'gemini-2.5-flash',
   mistral: 'mistral-large-latest',
   groq: 'llama-3.3-70b-versatile',
+  grok: 'grok-2-latest',
+  xai: 'grok-2-latest',
   openrouter: 'anthropic/claude-3.7-sonnet',
 };
 

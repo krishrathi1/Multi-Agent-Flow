@@ -37,6 +37,14 @@ router.get('/available-models', async (req, res) => {
     if (pLower === 'mistral') return Boolean(process.env.PLATFORM_MISTRAL_API_KEY?.trim());
     if (pLower === 'groq') return Boolean(process.env.PLATFORM_GROQ_API_KEY?.trim());
     if (pLower === 'openrouter') return Boolean(process.env.PLATFORM_OPENROUTER_API_KEY?.trim());
+    if (pLower === 'grok' || pLower === 'xai') {
+      return Boolean(
+        process.env.PLATFORM_GROK_API_KEY?.trim() ||
+        process.env.GROK_API_KEY?.trim() ||
+        process.env.XAI_API_KEY?.trim() ||
+        process.env.PLATFORM_XAI_API_KEY?.trim()
+      );
+    }
     return false;
   };
 

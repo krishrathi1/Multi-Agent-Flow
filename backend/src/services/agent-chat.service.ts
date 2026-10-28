@@ -14,7 +14,7 @@ import { retrieveCodeContext } from './code-intelligence.service.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getOrganizationIntegrationToken } from './org.service.js';
-import { getGroqApiKey, groqChat } from './llm-provider.service.js';
+import { getGroqApiKey, groqChat, getGrokApiKey, grokChat } from './llm-provider.service.js';
 
 const HISTORY_LIMIT = 30;
 
@@ -24,6 +24,10 @@ const HISTORY_LIMIT = 30;
  * output = completion / output tokens price per 1M
  */
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  // Grok
+  'grok-2':                   { input: 2.00,  output: 10.00 },
+  'grok-beta':                { input: 5.00,  output: 15.00 },
+  'grok':                     { input: 2.00,  output: 10.00 },
   // Gemini
   'gemini-2.5-flash':         { input: 0.30,  output: 2.50  },
   'gemini-2.5-pro':           { input: 1.25,  output: 10.00 },
@@ -99,16 +103,41 @@ async function callChatLLM(params: {
   const preferredLower = preferred.toLowerCase();
 
   const isGoogle = preferredLower.startsWith('google/') || preferredLower.startsWith('gemini/') || (preferredLower.includes('gemini') && !preferredLower.startsWith('opencode/'));
+  const isGrok = preferredLower.startsWith('grok/') || preferredLower.startsWith('xai/') || preferredLower.includes('grok');
+  const isGroq = preferredLower.startsWith('groq/') || preferredLower.includes('groq');
   const isNvidia = preferredLower.startsWith('nvidia/');
   const isOpenCode = preferredLower.startsWith('opencode/');
   const isOpenAI = preferredLower.startsWith('openai/') || (!preferredLower.includes('/') && (preferredLower.startsWith('gpt-') || preferredLower.startsWith('o1') || preferredLower.startsWith('o3')));
   const isAnthropic = preferredLower.startsWith('anthropic/') || (!preferredLower.includes('/') && preferredLower.startsWith('claude-'));
   const isLocal = preferredLower.startsWith('local/') || preferredLower.startsWith('ollama/');
 
-  // 0. Groq, when the org saved a key and no other provider was asked for.
+  // 0a. xAI Grok direct execution when requested or when key is available
+  if (isGrok || !preferred) {
+    const grokKey = await getGrokApiKey(params.organizationId);
+    if (grokKey) {
+      const g = await grokChat({
+        apiKey: grokKey,
+        system: params.systemPrompt,
+        prompt: params.prompt,
+        model: isGrok ? preferred : undefined,
+      });
+      if (g) {
+        return {
+          text: g.text,
+          model: g.model,
+          inputTokens: g.inputTokens,
+          outputTokens: g.outputTokens,
+          costUsd: calcCost(g.model, g.inputTokens, g.outputTokens),
+        };
+      }
+      unavailableReason = 'xAI Grok did not answer';
+    }
+  }
+
+  // 0b. Groq, when the org saved a key and no other provider was asked for.
   // A direct call answers in about a second; OpenCode's free models are
   // also the ones that hit usage limits.
-  if (!preferred || /^(groq|opencode)\//i.test(preferred)) {
+  if (isGroq || !preferred || /^(groq|opencode)\//i.test(preferred)) {
     const groqKey = await getGroqApiKey(params.organizationId);
     if (groqKey) {
       const g = await groqChat({

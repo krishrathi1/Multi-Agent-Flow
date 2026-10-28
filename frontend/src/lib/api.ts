@@ -362,8 +362,8 @@ export const api = {
         message: string;
       }>(`/processes/${id}/auto-heal`, { method: 'POST' }),
     /** Starts a live edit from the Watch Preview chat; poll getEdit until it finishes. */
-    startEdit: (id: string, instruction: string) =>
-      request<PreviewEdit>(`/processes/${id}/edits`, { method: 'POST', body: JSON.stringify({ instruction }) }),
+    startEdit: (id: string, instruction: string, model?: string) =>
+      request<PreviewEdit>(`/processes/${id}/edits`, { method: 'POST', body: JSON.stringify({ instruction, model }) }),
     getEdit: (id: string, jobId: string) => request<PreviewEdit>(`/processes/${id}/edits/${jobId}`),
     askAiFix: (id: string, instruction?: string) =>
       request<{

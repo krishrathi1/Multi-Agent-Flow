@@ -14,7 +14,86 @@ const PLATFORM_KEY_ENV: Record<string, string> = {
   mistral: 'PLATFORM_MISTRAL_API_KEY',
   groq: 'PLATFORM_GROQ_API_KEY',
   openrouter: 'PLATFORM_OPENROUTER_API_KEY',
+  grok: 'PLATFORM_GROK_API_KEY',
+  xai: 'PLATFORM_XAI_API_KEY',
 };
+
+// ─── xAI Grok ──────────────────────────────────────────────────────────────
+/** Default Grok model; override with GROK_MODEL. */
+export const grokModel = () => process.env.GROK_MODEL?.trim() || 'grok-2-latest';
+/** Fallback models for xAI Grok. */
+const GROK_FALLBACKS = ['grok-2', 'grok-beta', 'grok-2-1212'];
+
+/** The org's Grok key from Settings, else the platform's, else null. */
+export async function getGrokApiKey(organizationId: string): Promise<string | null> {
+  try {
+    const row = await prisma.llmProvider.findFirst({
+      where: {
+        organizationId,
+        provider: { in: ['grok', 'xai'], mode: 'insensitive' },
+        isActive: true,
+      },
+    });
+    if (row?.apiKey) return decryptField(row.apiKey);
+  } catch { /* fall through to the platform key */ }
+  return (
+    process.env.PLATFORM_GROK_API_KEY?.trim() ||
+    process.env.GROK_API_KEY?.trim() ||
+    process.env.XAI_API_KEY?.trim() ||
+    process.env.PLATFORM_XAI_API_KEY?.trim() ||
+    null
+  );
+}
+
+/**
+ * One chat completion from xAI Grok (OpenAI-compatible).
+ */
+export async function grokChat(params: {
+  apiKey: string;
+  system: string;
+  prompt: string;
+  model?: string;
+  maxTokens?: number;
+  timeoutMs?: number;
+}): Promise<{ text: string; model: string; inputTokens: number; outputTokens: number } | null> {
+  const first = (params.model || grokModel()).replace(/^(grok|xai)\//i, '');
+  for (const model of [first, ...GROK_FALLBACKS.filter((m) => m !== first)]) {
+    try {
+      const res = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${params.apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: params.system },
+            { role: 'user', content: params.prompt },
+          ],
+          temperature: 0.3,
+          max_tokens: params.maxTokens ?? 2048,
+        }),
+        signal: AbortSignal.timeout(params.timeoutMs ?? 30_000),
+      });
+      const data = (await res.json().catch(() => null)) as any;
+      const text = data?.choices?.[0]?.message?.content;
+      if (res.ok && typeof text === 'string' && text.trim()) {
+        return {
+          text: text.trim(),
+          model: `grok/${model}`,
+          inputTokens: data?.usage?.prompt_tokens ?? 0,
+          outputTokens: data?.usage?.completion_tokens ?? 0,
+        };
+      }
+      logger.warn({ model, status: res.status, error: data?.error }, 'xAI Grok request rejected; trying next model');
+      if (res.status === 401 || (res.status === 400 && data?.code === 'invalid-argument')) return null;
+    } catch (err) {
+      logger.warn({ err, model }, 'xAI Grok request failed; trying next model');
+    }
+  }
+  return null;
+}
 
 // ─── Groq ──────────────────────────────────────────────────────────────────
 // A key saved under Settings → AI Models & LLM is used for chat, code Q&A and,
@@ -22,9 +101,9 @@ const PLATFORM_KEY_ENV: Record<string, string> = {
 // working when OpenCode's free models hit their usage limit.
 
 /** Default Groq model; override with GROQ_MODEL. */
-export const groqModel = () => process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-120b';
+export const groqModel = () => process.env.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile';
 /** Tried in order when the preferred model is rejected (limits, size). */
-const GROQ_FALLBACKS = ['openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
+const GROQ_FALLBACKS = ['llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
 
 /** The org's Groq key from Settings, else the platform's, else null. */
 export async function getGroqApiKey(organizationId: string): Promise<string | null> {
@@ -113,6 +192,8 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
 
   // xAI Grok Models
   'grok-2':            { input: 2.0 / 1_000_000,  output: 10.0 / 1_000_000 },
+  'grok-beta':         { input: 5.0 / 1_000_000,  output: 15.0 / 1_000_000 },
+  'grok':              { input: 2.0 / 1_000_000,  output: 10.0 / 1_000_000 },
 
   'default':           { input: 0.5 / 1_000_000,  output: 1.5 / 1_000_000 },
 };
@@ -307,12 +388,19 @@ export async function testProvider(
     });
 
     if (res.ok) return { ok: true, message: 'The key was accepted.', status: res.status };
-    if (res.status === 401 || res.status === 403) {
-      return { ok: false, message: 'The provider rejected this key.', status: res.status };
+
+    let detail = '';
+    try {
+      const errBody = (await res.json()) as any;
+      detail = errBody?.error?.message || errBody?.error || errBody?.message || '';
+    } catch { /* empty */ }
+
+    if (res.status === 401 || res.status === 403 || res.status === 400) {
+      return { ok: false, message: detail || 'The provider rejected this key.', status: res.status };
     }
     return {
       ok: false,
-      message: `The provider answered ${res.status}.`,
+      message: detail || `The provider answered ${res.status}.`,
       status: res.status,
     };
   } catch (err) {
@@ -951,15 +1039,28 @@ export async function fetchLiveModels(
         timeoutMs: 10_000,
       });
       if (!res.ok) {
+        let detail = '';
+        try {
+          const errBody = (await res.json()) as any;
+          detail = errBody?.error?.message || errBody?.error || errBody?.message || '';
+        } catch { /* empty */ }
         return {
           ok: false,
           provider: prov,
           models: [],
-          message: `${prov.toUpperCase()} returned status ${res.status}`,
+          message: detail || `${prov.toUpperCase()} returned status ${res.status}`,
         };
       }
       const data = (await res.json()) as { data?: Array<{ id: string; name?: string }> };
-      const rawList = Array.isArray(data.data) ? data.data : [];
+      let rawList = Array.isArray(data.data) ? data.data : [];
+      if (rawList.length === 0 && (prov === 'grok' || prov === 'xai')) {
+        rawList = [
+          { id: 'grok-2-latest', name: 'Grok 2 Latest' },
+          { id: 'grok-2', name: 'Grok 2' },
+          { id: 'grok-beta', name: 'Grok Beta' },
+          { id: 'grok-2-vision-128k', name: 'Grok 2 Vision (128k)' },
+        ];
+      }
       const models: LiveProviderModel[] = rawList.map((m) => ({
         id: m.id,
         name: m.name || m.id,
