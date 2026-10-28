@@ -464,6 +464,12 @@ export function WatchPreviewModal({
           const motherRes = await api.chat.sendToMother(userPrompt, currentProcess.id, selectedModel);
           replyText = motherRes.result || 'Production Orchestrator processed request.';
           replyModel = (motherRes as any)?.model || chosenModelName;
+
+          // Re-fetch process so added/removed agents update live
+          try {
+            const updatedProc = await api.processes.get(currentProcess.id);
+            if (updatedProc) setCurrentProcess(updatedProc);
+          } catch { /* ignore */ }
         }
       } catch (chatErr: any) {
         console.warn('Real-time chat error:', chatErr);

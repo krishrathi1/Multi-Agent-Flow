@@ -92,11 +92,23 @@ export function Chat() {
         setAgents((prev) => prev.map((a) => (a.id === data.id ? { ...a, status: next } : a)));
       }
     };
+    const refreshFleet = () => {
+      fetchProcesses();
+      api.agents.list().then((data) => setAgents(data)).catch(() => {});
+    };
+
     socket.on('agent:updated', handleUpdated);
     socket.on('agent:status', handleUpdated);
+    socket.on('agent:created', refreshFleet);
+    socket.on('agent:deleted', refreshFleet);
+    socket.on('process:updated', refreshFleet);
+
     return () => {
       socket.off('agent:updated', handleUpdated);
       socket.off('agent:status', handleUpdated);
+      socket.off('agent:created', refreshFleet);
+      socket.off('agent:deleted', refreshFleet);
+      socket.off('process:updated', refreshFleet);
     };
   }, [fetchProcesses]);
 
@@ -161,6 +173,9 @@ export function Chat() {
           timestamp: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
+        // Refresh fleet and process state immediately if an agent was added or removed
+        fetchProcesses();
+        api.agents.list().then((data) => setAgents(data)).catch(() => {});
       } else if (selectedTarget.agentId) {
         const response = await api.chat.send(selectedTarget.agentId, text, chatModel || undefined);
         const assistantMessage: ChatMessage = {

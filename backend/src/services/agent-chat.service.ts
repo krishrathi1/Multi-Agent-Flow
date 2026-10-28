@@ -471,6 +471,134 @@ function buildSystemPrompt(agent: {
   return parts.join('\n');
 }
 
+function inferAgentDetails(
+  userPrompt: string,
+  existingAgents: Array<{ displayName: string; processRole?: string | null }>,
+) {
+  const lower = userPrompt.toLowerCase();
+
+  // Explicit custom name e.g. "named Sentinel" or "called Bob"
+  const nameMatch = userPrompt.match(/\b(named|called)\s+([A-Z][a-zA-Z0-9_-]+)/i);
+  const customName = nameMatch ? nameMatch[2].trim() : null;
+
+  if (/\b(qa|test|tester|testing|spec|verify|inspector)\b/i.test(lower)) {
+    return {
+      displayName: customName || 'QA Inspector',
+      processRole: 'QA & Test Automation Specialist',
+      avatar: '🧪',
+      description: 'Specialized quality assurance, unit testing, and test automation agent.',
+    };
+  }
+  if (/\b(security|audit|pentest|vulnerability|owasp|warden|safety)\b/i.test(lower)) {
+    return {
+      displayName: customName || 'Security Warden',
+      processRole: 'Security Vulnerability & Audit Specialist',
+      avatar: '🛡️',
+      description: 'Specialized security auditor, OWASP risk scanner, and vulnerability patcher.',
+    };
+  }
+  if (/\b(ui|ux|frontend|design|designer|css|tailwind|styling|interface|craftsman)\b/i.test(lower)) {
+    return {
+      displayName: customName || 'UI Craftsman',
+      processRole: 'Frontend UI/UX Specialist',
+      avatar: '🎨',
+      description: 'Specialized user interface designer, component architect, and styling specialist.',
+    };
+  }
+  if (/\b(backend|api|server|database|db|sql|route|data)\b/i.test(lower)) {
+    return {
+      displayName: customName || 'API Architect',
+      processRole: 'Backend API & Data Architect',
+      avatar: '⚡',
+      description: 'Specialized backend engineer, RESTful API and database schema architect.',
+    };
+  }
+  if (/\b(devops|deploy|vercel|cloud|docker|healer|doctor|fix\s+build)\b/i.test(lower)) {
+    return {
+      displayName: customName || 'DevOps Doctor',
+      processRole: 'DevOps & Deployment Healer',
+      avatar: '🩺',
+      description: 'Specialized DevOps engineer, cloud pipeline and deployment auto-healer.',
+    };
+  }
+  if (/\b(doc|docs|documentation|readme|writer|author)\b/i.test(lower)) {
+    return {
+      displayName: customName || 'Docs Author',
+      processRole: 'Technical Documentation Specialist',
+      avatar: '📝',
+      description: 'Specialized technical documentation, API guides, and README author.',
+    };
+  }
+  if (/\b(refactor|speed|optimize|performance|cleanup)\b/i.test(lower)) {
+    return {
+      displayName: customName || 'Refactor Specialist',
+      processRole: 'Performance & Code Refactoring Specialist',
+      avatar: '🚀',
+      description: 'Specialized code optimizer, performance tuner, and architecture refactorer.',
+    };
+  }
+
+  // Generic agent addition e.g. "add the agent"
+  const count = existingAgents.length + 1;
+  return {
+    displayName: customName || `Fleet Specialist ${count}`,
+    processRole: 'Autonomous Fleet Specialist',
+    avatar: '🤖',
+    description: 'Specialized autonomous fleet agent responsible for execution deliverables.',
+  };
+}
+
+function findAgentToRemove(userPrompt: string, agents: Array<any>) {
+  if (!agents || agents.length === 0) return null;
+  const lower = userPrompt.toLowerCase();
+
+  // 1. Check exact or partial display name / name in prompt
+  for (const a of agents) {
+    if (a.displayName && lower.includes(a.displayName.toLowerCase())) {
+      return a;
+    }
+    if (a.name && lower.includes(a.name.toLowerCase())) {
+      return a;
+    }
+  }
+
+  // 2. Check role / archetype keywords
+  if (/\b(qa|tester|test)\b/i.test(lower)) {
+    const match = agents.find((a) => (a.processRole || '').toLowerCase().includes('qa') || (a.processRole || '').toLowerCase().includes('test'));
+    if (match) return match;
+  }
+  if (/\b(security|warden|audit)\b/i.test(lower)) {
+    const match = agents.find((a) => (a.processRole || '').toLowerCase().includes('security') || (a.processRole || '').toLowerCase().includes('warden'));
+    if (match) return match;
+  }
+  if (/\b(ui|ux|frontend|design|craftsman)\b/i.test(lower)) {
+    const match = agents.find((a) => (a.processRole || '').toLowerCase().includes('ui') || (a.processRole || '').toLowerCase().includes('frontend') || (a.processRole || '').toLowerCase().includes('craftsman'));
+    if (match) return match;
+  }
+  if (/\b(devops|doctor|healer)\b/i.test(lower)) {
+    const match = agents.find((a) => (a.processRole || '').toLowerCase().includes('devops') || (a.processRole || '').toLowerCase().includes('healer') || (a.processRole || '').toLowerCase().includes('doctor'));
+    if (match) return match;
+  }
+  if (/\b(backend|api|architect)\b/i.test(lower)) {
+    const match = agents.find((a) => (a.processRole || '').toLowerCase().includes('api') || (a.processRole || '').toLowerCase().includes('backend'));
+    if (match) return match;
+  }
+  if (/\b(doc|docs|writer|author)\b/i.test(lower)) {
+    const match = agents.find((a) => (a.processRole || '').toLowerCase().includes('doc') || (a.processRole || '').toLowerCase().includes('author'));
+    if (match) return match;
+  }
+
+  // 3. Fallback: User said "remove the agent" without naming one.
+  // Pick the newest agent (highest processStage or latest createdAt)
+  const sorted = [...agents].sort((a, b) => {
+    const stageDiff = (b.processStage ?? 0) - (a.processStage ?? 0);
+    if (stageDiff !== 0) return stageDiff;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  return sorted[0];
+}
+
 /**
  * Runs Mother Chat Turn with omniscient production context and rate-limit local fallback.
  */
@@ -479,8 +607,182 @@ export async function chatWithMother(
   message: string,
   processId?: string,
   requestedModel?: string,
+  emit?: (event: string, payload: unknown) => void,
 ): Promise<{ result: string; model: string; sessionKey: string }> {
   const { messages: history } = await getMotherChatHistory(organizationId, processId);
+
+  // Intent parsing with typo tolerance (aganet, agant, ajent) and multi-lingual support
+  const isRemoveAgentIntent =
+    /\b(remove|delete|kill|drop|discard|dismiss|terminate|hata|hatao|nikal|nikalo)\s+(the\s+|a\s+|an\s+)?([a-z0-9_\-\s]+)?(agent|aganet|agant|ajent|agents)\b/i.test(message) ||
+    /\b(agent|aganet|agant|ajent|agents)\s+(remove|delete|kill|drop|hata|hatao|nikal|nikalo|chhor|chhoro)\b/i.test(message) ||
+    /\b(remove|delete|hatao|hata)\s+([a-z0-9_\-\s]+)\s+(from\s+fleet|from\s+process|ko)\b/i.test(message);
+
+  const isAddAgentIntent =
+    !isRemoveAgentIntent && (
+      /\b(add|create|make|spawn|recruit|provision|bna|bnao)\s+(a\s+|an\s+|the\s+)?([a-z0-9_\-\s]+)?(agent|aganet|agant|ajent|agents)\b/i.test(message) ||
+      /\b(agent|aganet|agant|ajent|agents)\s+(add|create|make|spawn|recruit|bna|bnao|lao|chahiye)\b/i.test(message) ||
+      /\b(naya|new|another)\s+(agent|aganet|agant|ajent)\b/i.test(message) ||
+      /\b(add|create)\s+([a-z0-9_\-]+)\s+(agent|aganet|agant|ajent)\b/i.test(message)
+    );
+
+  const isFixOrDeployIntent =
+    !isAddAgentIntent && !isRemoveAgentIntent &&
+    /^(please\s+)?(auto-heal|fix this|fix the build|repair workspace|heal now|deploy now)\b/i.test(message.trim());
+
+  const isAgentStatusIntent =
+    /\bwhat('s|\s+is)?\s+(the\s+|each\s+|any\s+|our\s+|my\s+)?(agent|aganet|agant|ajent|agents)\s+(doing|working\s+on|up\s+to|status)\b/i.test(message) ||
+    /\bwhat\s+are\s+(the\s+|all\s+|our\s+|my\s+)?(agents|aganet|agant|ajent)\s+(doing|working\s+on|up\s+to)\b/i.test(message) ||
+    /\bwhat\s+(agent|aganet|agant|ajent)\s+is\s+doing\b/i.test(message) ||
+    /\b(agent|aganet|agant|ajent|agents)\s+(kya\s+kr|kya\s+kar|status|activity)\b/i.test(message) ||
+    /\b(kya\s+kar\s+rahe\s+hain|kya\s+kr\s+rhe\s+hai|kya\s+kar\s+raha\s+hai|kya\s+kr\s+rha\s+h)\b/i.test(message) ||
+    /\bshow\s+(agent|agents)\s+(status|activity|work)\b/i.test(message);
+
+  let autoActionReport = '';
+
+  // ─── ACTION 1: ADD AGENT DIRECTIVE ───────────────────────────────────────
+  if (isAddAgentIntent) {
+    try {
+      let targetProc = processId
+        ? await prisma.process.findFirst({
+            where: { id: processId, organizationId },
+            include: { agents: { orderBy: { processStage: 'asc' } } },
+          })
+        : null;
+
+      if (!targetProc) {
+        targetProc = await prisma.process.findFirst({
+          where: { organizationId },
+          orderBy: { createdAt: 'desc' },
+          include: { agents: { orderBy: { processStage: 'asc' } } },
+        });
+      }
+
+      const existingAgents = targetProc?.agents || [];
+      const inferred = inferAgentDetails(message, existingAgents);
+      const nextStage = (existingAgents[existingAgents.length - 1]?.processStage || existingAgents.length) + 1;
+      const rawName = `${inferred.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36).slice(-4)}`;
+
+      const createdAgent = await prisma.agent.create({
+        data: {
+          organizationId,
+          name: rawName,
+          displayName: inferred.displayName,
+          description: inferred.description,
+          avatar: inferred.avatar,
+          processId: targetProc?.id || null,
+          processRole: inferred.processRole,
+          processStage: nextStage,
+          status: 'IDLE',
+          currentTask: 'Ready for assignment',
+          enabled: true,
+        },
+      });
+
+      // Log activity
+      await prisma.activity.create({
+        data: {
+          organizationId,
+          agentId: createdAgent.id,
+          processId: targetProc?.id || null,
+          type: ActivityType.SYSTEM,
+          message: `Mother Chat deployed specialist agent "${createdAgent.displayName}" (${createdAgent.avatar} Stage ${createdAgent.processStage}: ${createdAgent.processRole}) into ${targetProc ? `"${targetProc.name}"` : 'the fleet'}.`,
+        },
+      });
+
+      emit?.('agent:created', createdAgent);
+      emit?.('process:updated', { id: targetProc?.id });
+
+      autoActionReport += `\n- Added specialist agent "${createdAgent.displayName}" (${createdAgent.avatar} Stage ${createdAgent.processStage}: ${createdAgent.processRole}) to ${targetProc ? `production block "${targetProc.name}"` : 'the fleet'}.`;
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to add agent via Mother Chat');
+      autoActionReport += `\n- Failed to add agent: ${err.message}`;
+    }
+  }
+
+  // ─── ACTION 2: REMOVE AGENT DIRECTIVE ────────────────────────────────────
+  if (isRemoveAgentIntent) {
+    try {
+      let targetProc = processId
+        ? await prisma.process.findFirst({
+            where: { id: processId, organizationId },
+            include: { agents: { orderBy: { processStage: 'desc' } } },
+          })
+        : null;
+
+      if (!targetProc) {
+        targetProc = await prisma.process.findFirst({
+          where: { organizationId },
+          orderBy: { createdAt: 'desc' },
+          include: { agents: { orderBy: { processStage: 'desc' } } },
+        });
+      }
+
+      const candidateAgents = targetProc?.agents || (await prisma.agent.findMany({ where: { organizationId } }));
+      const targetAgent = findAgentToRemove(message, candidateAgents);
+
+      if (targetAgent) {
+        const agentId = targetAgent.id;
+
+        // Clean up relations that lack Cascade deletion
+        await prisma.message.deleteMany({ where: { OR: [{ senderId: agentId }, { receiverId: agentId }] } }).catch(() => {});
+        await prisma.metricSnapshot.deleteMany({ where: { agentId } }).catch(() => {});
+        await prisma.tokenUsage.deleteMany({ where: { agentId } }).catch(() => {});
+        await prisma.command.deleteMany({ where: { agentId } }).catch(() => {});
+        await prisma.approval.deleteMany({ where: { agentId } }).catch(() => {});
+        await prisma.activity.deleteMany({ where: { agentId } }).catch(() => {});
+        await prisma.task.updateMany({ where: { agentId }, data: { agentId: null } }).catch(() => {});
+
+        await prisma.agent.delete({ where: { id: agentId } });
+
+        emit?.('agent:deleted', { id: agentId });
+        emit?.('process:updated', { id: targetProc?.id });
+
+        autoActionReport += `\n- Removed agent "${targetAgent.displayName}" (${targetAgent.avatar || '🤖'} Stage ${targetAgent.processStage ?? 1}: ${targetAgent.processRole || 'Specialist'}) from ${targetProc ? `"${targetProc.name}"` : 'the fleet'}.`;
+      } else {
+        autoActionReport += `\n- No matching agent found in the fleet to remove.`;
+      }
+    } catch (err: any) {
+      logger.error({ err }, 'Failed to remove agent via Mother Chat');
+      autoActionReport += `\n- Failed to remove agent: ${err.message}`;
+    }
+  }
+
+  // ─── ACTION 3: AUTO-HEAL OR DEPLOY DIRECTIVE ─────────────────────────────
+  if (isFixOrDeployIntent) {
+    try {
+      let targetProcId = processId;
+      if (!targetProcId) {
+        const latestProc = await prisma.process.findFirst({
+          where: { organizationId },
+          orderBy: { createdAt: 'desc' },
+        });
+        targetProcId = latestProc?.id;
+      }
+
+      if (targetProcId) {
+        const fixRes = await askAiAndSpawnFixerAgent({
+          processId: targetProcId,
+          organizationId,
+          userInstruction: message,
+        });
+
+        const lines: string[] = [];
+        if (fixRes.agentSpawned) {
+          lines.push(`- Added specialist agent "${fixRes.agentSpawned.displayName}" (Stage ${fixRes.agentSpawned.processStage}: ${fixRes.agentSpawned.processRole}).`);
+        } else if (fixRes.diagnosis) {
+          lines.push(`- Diagnosis: ${fixRes.diagnosis}`);
+        }
+        lines.push(fixRes.fixedFiles.length > 0
+          ? `- Patched ${fixRes.fixedFiles.length} workspace file(s): ${fixRes.fixedFiles.join(', ')}.`
+          : '- No workspace files needed changes.');
+        if (fixRes.pushResult?.repoUrl) lines.push(`- Pushed a commit to GitHub: ${fixRes.pushResult.repoUrl}`);
+        if (fixRes.deployResult?.previewUrl) lines.push(`- Started a Vercel deployment: ${fixRes.deployResult.previewUrl}`);
+        autoActionReport += `\n${lines.join('\n')}`;
+      }
+    } catch (healErr: any) {
+      logger.warn({ healErr: healErr.message }, 'Mother Chat auto-heal/spawn action warning');
+    }
+  }
 
   // Find an anchor agent in the org for activity foreign key
   const anchorAgent = await prisma.agent.findFirst({
@@ -494,12 +796,16 @@ export async function chatWithMother(
   let preferredModel: string | undefined = requestedModel?.trim() || undefined;
   let coworkData: any = undefined;
   let activeProcessId: string | null = null;
+  let agentWorkOverview = '';
+
+  const minutes = (from: Date, to?: Date | null) =>
+    Math.max(0, Math.round(((to ?? new Date()).getTime() - from.getTime()) / 60000));
 
   if (processId) {
     const proc = await prisma.process.findFirst({
       where: { id: processId, organizationId },
       include: {
-        agents: true,
+        agents: { orderBy: { processStage: 'asc' } },
         tasks: {
           take: 10,
           orderBy: { updatedAt: 'desc' },
@@ -520,10 +826,6 @@ export async function chatWithMother(
 
       const files = await listWorkspaceFiles(processId);
       const latestRun = proc.runs[0];
-      // A running step has no summary yet; labelling it "Completed" made the
-      // model tell operators nobody was working while stage 1 was mid-build.
-      const minutes = (from: Date, to?: Date | null) =>
-        Math.max(0, Math.round(((to ?? new Date()).getTime() - from.getTime()) / 60000));
       const steps = [...(latestRun?.steps ?? [])].sort((a, b) => a.stage - b.stage || a.startedAt.getTime() - b.startedAt.getTime());
       const latestStepsSummary = steps.map((s) => {
         const who = `- ${s.agentName} (Stage ${s.stage})`;
@@ -535,8 +837,7 @@ export async function chatWithMother(
           default: return `${who}: ${s.state.toLowerCase().replace(/_/g, ' ')}`;
         }
       });
-      // A step row is only written when the agent finishes, so the agents of
-      // the stage in progress have none yet; the run records which stage that is.
+
       const stepAgentIds = new Set(steps.map((s) => s.agentId));
       const workingNow = steps.filter((s) => s.state === 'RUNNING').map((s) => `${s.agentName} (Stage ${s.stage})`);
       const inProgress = latestRun?.state === 'RUNNING' ? latestRun.currentStage : null;
@@ -549,6 +850,36 @@ export async function chatWithMother(
           latestStepsSummary.push(`- ${a.displayName} (Stage ${a.processStage ?? '?'}): not started yet`);
         }
       }
+
+      // Compile detailed live status for every agent
+      const agentStatusLines = await Promise.all(
+        proc.agents.map(async (a) => {
+          const step = steps.find((s) => s.agentId === a.id);
+          let workDetail = '';
+          if (step) {
+            if (step.state === 'RUNNING') {
+              const mins = minutes(step.startedAt);
+              workDetail = `Working now on Stage ${step.stage} (${mins} min elapsed)`;
+            } else if (step.state === 'COMPLETED') {
+              workDetail = `Completed Stage ${step.stage}${step.summary ? `: ${step.summary.slice(0, 180)}` : ''}`;
+            } else if (step.state === 'FAILED') {
+              workDetail = `Failed in Stage ${step.stage}: ${(step.error || 'error').slice(0, 160)}`;
+            } else {
+              workDetail = `Stage ${step.stage}: ${step.state.toLowerCase()}`;
+            }
+          } else if (a.currentTask) {
+            workDetail = a.currentTask;
+          } else {
+            const lastAct = await prisma.activity.findFirst({
+              where: { agentId: a.id, organizationId },
+              orderBy: { createdAt: 'desc' },
+            });
+            workDetail = lastAct ? lastAct.message.slice(0, 160) : (a.status === 'RUNNING' ? 'Executing assigned deliverables' : 'Ready for stage assignment');
+          }
+          return `- ${a.avatar || '🤖'} **${a.displayName}** (Stage ${a.processStage ?? 1}: ${a.processRole || 'Specialist'}) — **${a.status}**: ${workDetail}`;
+        })
+      );
+      agentWorkOverview = agentStatusLines.join('\n');
 
       coworkData = {
         processName: proc.name,
@@ -563,6 +894,7 @@ export async function chatWithMother(
         files: files.map((f) => f.path),
         tasks: proc.tasks.map((t) => ({ title: t.title, status: t.status })),
         latestSteps: latestStepsSummary,
+        agentWorkOverview,
       };
 
       // Gather live cloud deployment telemetry
@@ -575,9 +907,6 @@ export async function chatWithMother(
         }
       } catch { /* ignore */ }
 
-      // A re-run starts with no finished steps, so without the previous run
-      // the model said the chart "isn't implemented yet" while the files from
-      // the last run were sitting in the workspace.
       const previousRun = proc.runs.find((r) => r.id !== latestRun?.id && (r.state === 'COMPLETED' || r.state === 'FAILED'));
       const previousSummary = previousRun
         ? `Previous Run: ${previousRun.state.toLowerCase()}, finished ${minutes(previousRun.finishedAt ?? previousRun.startedAt)} min ago\n` +
@@ -586,8 +915,6 @@ export async function chatWithMother(
             .join('\n')
         : 'Previous Run: none';
 
-      // Agents leave a notes file at the end of each stage; short excerpts let
-      // the model answer "what did QA find?" from what was actually written.
       const notes: string[] = [];
       for (const f of files.filter((x) => /-output\.md$/.test(x.path)).slice(0, 4)) {
         try {
@@ -596,8 +923,6 @@ export async function chatWithMother(
         } catch { /* unreadable */ }
       }
 
-      // File names alone left code questions ("how does the timer avoid
-      // drift?") unanswerable; pull the most relevant excerpts for this one.
       let codeExcerpts = '';
       try {
         const hits = await retrieveCodeContext(organizationId, message, processId, { maxFiles: 3, contextLines: 25, wholeTopFileChars: 16000 });
@@ -625,12 +950,28 @@ ${codeExcerpts || 'None matched'}
   } else {
     const processes = await prisma.process.findMany({
       where: { organizationId },
-      include: { agents: true },
+      include: { agents: { orderBy: { processStage: 'asc' } } },
     });
     const allAgents = await prisma.agent.findMany({
       where: { organizationId },
-      select: { displayName: true, processRole: true, processStage: true, status: true },
+      select: { id: true, displayName: true, processRole: true, processStage: true, status: true, avatar: true, currentTask: true },
+      orderBy: { createdAt: 'asc' },
     });
+
+    const agentStatusLines = await Promise.all(
+      allAgents.map(async (a) => {
+        let work = a.currentTask;
+        if (!work) {
+          const act = await prisma.activity.findFirst({
+            where: { agentId: a.id, organizationId },
+            orderBy: { createdAt: 'desc' },
+          });
+          work = act ? act.message.slice(0, 160) : 'Active and standing by';
+        }
+        return `- ${a.avatar || '🤖'} **${a.displayName}** (Stage ${a.processStage ?? 1}: ${a.processRole || 'Specialist'}) — **${a.status}**: ${work}`;
+      })
+    );
+    agentWorkOverview = agentStatusLines.join('\n');
 
     coworkData = {
       processName: 'Fleet Command',
@@ -643,6 +984,7 @@ ${codeExcerpts || 'None matched'}
         status: a.status,
       })),
       files: [],
+      agentWorkOverview,
     };
 
     processContext = `
@@ -653,72 +995,27 @@ ${allAgents.map((a) => `- ${a.displayName} (${a.processRole || 'Agent'}, Status:
 `;
   }
 
-  const isAgentBuildIntent =
-    /^(please\s+)?(make|create|build|add|spawn|bna|bnao)\s+(a\s+|an\s+)?(new\s+)?agent\b/i.test(message) ||
-    /^(please\s+)?(agent\s+(bna|add|create|make))\b/i.test(message);
-
-  const isFixOrDeployIntent =
-    /^(please\s+)?(auto-heal|fix this|fix the build|repair workspace|heal now|deploy now)\b/i.test(message.trim());
-
-  let autoHealReport = '';
-  if (isAgentBuildIntent || isFixOrDeployIntent) {
-    try {
-      let targetProcId = processId;
-      if (!targetProcId) {
-        const latestProc = await prisma.process.findFirst({
-          where: { organizationId },
-          orderBy: { createdAt: 'desc' },
-        });
-        targetProcId = latestProc?.id;
-      }
-
-      if (targetProcId) {
-        const fixRes = await askAiAndSpawnFixerAgent({
-          processId: targetProcId,
-          organizationId,
-          userInstruction: message,
-        });
-
-        // Only report what actually happened — a missing push or deploy used
-        // to be announced as "Pushed clean atomic commit" all the same.
-        const lines: string[] = [];
-        if (fixRes.agentSpawned) {
-          lines.push(`- Added specialist agent "${fixRes.agentSpawned.displayName}" (Stage ${fixRes.agentSpawned.processStage}: ${fixRes.agentSpawned.processRole}).`);
-        } else if (fixRes.diagnosis) {
-          lines.push(`- Diagnosis: ${fixRes.diagnosis}`);
-        }
-        lines.push(fixRes.fixedFiles.length > 0
-          ? `- Patched ${fixRes.fixedFiles.length} workspace file(s): ${fixRes.fixedFiles.join(', ')}.`
-          : '- No workspace files needed changes.');
-        if (fixRes.pushResult?.repoUrl) lines.push(`- Pushed a commit to GitHub: ${fixRes.pushResult.repoUrl}`);
-        if (fixRes.deployResult?.previewUrl) lines.push(`- Started a Vercel deployment: ${fixRes.deployResult.previewUrl}`);
-        autoHealReport = `\n${lines.join('\n')}`;
-      }
-    } catch (healErr: any) {
-      logger.warn({ healErr: healErr.message }, 'Mother Chat auto-heal/spawn action warning');
-    }
-  }
-
   const effectiveMessage = message;
 
   // The old prompt told the model it had "ALREADY executed" fleet actions and
   // must never admit a limit, so it invented recruits, fixes and live URLs.
   const motherSystemPrompt = `
-You are Mother Chat, the assistant that oversees MyceliumOps productions (multi-agent build pipelines).
+You are Mother Chat, the supreme orchestrator that oversees MyceliumOps productions (multi-agent build pipelines) and manages the fleet.
 Answer the operator's question using the live production context below. It is refreshed on every message and is the only source of truth about this production.
 
 Live production context:
 ${processContext}
-${autoHealReport ? `Actions MyceliumOps just executed for this message:${autoHealReport}` : 'No actions were executed for this message.'}
+${agentWorkOverview ? `\nDetailed Live Agent Activity Status:\n${agentWorkOverview}\n` : ''}
+${autoActionReport ? `Actions MyceliumOps just executed for this message:${autoActionReport}` : 'No actions were executed for this message.'}
 
 Rules:
 - Answer the question that was asked, directly, in the first sentence. Then add only the detail that helps.
+- If the operator asks what an agent or all agents are doing, report the exact status and current activity using the "Detailed Live Agent Activity Status" above.
+- If an action was executed above (e.g. adding or removing an agent), confirm it clearly to the operator in the response.
 - Use only facts from the context. Name agents, stages and files exactly as they appear there.
-- If the context doesn't contain the answer (for example, a file's contents or a feature that may not be written yet), say so plainly and say what would tell us — e.g. which agent or stage will produce it.
-- Never claim an agent was created, code was changed, something was pushed to GitHub, or a URL is live unless it is listed under the actions executed above.
-- Don't describe files or folders outside this production; you have no access to them.
-- Keep it short: a few sentences or a compact list. Use Markdown only when a list or code helps.
-- Reply in the language the operator writes in.
+- If the context doesn't contain the answer, say so plainly.
+- Keep it concise, helpful, and well-structured with Markdown lists when describing agents.
+- Reply in the language the operator writes in (English, Hindi, or Hinglish).
 `;
 
   const cleanContent = (txt: string) =>
@@ -751,8 +1048,11 @@ Rules:
     .replace(/^(Mother Chat|Operator|Assistant):\s*/gi, '')
     .trim();
 
-  if (autoHealReport) {
-    cleanText = `**Actions taken:**\n${autoHealReport.trim()}\n\n` + cleanText;
+  if (autoActionReport) {
+    cleanText = `**Actions taken:**\n${autoActionReport.trim()}\n\n` + cleanText;
+  }
+  if (isAgentStatusIntent && agentWorkOverview && (!cleanText.toLowerCase().includes('stage') || cleanText.includes("couldn't reach an AI model"))) {
+    cleanText = `${cleanText}\n\n**Live Agent Fleet Activity:**\n${agentWorkOverview}`;
   }
   res.text = cleanText;
 

@@ -172,11 +172,16 @@ router.post('/mother/chat', async (req, res) => {
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'Message is required' });
     }
+    const io = req.app.get('io');
+    const emit = (event: string, payload: unknown) => {
+      io?.to(`org:${req.organizationId}`).emit(event, payload);
+    };
     const response = await localChat.chatWithMother(
       req.organizationId!,
       message,
       processId,
       model,
+      emit,
     );
     res.json(response);
   } catch (err: any) {
