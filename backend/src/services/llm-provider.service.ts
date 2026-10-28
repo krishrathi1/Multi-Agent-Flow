@@ -182,10 +182,20 @@ export async function groqChat(params: {
   }
   messages.push({ role: 'user', content: params.prompt });
 
-  const first = (params.model || groqModel()).replace(/^groq\//i, '');
+  const reqModel = (params.model || '').trim().replace(/^groq\//i, '');
+  const isGroqNative = reqModel && (
+    reqModel.startsWith('openai/gpt-oss') ||
+    reqModel.startsWith('qwen/') ||
+    reqModel.startsWith('llama-') ||
+    reqModel.startsWith('mixtral') ||
+    reqModel.startsWith('meta-llama/') ||
+    reqModel.startsWith('allam-') ||
+    reqModel.startsWith('canopylabs/')
+  );
+  const first = isGroqNative ? reqModel : groqModel();
   const modelCandidates = [
     first,
-    params.model ? params.model : undefined,
+    isGroqNative ? reqModel : undefined,
     ...GROQ_FALLBACKS,
   ].filter(Boolean) as string[];
 

@@ -91,7 +91,7 @@ export function isLocalChatAvailable(): boolean {
 /**
  * Executes a conversation turn via Gemini API, Local Ollama, Claude CLI, or intelligent synthesis.
  */
-async function callChatLLM(params: {
+export async function callChatLLM(params: {
   organizationId: string;
   systemPrompt: string;
   prompt: string;
@@ -148,10 +148,8 @@ async function callChatLLM(params: {
     }
   }
 
-  // 0b. Groq, when the org saved a key and no other provider was asked for.
-  // A direct call answers in about a second; OpenCode's free models are
-  // also the ones that hit usage limits.
-  if (isGroq || !preferred || /^(groq|opencode)\//i.test(preferred)) {
+  // 0b. Groq execution (when requested, or as seamless fallback if Grok/other preferred has no direct key)
+  if (isGroq || !preferred || /^(groq|opencode)\//i.test(preferred) || isGrok) {
     const groqKey = await getGroqApiKey(params.organizationId);
     if (groqKey) {
       const g = await groqChat({
@@ -306,6 +304,21 @@ async function callChatLLM(params: {
         logger.warn({ err, model: cleanModel }, 'Gemini model failed, trying next candidate');
       }
     }
+  }
+
+  // 4b. Universal Fast Cloud Fallback (Groq) if previous candidates did not answer
+  try {
+    const universalGroqKey = await getGroqApiKey(params.organizationId);
+    if (universalGroqKey) {
+      const g = await groqChat({
+        apiKey: universalGroqKey,
+        system: params.systemPrompt,
+        prompt: params.prompt,
+      });
+      if (g) return { text: g.text, model: g.model, inputTokens: g.inputTokens, outputTokens: g.outputTokens, costUsd: 0 };
+    }
+  } catch {
+    // Continue to local/offline fallbacks
   }
 
   // 5. Local PC Ollama on Windows Host

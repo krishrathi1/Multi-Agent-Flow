@@ -345,6 +345,138 @@ function closingParagraph(text: string): string {
 }
 
 /**
+ * Direct real-time workspace editing using ultra-fast LLM completion (Groq / Gemini / Grok).
+ * Typically finishes in 1-2 seconds, directly updating files in the workspace.
+ */
+export async function applyDirectWorkspaceEdit(params: {
+  workspace: string;
+  instruction: string;
+  projectName: string;
+  organizationId: string;
+  preferredModel?: string;
+}): Promise<{ changedFiles: string[]; summary: string } | null> {
+  const EXTS = new Set(['.html', '.htm', '.css', '.js', '.jsx', '.ts', '.tsx', '.json', '.vue', '.svelte']);
+  const files: Array<{ path: string; content: string }> = [];
+  let totalBytes = 0;
+
+  async function walk(dir: string, relPrefix = ''): Promise<void> {
+    if (totalBytes >= 140_000 || files.length >= 30) return;
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (totalBytes >= 140_000 || files.length >= 30) return;
+      if (
+        e.name === 'node_modules' ||
+        e.name === '.git' ||
+        e.name === 'dist' ||
+        e.name === '.nexus-workspaces' ||
+        e.isSymbolicLink()
+      ) continue;
+      if (e.name.endsWith('-output.md') || e.name === 'package-lock.json') continue;
+      const full = path.join(dir, e.name);
+      const rel = relPrefix ? `${relPrefix}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        await walk(full, rel);
+      } else if (e.isFile()) {
+        const ext = path.extname(e.name).toLowerCase();
+        if (EXTS.has(ext)) {
+          try {
+            const stat = await fs.stat(full);
+            if (stat.size <= 50_000 && totalBytes + stat.size <= 140_000) {
+              const content = await fs.readFile(full, 'utf-8');
+              files.push({ path: rel, content });
+              totalBytes += stat.size;
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    }
+  }
+
+  await walk(params.workspace);
+  if (files.length === 0) return null;
+
+  const prompt = [
+    `You are an expert full-stack web developer editing an active project workspace in REAL TIME for a live browser preview.`,
+    `Project name: "${params.projectName}"`,
+    `User instruction: "${params.instruction}"`,
+    '',
+    'Current project files:',
+    ...files.map((f) => `=== FILE: ${f.path} ===\n${f.content}\n=== END FILE ===`),
+    '',
+    'Instructions:',
+    '1. Apply the user request accurately to the relevant project files (styling, CSS, colors, HTML content, components, scripts, layouts, buttons, etc.).',
+    '2. Ensure code is valid, modern, and does not break existing application behavior.',
+    '3. Output ONLY the files that need to be created or modified using this EXACT delimiter:',
+    '<<<FILE: relative/path/to/file>>>',
+    '[entire updated file contents]',
+    '<<<ENDFILE>>>',
+    '',
+    '4. At the very end, include a concise 1-2 sentence summary using:',
+    '<<<SUMMARY>>>',
+    '[brief summary of changes applied]',
+    '<<<ENDSUMMARY>>>',
+  ].join('\n');
+
+  try {
+    const { callChatLLM } = await import('./agent-chat.service.js');
+    const chatRes = await callChatLLM({
+      organizationId: params.organizationId,
+      systemPrompt: 'You are an expert full-stack web developer who makes high-precision, zero-error code modifications to web apps in real time.',
+      prompt,
+      preferredModel: params.preferredModel,
+    });
+
+    if (!chatRes?.text) return null;
+
+    const text = chatRes.text;
+    const changedFiles: string[] = [];
+    const fileRegex = /<<<FILE:\s*([^\r\n>]+)>>>([\s\S]*?)<<<ENDFILE>>>/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = fileRegex.exec(text)) !== null) {
+      const relPath = match[1].trim().replace(/^['"]|['"]$/g, '');
+      let fileContent = match[2].trim();
+      fileContent = fileContent.replace(/^```[a-z0-9_-]*\r?\n/i, '').replace(/\r?\n```\s*$/i, '');
+      if (relPath && fileContent) {
+        const safeRel = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, '');
+        await writeWorkspaceFile(params.workspace, safeRel, fileContent);
+        changedFiles.push(safeRel);
+      }
+    }
+
+    if (changedFiles.length === 0) {
+      const altRegex = /(?:^|\n)(?:FILE|File):\s*([^\r\n]+)\r?\n```[a-z0-9_-]*\r?\n([\s\S]*?)\r?\n```/g;
+      while ((match = altRegex.exec(text)) !== null) {
+        const relPath = match[1].trim().replace(/^['"]|['"]$/g, '');
+        const fileContent = match[2].trim();
+        if (relPath && fileContent) {
+          const safeRel = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, '');
+          await writeWorkspaceFile(params.workspace, safeRel, fileContent);
+          changedFiles.push(safeRel);
+        }
+      }
+    }
+
+    if (changedFiles.length === 0) return null;
+
+    const sumMatch = text.match(/<<<SUMMARY>>>([\s\S]*?)<<<ENDSUMMARY>>>/);
+    const summary = sumMatch?.[1]?.trim()
+      ? sumMatch[1].trim()
+      : `Updated ${changedFiles.join(', ')} to apply "${params.instruction}".`;
+
+    return { changedFiles, summary };
+  } catch (err) {
+    logger.warn({ err }, 'applyDirectWorkspaceEdit encountered error');
+    return null;
+  }
+}
+
+/**
  * Applies a change the user asked for while looking at the preview. The chat
  * used to ignore the instruction entirely — it ran a fixed set of regex
  * "heals", recruited a placeholder agent and replied "remediation applied
@@ -387,6 +519,36 @@ export async function startWorkspaceEdit(
   void (async () => {
     const workspace = workspaceFor(processId);
     try {
+      // 1. Fast Real-Time Direct LLM Workspace Edit (1-2s response)
+      try {
+        const direct = await applyDirectWorkspaceEdit({
+          workspace,
+          instruction,
+          projectName: proc.name,
+          organizationId,
+          preferredModel: model,
+        });
+        if (direct && direct.changedFiles.length > 0) {
+          job.state = 'completed';
+          job.changedFiles = direct.changedFiles;
+          job.summary = direct.summary;
+          job.commit = await snapshotWorkspace(workspace, `Preview edit: ${instruction.replace(/\s+/g, ' ').slice(0, 72)}`);
+          if (proc.agents[0]) {
+            await prisma.activity.create({
+              data: {
+                organizationId, processId, agentId: proc.agents[0].id, type: ActivityType.SYSTEM,
+                message: `Preview edit applied: "${instruction.slice(0, 120)}" (${direct.changedFiles.length} file${direct.changedFiles.length === 1 ? '' : 's'} changed)`,
+                metadata: { previewEdit: { jobId: job.id, changedFiles: direct.changedFiles, commit: job.commit } },
+              },
+            }).catch(() => {});
+          }
+          return;
+        }
+      } catch (directErr) {
+        logger.warn({ directErr, processId }, 'Direct workspace edit failed; falling back to OpenCode runner');
+      }
+
+      // 2. Fall back to OpenCode CLI runner
       const files = (await listWorkspaceFiles(processId)).map((f) => f.path).filter((p) => !/-output\.md$/.test(p));
       const prompt = [
         `You are editing an existing web project in this workspace, "${proc.name}", which MyceliumOps agents built.`,
@@ -402,12 +564,19 @@ export async function startWorkspaceEdit(
 
       const before = await workspaceStamps(workspace);
       let res: Awaited<ReturnType<typeof runOpenCode>>;
+      const grokKey = await getGrokApiKey(organizationId);
+      const groqKey = await getGroqApiKey(organizationId);
+      const opencodeEnv: Record<string, string> = {};
+      if (groqKey) opencodeEnv.GROQ_API_KEY = groqKey;
+      if (grokKey) {
+        opencodeEnv.XAI_API_KEY = grokKey;
+        opencodeEnv.GROK_API_KEY = grokKey;
+      }
+
       try {
-        res = await runOpenCode(prompt, model, workspace, 10 * 60_000);
+        res = await runOpenCode(prompt, model, workspace, 10 * 60_000, { env: opencodeEnv });
       } catch (err) {
         // Fallbacks when OpenCode free models hit limits
-        const grokKey = err instanceof OpenCodeUnavailableError ? await getGrokApiKey(organizationId) : null;
-        const groqKey = err instanceof OpenCodeUnavailableError ? await getGroqApiKey(organizationId) : null;
         if (grokKey) {
           job.model = `grok/${grokModel()}`;
           emit('process:edit:updated', job);

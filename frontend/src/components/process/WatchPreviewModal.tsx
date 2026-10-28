@@ -450,64 +450,128 @@ export function WatchPreviewModal({
       streamEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
 
+    const isCodeEdit = /\b(edit|change|add|create|update|modify|remove|delete|fix|repair|style|color|make|build|patch|background|button|navbar|layout|page|screen|theme|blue|red|green|dark|light|font|title|heading|text|header|footer|replace|set|card|icon|size|padding|margin)\b/i.test(userPrompt);
+
     try {
-      // 1. Direct Real-Time Agent Turn
-      let replyText = '';
-      let replyModel = chosenModelName;
-
-      try {
-        if (targetAgent?.id && targetAgent.id !== 'default') {
-          const chatRes = await api.chat.send(targetAgent.id, userPrompt, selectedModel);
-          replyText = chatRes.result || 'Turn complete.';
-          replyModel = (chatRes as any)?.model || chosenModelName;
-        } else {
-          const motherRes = await api.chat.sendToMother(userPrompt, currentProcess.id, selectedModel);
-          replyText = motherRes.result || 'Production Orchestrator processed request.';
-          replyModel = (motherRes as any)?.model || chosenModelName;
-
-          // Re-fetch process so added/removed agents update live
-          try {
-            const updatedProc = await api.processes.get(currentProcess.id);
-            if (updatedProc) setCurrentProcess(updatedProc);
-          } catch { /* ignore */ }
-        }
-      } catch (chatErr: any) {
-        console.warn('Real-time chat error:', chatErr);
-        replyText = `Agent received request: "${userPrompt}". ${chatErr?.message ? `(${chatErr.message})` : ''}`;
-      }
-
-      // Display agent's real-time answer
-      setRealTimeItems((prev) => [
-        ...prev.filter((i) => i.id !== runningId),
-        {
-          id: `reply-${Date.now()}`,
-          type: 'success',
-          title: `${targetName} (${replyModel})`,
-          details: replyText,
-          timestamp: 'Just now',
-          agentId: targetAgent?.id,
-          agentName: targetName,
-        },
-      ]);
-
-      // 2. If the user request implies a code/workspace modification, trigger background workspace edit
-      const isCodeEdit = /\b(edit|change|add|create|update|modify|remove|delete|fix|repair|style|color|make|build|patch|background|button|navbar|layout|page|screen)\b/i.test(userPrompt);
       if (isCodeEdit) {
-        try {
-          const editJob = await api.processes.startEdit(currentProcess.id, userPrompt, selectedModel);
-          let poll = editJob;
-          const started = Date.now();
-          while (poll.state === 'running' && Date.now() - started < 35_000) {
-            await new Promise((r) => setTimeout(r, 2000));
-            poll = await api.processes.getEdit(currentProcess.id, poll.id);
-          }
-          if (poll.state === 'completed') {
-            if (iframeRef.current) iframeRef.current.src = iframeRef.current.src;
-            toast.success('Preview updated', `${poll.changedFiles.length} file(s) updated.`);
-          }
-        } catch {
-          // Non-blocking: chat reply already delivered in real time
+        // Real-time workspace modification
+        setRealTimeItems((prev) => [
+          ...prev.filter((i) => i.id !== runningId),
+          {
+            id: runningId,
+            type: 'running',
+            title: `${targetName} is updating the preview in real time...`,
+            details: `Modifying workspace files with ${chosenModelName}...`,
+            timestamp: 'Just now',
+            agentId: targetAgent?.id,
+            agentName: targetName,
+          },
+        ]);
+
+        const editJob = await api.processes.startEdit(currentProcess.id, userPrompt, selectedModel);
+        let poll = editJob;
+        const started = Date.now();
+        while (poll.state === 'running' && Date.now() - started < 35_000) {
+          await new Promise((r) => setTimeout(r, 600));
+          poll = await api.processes.getEdit(currentProcess.id, poll.id);
         }
+
+        if (poll.state === 'completed' && poll.changedFiles?.length > 0) {
+          // Immediately reload iframe in real time with cache buster
+          if (iframeRef.current) {
+            try {
+              const url = new URL(iframeRef.current.src, window.location.origin);
+              url.searchParams.set('t', Date.now().toString());
+              iframeRef.current.src = url.toString();
+            } catch {
+              iframeRef.current.src = iframeRef.current.src;
+            }
+          }
+
+          const fileList = poll.changedFiles.map((f: string) => `• \`${f}\``).join('\n');
+          const summaryText = poll.summary
+            ? `${poll.summary}\n\n**Updated Files (${poll.changedFiles.length}):**\n${fileList}`
+            : `I have updated your application in real time per your instruction!\n\n**Updated Files (${poll.changedFiles.length}):**\n${fileList}`;
+
+          setRealTimeItems((prev) => [
+            ...prev.filter((i) => i.id !== runningId),
+            {
+              id: `reply-${Date.now()}`,
+              type: 'success',
+              title: `${targetName} (${chosenModelName})`,
+              details: summaryText,
+              timestamp: 'Just now',
+              agentId: targetAgent?.id,
+              agentName: targetName,
+            },
+          ]);
+
+          toast.success('Preview updated in real time', `${poll.changedFiles.length} file(s) updated.`);
+        } else {
+          // Fall back to agent conversation turn if edit didn't change files
+          let replyText = poll.error || '';
+          if (!replyText) {
+            if (targetAgent?.id && targetAgent.id !== 'default') {
+              const chatRes = await api.chat.send(targetAgent.id, userPrompt, selectedModel);
+              replyText = chatRes.result || 'Turn complete.';
+            } else {
+              const motherRes = await api.chat.sendToMother(userPrompt, currentProcess.id, selectedModel);
+              replyText = motherRes.result || 'Processed request.';
+            }
+          }
+
+          setRealTimeItems((prev) => [
+            ...prev.filter((i) => i.id !== runningId),
+            {
+              id: `reply-${Date.now()}`,
+              type: 'success',
+              title: `${targetName} (${chosenModelName})`,
+              details: replyText,
+              timestamp: 'Just now',
+              agentId: targetAgent?.id,
+              agentName: targetName,
+            },
+          ]);
+        }
+      } else {
+        // General direct conversational turn
+        let replyText = '';
+        let replyModel = chosenModelName;
+
+        try {
+          if (targetAgent?.id && targetAgent.id !== 'default') {
+            const chatRes = await api.chat.send(targetAgent.id, userPrompt, selectedModel);
+            replyText = chatRes.result || 'Turn complete.';
+            replyModel = (chatRes as any)?.model || chosenModelName;
+          } else {
+            const motherRes = await api.chat.sendToMother(userPrompt, currentProcess.id, selectedModel);
+            replyText = motherRes.result || 'Production Orchestrator processed request.';
+            replyModel = (motherRes as any)?.model || chosenModelName;
+
+            // Re-fetch process so added/removed agents update live
+            try {
+              const updatedProc = await api.processes.get(currentProcess.id);
+              if (updatedProc) setCurrentProcess(updatedProc);
+            } catch { /* ignore */ }
+          }
+        } catch (chatErr: any) {
+          console.warn('Real-time chat error:', chatErr);
+          replyText = `Agent received request: "${userPrompt}". ${chatErr?.message ? `(${chatErr.message})` : ''}`;
+        }
+
+        // Display agent's real-time answer
+        setRealTimeItems((prev) => [
+          ...prev.filter((i) => i.id !== runningId),
+          {
+            id: `reply-${Date.now()}`,
+            type: 'success',
+            title: `${targetName} (${replyModel})`,
+            details: replyText,
+            timestamp: 'Just now',
+            agentId: targetAgent?.id,
+            agentName: targetName,
+          },
+        ]);
       }
     } catch (err: any) {
       setRealTimeItems((prev) => [
