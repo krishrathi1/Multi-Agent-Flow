@@ -199,7 +199,9 @@ export async function groqChat(params: {
 
   const uniqueModels = Array.from(new Set(modelCandidates));
 
-  for (const model of uniqueModels) {
+  let waitedForLimit = false;
+  for (let i = 0; i < uniqueModels.length; i++) {
+    const model = uniqueModels[i];
     try {
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -224,6 +226,14 @@ export async function groqChat(params: {
       }
       logger.warn({ model, status: res.status, error: data?.error?.message }, 'Groq request rejected; trying next model');
       if (res.status === 401) return null; // a bad key fails every model
+      // The free tier's per-minute window often frees up within seconds, and
+      // the next model down answers noticeably worse; wait once rather than drop.
+      const retryIn = Number(String(data?.error?.message ?? '').match(/try again in ([\d.]+)s/)?.[1]);
+      if (res.status === 429 && !waitedForLimit && retryIn > 0 && retryIn <= 6) {
+        waitedForLimit = true;
+        await new Promise((r) => setTimeout(r, retryIn * 1000 + 250));
+        i--;
+      }
     } catch (err) {
       logger.warn({ err, model }, 'Groq request failed; trying next model');
     }

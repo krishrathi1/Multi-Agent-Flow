@@ -952,7 +952,7 @@ export async function chatWithMother(
       processContext = `
 Production Block: "${proc.name}"
 Status: ${proc.status}
-Goal / Prompt: ${proc.prompt.length > 6000 ? `${proc.prompt.slice(0, 6000)}\n…(brief truncated)` : proc.prompt}
+Goal / Prompt: ${proc.prompt.length > 2500 ? `${proc.prompt.slice(0, 2500)}\n…(brief truncated)` : proc.prompt}
 Agents in Block: ${proc.agents.map((a) => `${a.displayName} (${a.processRole || 'Agent'}, Stage ${a.processStage}, Status: ${a.status})`).join(', ')}
 Workspace Files Created (${files.length}): ${files.map((f) => f.path).join(', ') || 'None yet'}
 Cloud Deployment Telemetry: ${deploymentInfo}
