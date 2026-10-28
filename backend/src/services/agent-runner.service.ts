@@ -344,155 +344,284 @@ function closingParagraph(text: string): string {
   return (paras[paras.length - 1] ?? '').slice(0, 1200);
 }
 
+/** Source files a preview edit may read or change. */
+const EDITABLE_FILE = /\.(html?|css|scss|jsx?|tsx?|mjs|vue|svelte)$/i;
+const SKIPPED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.preview-out', '.nexus-workspaces', '.claude', 'coverage']);
 /**
- * Direct real-time workspace editing using ultra-fast LLM completion (Groq / Gemini / Grok).
- * Typically finishes in 1-2 seconds, directly updating files in the workspace.
+ * Characters of project code shown to the model. Groq's free tier allows
+ * 8,000 tokens a minute per model, prompt and reply together, so this plus
+ * the instructions has to stay near 3,500 tokens to leave room for the reply.
+ */
+const EDIT_CONTEXT_CHARS = 10_000;
+const EDIT_REPLY_TOKENS = 4_000;
+const STOP_WORDS = new Set(('the and for with that this from into make change update please can you want should would add set use '
+  + 'all its are was not but have has then than there their them they what when where which while also just more some '
+  + 'page app site like look new let get put way it is to of in on a an be by as at or so do').split(' '));
+
+interface EditSource { path: string; content: string; score: number }
+type EditOutcome =
+  | { ok: true; changedFiles: string[]; summary: string; model: string }
+  | { ok: false; reason: string };
+
+/** Words of the request worth searching for, and any quoted text verbatim. */
+function editTerms(instruction: string): { words: string[]; phrases: string[] } {
+  const phrases = [...instruction.matchAll(/["'“‘`]([^"'”’`]{3,80})["'”’`]/g)].map((m) => m[1].toLowerCase());
+  const words = [...new Set(instruction.toLowerCase().match(/[a-z][a-z0-9-]{2,}/g) ?? [])]
+    .filter((w) => !STOP_WORDS.has(w))
+    .flatMap((w) => (w.endsWith('s') && w.length > 4 ? [w, w.slice(0, -1)] : [w]));
+  return { words: [...new Set(words)], phrases };
+}
+
+/** Lines of a large file around the request's words, merged into windows. */
+function excerpt(content: string, words: string[], budget: number): string {
+  const lines = content.split('\n');
+  const hits = lines.map((l, i) => (words.some((w) => l.toLowerCase().includes(w)) ? i : -1)).filter((i) => i >= 0);
+  const windows: Array<[number, number]> = [];
+  for (const i of hits.length ? hits : [0]) {
+    const [a, b] = [Math.max(0, i - 6), Math.min(lines.length - 1, i + 6)];
+    const last = windows[windows.length - 1];
+    if (last && a <= last[1] + 1) last[1] = Math.max(last[1], b);
+    else windows.push([a, b]);
+  }
+  let out = '';
+  for (const [a, b] of windows) {
+    const part = `… lines ${a + 1}-${b + 1}:\n${lines.slice(a, b + 1).join('\n')}\n`;
+    if (out.length + part.length > budget) break;
+    out += part;
+  }
+  return out || lines.slice(0, 40).join('\n').slice(0, budget);
+}
+
+/**
+ * The files the request is most likely about. The preview's own bundle says
+ * which files are on screen; the request's words (and any build errors) rank
+ * them. Picking by folder order instead meant the model never saw the page
+ * the user was looking at and edited whatever it was shown.
+ */
+async function rankEditSources(workspace: string, inputs: string[], index: string | null, errors: string[], instruction: string): Promise<EditSource[]> {
+  let paths = inputs.filter((p) => EDITABLE_FILE.test(p));
+  if (index && !paths.includes(index)) paths.push(index);
+  if (paths.length <= 1) {
+    // Static site, or a build too broken to list its inputs: every source file.
+    paths = [];
+    const walk = async (dir: string, rel: string, depth: number): Promise<void> => {
+      if (depth > 8 || paths.length >= 400) return;
+      const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const e of entries) {
+        if (e.isSymbolicLink() || SKIPPED_DIRS.has(e.name)) continue;
+        const r = rel ? `${rel}/${e.name}` : e.name;
+        if (e.isDirectory()) await walk(path.join(dir, e.name), r, depth + 1);
+        else if (EDITABLE_FILE.test(e.name)) paths.push(r);
+      }
+    };
+    await walk(workspace, '', 0);
+  }
+
+  const { words, phrases } = editTerms(instruction);
+  const errorFiles = new Set(errors.map((e) => e.split(':')[0]));
+  const styling = /\b(colou?r|theme|font|background|dark|light|style|css|spacing|padding|margin|border|shadow|gradient|rounded)\b/i.test(instruction);
+  const sources: EditSource[] = [];
+  for (const p of paths) {
+    const content = await fs.readFile(path.join(workspace, p), 'utf-8').catch(() => null);
+    if (content === null || content.length > 400_000) continue;
+    sources.push({ path: p, content, score: 0 });
+  }
+  // Rarer words say more about which file is meant than "button" in every file.
+  const df = new Map(words.map((w) => [w, sources.filter((s) => s.content.toLowerCase().includes(w)).length]));
+  for (const s of sources) {
+    const lowerPath = s.path.toLowerCase();
+    const lower = s.content.toLowerCase();
+    for (const w of words) {
+      const idf = Math.log((sources.length + 1) / ((df.get(w) ?? 0) + 1)) + 1;
+      if (lowerPath.includes(w)) s.score += 5 * idf;
+      if (lower.includes(w)) s.score += idf * Math.min(5, lower.split(w).length - 1);
+    }
+    for (const ph of phrases) if (lower.includes(ph)) s.score += 25;
+    if (errorFiles.has(s.path)) s.score += 60;
+    if (styling && /\.(s?css)$/.test(s.path)) s.score += 4;
+    if (/(^|\/)(app|main|index|layout|appshell|home|dashboard)\.[a-z]+$/i.test(s.path)) s.score += 1.5;
+  }
+  return sources.sort((a, b) => b.score - a.score);
+}
+
+/** Resolves a path the model named, refusing anything outside the workspace. */
+function editTarget(workspace: string, rel: string): string | null {
+  const clean = rel.trim().replace(/^['"`]|['"`]$/g, '').replace(/^\.?\//, '');
+  if (!clean || clean.split(/[\\/]/).some((seg) => seg === '..' || SKIPPED_DIRS.has(seg))) return null;
+  const abs = path.resolve(workspace, clean);
+  return abs.startsWith(workspace + path.sep) ? abs : null;
+}
+
+/** Replaces `find` in `text`, tolerating indentation and trailing-space drift. */
+function replaceOnce(text: string, find: string, replace: string): string | null {
+  if (!find.trim()) return null;
+  if (text.includes(find)) return text.replace(find, () => replace);
+  const lines = text.split('\n');
+  const want = find.split('\n').map((l) => l.trim()).filter((l, i, a) => l || (i > 0 && i < a.length - 1));
+  if (!want.length) return null;
+  for (let i = 0; i + want.length <= lines.length; i++) {
+    let j = 0;
+    let k = i;
+    while (j < want.length && k < lines.length) {
+      if (!lines[k].trim() && want[j]) { k++; continue; }
+      if (lines[k].trim() !== want[j]) break;
+      j++; k++;
+    }
+    if (j === want.length) {
+      const indent = lines[i].match(/^\s*/)?.[0] ?? '';
+      const minIndent = Math.min(...replace.split('\n').filter((l) => l.trim()).map((l) => l.match(/^\s*/)![0].length));
+      const shifted = replace.split('\n').map((l) => (l.trim() ? indent + l.slice(Number.isFinite(minIndent) ? minIndent : 0) : l));
+      return [...lines.slice(0, i), ...shifted, ...lines.slice(k)].join('\n');
+    }
+  }
+  return null;
+}
+
+/**
+ * Applies a Watch Preview chat request straight to the workspace with one
+ * fast model call (Groq, or another configured provider) — seconds instead
+ * of an agent run. The model answers with find/replace edits, not whole
+ * files, so large files aren't truncated by the reply limit and untouched
+ * code can't be lost. If the edit breaks the preview build it is undone and
+ * retried once with the errors; when it can't be applied the caller falls
+ * back to an OpenCode agent.
  */
 export async function applyDirectWorkspaceEdit(params: {
+  processId: string;
   workspace: string;
   instruction: string;
   projectName: string;
   organizationId: string;
   preferredModel?: string;
-}): Promise<{ changedFiles: string[]; summary: string } | null> {
-  const UI_EXTS = new Set(['.html', '.htm', '.css', '.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte']);
-  const files: Array<{ path: string; content: string; priority: number }> = [];
-  let totalBytes = 0;
+}): Promise<EditOutcome> {
+  const { checkPreviewBuild } = await import('../routes/preview.js');
+  const { callChatLLM } = await import('./agent-chat.service.js');
+  const workspace = path.resolve(params.workspace);
+  const before = await checkPreviewBuild(params.processId);
+  const ranked = await rankEditSources(workspace, before.inputs, before.index, before.errors, params.instruction);
+  if (ranked.length === 0) return { ok: false, reason: 'The project has no source files to edit.' };
 
-  async function walk(dir: string, relPrefix = ''): Promise<void> {
-    if (totalBytes >= 18_000 || files.length >= 15) return;
-    let entries;
+  // Most relevant files whole while they fit, the rest as excerpts.
+  const { words } = editTerms(params.instruction);
+  const shown = new Map<string, 'whole' | 'excerpt'>();
+  const blocks: string[] = [];
+  let used = 0;
+  for (const s of ranked.slice(0, 12)) {
+    const room = EDIT_CONTEXT_CHARS - used;
+    if (room < 600) break;
+    if (s.content.length <= room && (s.content.length <= 6_000 || shown.size === 0)) {
+      blocks.push(`=== ${s.path} (whole file) ===\n${s.content}`);
+      shown.set(s.path, 'whole');
+      used += s.content.length;
+    } else if (s.score > 0 || shown.size === 0) {
+      const part = excerpt(s.content, words, Math.min(room, 3_500));
+      blocks.push(`=== ${s.path} (excerpt — the file is longer) ===\n${part}`);
+      shown.set(s.path, 'excerpt');
+      used += part.length;
+    }
+  }
+  const otherFiles = ranked.map((s) => s.path).filter((p) => !shown.has(p)).slice(0, 60);
+
+  const basePrompt = [
+    `Project: "${params.projectName}". The user is watching its live preview and asked:`,
+    `"""${params.instruction}"""`,
+    before.errors.length ? `The preview currently fails to build:\n${before.errors.join('\n')}` : '',
+    'Relevant project files:',
+    ...blocks,
+    otherFiles.length ? `Other files in the project (not shown): ${otherFiles.join(', ')}` : '',
+    `Make the smallest change that fully does what the user asked, so it is visible in the preview. Keep the app building: check imports and names you touch.
+Reply ONLY with edits in this exact format, one block per change:
+<<<EDIT path/to/file>>>
+<<<FIND>>>
+lines copied exactly from the file shown above (enough to be unique)
+<<<REPLACE>>>
+the new lines
+<<<END>>>
+To create a new file: <<<NEW path/to/file>>> full contents <<<END>>>
+Finish with: <<<SUMMARY>>>one or two sentences on what you changed<<<END>>>`,
+  ].filter(Boolean).join('\n\n');
+
+  let feedback = '';
+  let lastReason = 'The model did not return an edit.';
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let reply: { text: string; model: string } | null = null;
     try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
+      reply = await callChatLLM({
+        organizationId: params.organizationId,
+        systemPrompt: 'You edit web projects precisely. You answer only with FIND/REPLACE edit blocks copied exactly from the files you are shown.',
+        prompt: feedback ? `${basePrompt}\n\n${feedback}` : basePrompt,
+        preferredModel: params.preferredModel,
+        maxTokens: EDIT_REPLY_TOKENS,
+      });
+    } catch (err) {
+      return { ok: false, reason: (err as Error).message };
     }
-    for (const e of entries) {
-      if (totalBytes >= 18_000 || files.length >= 15) return;
-      if (
-        e.name === 'node_modules' ||
-        e.name === '.git' ||
-        e.name === 'dist' ||
-        e.name === '.nexus-workspaces' ||
-        e.name === 'tests' ||
-        e.name === 'server' ||
-        e.isSymbolicLink()
-      ) continue;
-      if (
-        e.name.endsWith('-output.md') ||
-        e.name.endsWith('.json') ||
-        e.name.endsWith('.md') ||
-        e.name.endsWith('.config.ts') ||
-        e.name.endsWith('.config.js')
-      ) continue;
+    // callChatLLM answers with a canned fallback when no model is reachable.
+    if (!reply || reply.model.includes('Fallback')) {
+      return { ok: false, reason: reply?.text.match(/\(([^)]+)\)/)?.[1] ?? 'No AI model is reachable.' };
+    }
+    if (!/<<<(EDIT|NEW)\s/.test(reply.text)) {
+      lastReason = 'The model replied without an edit.';
+      feedback = 'Your previous reply had no <<<EDIT>>> blocks. Reply only with edit blocks in the format above.';
+      continue;
+    }
 
-      const full = path.join(dir, e.name);
-      const rel = relPrefix ? `${relPrefix}/${e.name}` : e.name;
-      if (e.isDirectory()) {
-        await walk(full, rel);
-      } else if (e.isFile()) {
-        const ext = path.extname(e.name).toLowerCase();
-        if (UI_EXTS.has(ext)) {
-          try {
-            const stat = await fs.stat(full);
-            if (stat.size <= 16_000 && totalBytes + stat.size <= 24_000) {
-              const content = await fs.readFile(full, 'utf-8');
-              // Prioritize index.html, App, and css files
-              let priority = 10;
-              const lower = rel.toLowerCase();
-              if (lower.includes('app.') || lower.includes('main.') || lower === 'index.html') priority = 1;
-              else if (lower.endsWith('.css')) priority = 2;
-              files.push({ path: rel, content, priority });
-              totalBytes += stat.size;
-            }
-          } catch { /* ignore */ }
-        }
+    const originals = new Map<string, string | null>();
+    const failures: string[] = [];
+    const blockRe = /<<<(EDIT|NEW)\s+([^>\n]+?)>>>\s*\n([\s\S]*?)<<<END>>>/g;
+    for (const m of reply.text.matchAll(blockRe)) {
+      const [, kind, rel, body] = m;
+      const abs = editTarget(workspace, rel);
+      const relClean = abs ? path.relative(workspace, abs).replace(/\\/g, '/') : rel.trim();
+      if (!abs) { failures.push(`${rel.trim()}: not a path inside the project`); continue; }
+      const current = await fs.readFile(abs, 'utf-8').catch(() => null);
+      if (kind === 'NEW') {
+        if (current !== null && shown.get(relClean) !== 'whole') { failures.push(`${relClean}: already exists; edit it with FIND/REPLACE`); continue; }
+        if (!originals.has(relClean)) originals.set(relClean, current);
+        await fs.mkdir(path.dirname(abs), { recursive: true });
+        await fs.writeFile(abs, body.replace(/^```[a-z0-9_-]*\n|\n```\s*$/gi, '').replace(/\s+$/, '') + '\n', 'utf-8');
+        continue;
       }
+      // Only the newline after a marker is dropped: the first line's indentation is part of the code.
+      const parts = body.match(/^\s*<<<FIND>>>[ \t]*\r?\n([\s\S]*?)\r?\n?<<<REPLACE>>>[ \t]*\r?\n?([\s\S]*?)\s*$/);
+      if (!parts || current === null) { failures.push(`${relClean}: ${current === null ? 'no such file' : 'malformed edit block'}`); continue; }
+      const next = replaceOnce(current, parts[1].replace(/\s+$/, ''), parts[2].replace(/\s+$/, ''));
+      if (next === null) { failures.push(`${relClean}: the FIND text is not in the file`); continue; }
+      if (!originals.has(relClean)) originals.set(relClean, current);
+      await fs.writeFile(abs, next, 'utf-8');
     }
+
+    const changed = [...originals.keys()];
+    const revert = async () => {
+      for (const [rel, content] of originals) {
+        const abs = path.join(workspace, rel);
+        if (content === null) await fs.rm(abs, { force: true });
+        else await fs.writeFile(abs, content, 'utf-8');
+      }
+    };
+    // A half-applied request is retried whole once; after that, what applied and builds is kept.
+    if (failures.length && (changed.length === 0 || attempt === 1)) {
+      await revert();
+      lastReason = `The edit could not be applied (${failures.slice(0, 3).join('; ')}).`;
+      feedback = `Your previous edits could not be applied: ${failures.join('; ')}. FIND must be copied exactly from the files shown.`;
+      continue;
+    }
+
+    // An edit must not break a preview that built before it.
+    const after = await checkPreviewBuild(params.processId);
+    const newErrors = after.errors.filter((e) => !before.errors.includes(e));
+    if (newErrors.length) {
+      await revert();
+      lastReason = `The edit broke the preview build, so it was undone: ${newErrors[0]}`;
+      feedback = `Your previous edits broke the build with:\n${newErrors.join('\n')}\nThey were undone. Send corrected edits.`;
+      continue;
+    }
+
+    const summary = reply.text.match(/<<<SUMMARY>>>([\s\S]*?)(<<<END(SUMMARY)?>>>|$)/)?.[1]?.trim()
+      || `Applied "${params.instruction.slice(0, 80)}" to ${changed.join(', ')}.`;
+    return { ok: true, changedFiles: changed, summary, model: reply.model };
   }
-
-  await walk(params.workspace);
-  if (files.length === 0) return null;
-
-  // Sort by priority so key files are included first
-  files.sort((a, b) => a.priority - b.priority);
-  // Keep up to 6 most relevant UI files (max ~12,000 bytes)
-  const targetFiles = files.slice(0, 6);
-
-  const prompt = [
-    `You are an expert full-stack web developer editing an active project workspace in REAL TIME for a live browser preview.`,
-    `Project name: "${params.projectName}"`,
-    `User instruction: "${params.instruction}"`,
-    '',
-    'Current project files:',
-    ...targetFiles.map((f) => `=== FILE: ${f.path} ===\n${f.content}\n=== END FILE ===`),
-    '',
-    'Instructions:',
-    '1. Apply the user request accurately to the relevant project files (styling, CSS, colors, HTML content, components, scripts, layouts, buttons, etc.).',
-    '2. Ensure code is valid, modern, and does not break existing application behavior.',
-    '3. Output ONLY the files that need to be created or modified using this EXACT delimiter:',
-    '<<<FILE: relative/path/to/file>>>',
-    '[entire updated file contents]',
-    '<<<ENDFILE>>>',
-    '',
-    '4. At the very end, include a concise 1-2 sentence summary using:',
-    '<<<SUMMARY>>>',
-    '[brief summary of changes applied]',
-    '<<<ENDSUMMARY>>>',
-  ].join('\n');
-
-  try {
-    const { callChatLLM } = await import('./agent-chat.service.js');
-    const chatRes = await callChatLLM({
-      organizationId: params.organizationId,
-      systemPrompt: 'You are an expert full-stack web developer who makes high-precision, zero-error code modifications to web apps in real time.',
-      prompt,
-      preferredModel: params.preferredModel,
-    });
-
-    if (!chatRes?.text) return null;
-
-    const text = chatRes.text;
-    const changedFiles: string[] = [];
-    const fileRegex = /<<<FILE:\s*([^\r\n>]+)>>>([\s\S]*?)<<<ENDFILE>>>/g;
-    let match: RegExpExecArray | null;
-
-    while ((match = fileRegex.exec(text)) !== null) {
-      const relPath = match[1].trim().replace(/^['"]|['"]$/g, '');
-      let fileContent = match[2].trim();
-      fileContent = fileContent.replace(/^```[a-z0-9_-]*\r?\n/i, '').replace(/\r?\n```\s*$/i, '');
-      if (relPath && fileContent) {
-        const safeRel = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, '');
-        await writeWorkspaceFile(params.workspace, safeRel, fileContent);
-        changedFiles.push(safeRel);
-      }
-    }
-
-    if (changedFiles.length === 0) {
-      const altRegex = /(?:^|\n)(?:FILE|File):\s*([^\r\n]+)\r?\n```[a-z0-9_-]*\r?\n([\s\S]*?)\r?\n```/g;
-      while ((match = altRegex.exec(text)) !== null) {
-        const relPath = match[1].trim().replace(/^['"]|['"]$/g, '');
-        const fileContent = match[2].trim();
-        if (relPath && fileContent) {
-          const safeRel = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, '');
-          await writeWorkspaceFile(params.workspace, safeRel, fileContent);
-          changedFiles.push(safeRel);
-        }
-      }
-    }
-
-    if (changedFiles.length === 0) return null;
-
-    const sumMatch = text.match(/<<<SUMMARY>>>([\s\S]*?)<<<ENDSUMMARY>>>/);
-    const summary = sumMatch?.[1]?.trim()
-      ? sumMatch[1].trim()
-      : `Updated ${changedFiles.join(', ')} to apply "${params.instruction}".`;
-
-    return { changedFiles, summary };
-  } catch (err) {
-    logger.warn({ err }, 'applyDirectWorkspaceEdit encountered error');
-    return null;
-  }
+  return { ok: false, reason: lastReason };
 }
 
 /**
@@ -537,18 +666,22 @@ export async function startWorkspaceEdit(
 
   void (async () => {
     const workspace = workspaceFor(processId);
+    let directFailure: string | null = null;
     try {
-      // 1. Fast Real-Time Direct LLM Workspace Edit (1-2s response)
+      // 1. Fast Real-Time Direct LLM Workspace Edit (seconds)
       try {
         const direct = await applyDirectWorkspaceEdit({
+          processId,
           workspace,
           instruction,
           projectName: proc.name,
           organizationId,
           preferredModel: model,
         });
-        if (direct && direct.changedFiles.length > 0) {
+        if (!direct.ok) directFailure = direct.reason;
+        if (direct.ok) {
           job.state = 'completed';
+          job.model = direct.model;
           job.changedFiles = direct.changedFiles;
           job.summary = direct.summary;
           job.commit = await snapshotWorkspace(workspace, `Preview edit: ${instruction.replace(/\s+/g, ' ').slice(0, 72)}`);
@@ -583,7 +716,9 @@ export async function startWorkspaceEdit(
 
       const before = await workspaceStamps(workspace);
       let res: Awaited<ReturnType<typeof runOpenCode>>;
-      const grokKey = await getGrokApiKey(organizationId);
+      // A Groq key (gsk_) saved under Grok is still a Groq key; xAI would reject it.
+      const savedGrokKey = await getGrokApiKey(organizationId);
+      const grokKey = savedGrokKey?.startsWith('xai-') ? savedGrokKey : null;
       const groqKey = await getGroqApiKey(organizationId);
       const opencodeEnv: Record<string, string> = {};
       if (groqKey) opencodeEnv.GROQ_API_KEY = groqKey;
@@ -635,6 +770,8 @@ export async function startWorkspaceEdit(
       job.state = 'failed';
       job.error = (err as Error).message;
     } finally {
+      // The agent fallback's error alone hides why the fast edit didn't apply.
+      if (job.state === 'failed' && directFailure) job.error = `${directFailure} The agent fallback also failed: ${job.error}`;
       job.finishedAt = new Date().toISOString();
       editingProcesses.delete(processId);
       emit('process:edit:updated', job);

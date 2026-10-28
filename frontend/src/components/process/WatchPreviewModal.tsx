@@ -471,9 +471,17 @@ export function WatchPreviewModal({
         const editJob = await api.processes.startEdit(currentProcess.id, userPrompt, selectedModel);
         let poll = editJob;
         const started = Date.now();
-        while (poll.state === 'running' && Date.now() - started < 35_000) {
-          await new Promise((r) => setTimeout(r, 600));
+        // Wait for the edit itself: a fast edit takes seconds, but the agent
+        // fallback can take minutes, and giving up early answered with a chat
+        // reply while the change landed later without reloading the preview.
+        while (poll.state === 'running' && Date.now() - started < 12 * 60_000) {
+          await new Promise((r) => setTimeout(r, Date.now() - started < 30_000 ? 800 : 2500));
           poll = await api.processes.getEdit(currentProcess.id, poll.id);
+          if (poll.state === 'running' && Date.now() - started > 30_000) {
+            setRealTimeItems((prev) => prev.map((i) => (i.id === runningId
+              ? { ...i, details: `Still applying the change (${Math.round((Date.now() - started) / 1000)}s)…` }
+              : i)));
+          }
         }
 
         if (poll.state === 'completed' && poll.changedFiles?.length > 0) {
@@ -498,7 +506,7 @@ export function WatchPreviewModal({
             {
               id: `reply-${Date.now()}`,
               type: 'success',
-              title: `${targetName} (${chosenModelName})`,
+              title: `${targetName} (${poll.model || chosenModelName})`,
               details: summaryText,
               timestamp: 'Just now',
               agentId: targetAgent?.id,
@@ -507,6 +515,22 @@ export function WatchPreviewModal({
           ]);
 
           toast.success('Preview updated in real time', `${poll.changedFiles.length} file(s) updated.`);
+        } else if (poll.state === 'failed' || poll.state === 'running') {
+          // Say the change wasn't made; a chat reply here read as if it had been.
+          setRealTimeItems((prev) => [
+            ...prev.filter((i) => i.id !== runningId),
+            {
+              id: `reply-${Date.now()}`,
+              type: 'error',
+              title: `${targetName} couldn't apply that change`,
+              details: poll.state === 'running'
+                ? 'The change is taking unusually long. The preview will show it once it lands; reload it in a minute.'
+                : `${poll.error || 'The edit failed.'}\n\nTry describing the change more specifically (for example the page or the text you see).`,
+              timestamp: 'Just now',
+              agentId: targetAgent?.id,
+              agentName: targetName,
+            },
+          ]);
         } else {
           // Fall back to agent conversation turn if edit didn't change files
           let replyText = poll.error || '';

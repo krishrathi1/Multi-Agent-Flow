@@ -96,6 +96,8 @@ export async function callChatLLM(params: {
   systemPrompt: string;
   prompt: string;
   preferredModel?: string;
+  /** Reply budget for the Grok/Groq paths; their default suits chat answers, not code edits. */
+  maxTokens?: number;
   coworkData?: {
     processName?: string;
     status?: string;
@@ -134,6 +136,7 @@ export async function callChatLLM(params: {
         system: params.systemPrompt,
         prompt: params.prompt,
         model: isGrok ? preferred : undefined,
+        maxTokens: params.maxTokens,
       });
       if (g) {
         return {
@@ -157,6 +160,7 @@ export async function callChatLLM(params: {
         system: params.systemPrompt,
         prompt: params.prompt,
         model: preferredLower.startsWith('groq/') ? preferred : undefined,
+        maxTokens: params.maxTokens,
       });
       if (g) return { text: g.text, model: g.model, inputTokens: g.inputTokens, outputTokens: g.outputTokens, costUsd: 0 };
       unavailableReason = 'Groq did not answer';
