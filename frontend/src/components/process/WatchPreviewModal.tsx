@@ -455,7 +455,7 @@ export function WatchPreviewModal({
     // "Rename the app…" to a chat reply and nothing changed.
     const asksToChange = /\b(edit|change|add|create|update|modify|remove|delete|fix|repair|style|colou?r|make|build|patch|replace|set|restore|revert|undo|rename|move|hide|show|insert|swap|translate|center|centre|align|resize|enlarge|shrink|increase|decrease|bigger|smaller|use|turn|put|switch|convert|improve|redesign|reorder|sort|limit|enable|disable)\b/i.test(userPrompt);
     const isQuestion = /\?\s*$/.test(userPrompt)
-      || /^\s*(what|why|how|where|who|when|which|explain|describe|summari[sz]e|tell me|list|status)\b/i.test(userPrompt);
+      || /^\s*(what|why|how|where|who|when|which|explain|describe|summari[sz]e|tell me|list|status|can you|could you|is (it|there|this)|are (there|these)|do (we|you)|does (it|this))\b/i.test(userPrompt);
     const isCodeEdit = asksToChange || !isQuestion;
 
     try {

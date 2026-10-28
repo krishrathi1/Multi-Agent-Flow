@@ -461,7 +461,7 @@ async function rankEditSources(workspace: string, inputs: string[], index: strin
   }
   // A broken file's callers show what it has to export.
   for (const broken of errorFiles) {
-    const stem = path.posix.basename(broken).replace(/\.[a-z]+$/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const stem = path.basename(broken.replace(/\\/g, '/')).replace(/\.[a-z0-9]+$/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     for (const s of sources) {
       if (s.path !== broken && new RegExp(`from\\s+['"][./]+(?:[^'"]*/)?${stem}['"]`).test(s.content)) s.score = Math.max(s.score, 30);
     }
@@ -473,8 +473,10 @@ async function rankEditSources(workspace: string, inputs: string[], index: strin
 function editTarget(workspace: string, rel: string): string | null {
   const clean = rel.trim().replace(/^['"`]|['"`]$/g, '').replace(/^\.?\//, '');
   if (!clean || clean.split(/[\\/]/).some((seg) => seg === '..' || SKIPPED_DIRS.has(seg))) return null;
-  const abs = path.resolve(workspace, clean);
-  return abs.startsWith(workspace + path.sep) ? abs : null;
+  const normalizedWs = path.resolve(workspace);
+  const abs = path.resolve(normalizedWs, clean);
+  const relFromWs = path.relative(normalizedWs, abs);
+  return !relFromWs.startsWith('..') && !path.isAbsolute(relFromWs) ? abs : null;
 }
 
 /** Replaces `find` in `text`, tolerating indentation and trailing-space drift. */

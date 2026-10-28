@@ -228,7 +228,10 @@ export async function groqChat(params: {
       if (res.status === 401) return null; // a bad key fails every model
       // The free tier's per-minute window often frees up within seconds, and
       // the next model down answers noticeably worse; wait once rather than drop.
-      const retryIn = Number(String(data?.error?.message ?? '').match(/try again in ([\d.]+)s/)?.[1]);
+      const headerRetry = Number(res.headers.get('retry-after'));
+      const msgMatch = String(data?.error?.message ?? '').match(/try again in ([\d.]+)(m?s)/i);
+      const msgSeconds = msgMatch ? (msgMatch[2].toLowerCase() === 'ms' ? Number(msgMatch[1]) / 1000 : Number(msgMatch[1])) : NaN;
+      const retryIn = !isNaN(headerRetry) && headerRetry > 0 ? headerRetry : msgSeconds;
       if (res.status === 429 && !waitedForLimit && retryIn > 0 && retryIn <= 6) {
         waitedForLimit = true;
         await new Promise((r) => setTimeout(r, retryIn * 1000 + 250));
