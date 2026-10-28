@@ -450,7 +450,13 @@ export function WatchPreviewModal({
       streamEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
 
-    const isCodeEdit = /\b(edit|change|add|create|update|modify|remove|delete|fix|repair|style|color|make|build|patch|background|button|navbar|layout|page|screen|theme|blue|red|green|dark|light|font|title|heading|text|header|footer|replace|set|card|icon|size|padding|margin)\b/i.test(userPrompt);
+    // This chat exists to change the preview, so anything that isn't plainly a
+    // question is an edit. A keyword list sent "Restore the greeting…" or
+    // "Rename the app…" to a chat reply and nothing changed.
+    const asksToChange = /\b(edit|change|add|create|update|modify|remove|delete|fix|repair|style|colou?r|make|build|patch|replace|set|restore|revert|undo|rename|move|hide|show|insert|swap|translate|center|centre|align|resize|enlarge|shrink|increase|decrease|bigger|smaller|use|turn|put|switch|convert|improve|redesign|reorder|sort|limit|enable|disable)\b/i.test(userPrompt);
+    const isQuestion = /\?\s*$/.test(userPrompt)
+      || /^\s*(what|why|how|where|who|when|which|explain|describe|summari[sz]e|tell me|list|status)\b/i.test(userPrompt);
+    const isCodeEdit = asksToChange || !isQuestion;
 
     try {
       if (isCodeEdit) {
