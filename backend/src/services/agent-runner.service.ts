@@ -441,6 +441,31 @@ async function rankEditSources(workspace: string, inputs: string[], index: strin
     if (styling && /\.(s?css)$/.test(s.path)) s.score += 4;
     if (/(^|\/)(app|main|index|layout|appshell|home|dashboard)\.[a-z]+$/i.test(s.path)) s.score += 1.5;
   }
+  sources.sort((a, b) => b.score - a.score);
+
+  // What the leading files import (types, contracts) and their tests say how
+  // the code must fit together; without them a repair came back as a stub.
+  const byPath = new Map(sources.map((s) => [s.path, s]));
+  const resolveImport = (from: string, spec: string) => {
+    const base = path.posix.join(path.posix.dirname(from), spec);
+    for (const ext of ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js']) {
+      if (byPath.has(base + ext)) return byPath.get(base + ext)!;
+    }
+    return null;
+  };
+  for (const lead of sources.slice(0, 2).filter((s) => s.score > 0)) {
+    const related = [...lead.content.matchAll(/from\s+['"](\.{1,2}\/[^'"]+)['"]/g)]
+      .map((m) => resolveImport(lead.path, m[1]))
+      .concat(byPath.get(lead.path.replace(/\.(tsx?|jsx?)$/, '.test.$1')) ?? null);
+    for (const r of related) if (r && r !== lead) r.score = Math.max(r.score, lead.score * 0.6);
+  }
+  // A broken file's callers show what it has to export.
+  for (const broken of errorFiles) {
+    const stem = path.posix.basename(broken).replace(/\.[a-z]+$/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const s of sources) {
+      if (s.path !== broken && new RegExp(`from\\s+['"][./]+(?:[^'"]*/)?${stem}['"]`).test(s.content)) s.score = Math.max(s.score, 30);
+    }
+  }
   return sources.sort((a, b) => b.score - a.score);
 }
 
@@ -525,11 +550,13 @@ export async function applyDirectWorkspaceEdit(params: {
   const basePrompt = [
     `Project: "${params.projectName}". The user is watching its live preview and asked:`,
     `"""${params.instruction}"""`,
-    before.errors.length ? `The preview currently fails to build:\n${before.errors.join('\n')}` : '',
+    before.errors.length
+      ? `The preview currently fails to build:\n${before.errors.join('\n')}\nA file that fails like this is often truncated or corrupted: rebuild its complete, working implementation from what its callers import, the types it uses and its tests, rather than the least code that compiles.`
+      : '',
     'Relevant project files:',
     ...blocks,
     otherFiles.length ? `Other files in the project (not shown): ${otherFiles.join(', ')}` : '',
-    `Make the smallest change that fully does what the user asked, so it is visible in the preview. Keep the app building: check imports and names you touch.
+    `Make the smallest change that fully does what the user asked, so it is visible in the preview. Keep the app building: check imports and names you touch. Write real, working code that fits the types and tests shown — never placeholders, stubs or "not implemented" errors.
 Reply ONLY with edits in this exact format, one block per change:
 <<<EDIT path/to/file>>>
 <<<FIND>>>
