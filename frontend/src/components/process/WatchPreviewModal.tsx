@@ -489,7 +489,9 @@ export function WatchPreviewModal({
           if (iframeRef.current) {
             try {
               const url = new URL(iframeRef.current.src, window.location.origin);
-              url.searchParams.set('t', Date.now().toString());
+              // `t` is the preview's access token; overwriting it as a cache
+              // buster made every edit reload to "This preview is not shared".
+              url.searchParams.set('_r', Date.now().toString());
               iframeRef.current.src = url.toString();
             } catch {
               iframeRef.current.src = iframeRef.current.src;
