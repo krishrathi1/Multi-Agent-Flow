@@ -559,8 +559,8 @@ export function renderReportMarkdown(r: Omit<ProjectReport, 'markdown'>): string
 
   out.push(`# ${r.processName}`, '');
   out.push(`Production report · generated ${when}`, '');
-  // A plain paragraph, not a blockquote: the in-app viewer doesn't render '>'.
-  out.push(`**Goal:** ${r.goal.trim().replace(/\s*\n\s*/g, ' ')}`, '');
+  out.push('## Goal & Mission Briefing', '');
+  out.push(r.goal.trim(), '');
 
   // At a glance
   out.push('## At a glance', '');

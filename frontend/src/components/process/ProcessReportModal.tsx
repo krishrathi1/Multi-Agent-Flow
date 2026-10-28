@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   AlertTriangle,
   Check,
   CheckCircle2,
+  Coins,
   Copy,
   Download,
   FileCode,
   FileText,
   FolderTree,
   Info,
+  Layers,
   ListChecks,
   Printer,
   RefreshCw,
   Search,
+  Sparkles,
+  Target,
   Terminal,
   Users,
   XCircle,
@@ -119,19 +124,39 @@ function StateBadge({ state }: { state: string }) {
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn('space-y-2.5', className)}>
-      <h3 className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">{title}</h3>
+    <section className={cn('space-y-3', className)}>
+      <div className="flex items-center gap-2">
+        <h3 className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">{title}</h3>
+        <div className="h-px flex-1 bg-line-subtle" />
+      </div>
       {children}
     </section>
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
+function Stat({
+  label,
+  value,
+  sub,
+  icon: Icon,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  icon?: any;
+}) {
   return (
-    <div className="rounded-xl border border-line-subtle bg-inset px-3.5 py-3 min-w-0">
-      <div className="text-[11px] font-medium text-ink-muted">{label}</div>
-      <div className="mt-0.5 text-base font-semibold text-ink truncate">{value}</div>
-      {sub && <div className="text-[11px] text-ink-muted truncate">{sub}</div>}
+    <div className="rounded-xl border border-line bg-surface p-3.5 min-w-0 shadow-2xs hover:border-line-strong transition-all">
+      <div className="flex items-center justify-between gap-1.5 mb-1.5">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">{label}</span>
+        {Icon && (
+          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-inset text-brand-600 dark:text-brand-400">
+            <Icon size={13} />
+          </span>
+        )}
+      </div>
+      <div className="text-base font-bold text-ink truncate">{value}</div>
+      {sub && <div className="mt-0.5 text-[11px] text-ink-muted truncate font-medium">{sub}</div>}
     </div>
   );
 }
@@ -329,21 +354,67 @@ export function ProcessReportModal({ process, open, onClose }: ProcessReportModa
           <div className="max-h-[62vh] overflow-y-auto pr-1 space-y-6 text-sm text-ink">
             {tab === 'overview' && (
               <>
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <Stat
+                    icon={Activity}
                     label="Latest run"
                     value={report.run ? <StateBadge state={report.run.state} /> : 'Not run yet'}
                     sub={report.run?.durationMs ? `took ${formatDuration(report.run.durationMs)}` : `${report.runsCompleted}/${report.runsTotal} runs completed`}
                   />
-                  <Stat label="Code" value={`${report.stack.totalFiles} files`} sub={`${report.stack.totalLines.toLocaleString()} lines · ${formatBytes(report.stack.totalBytes)}`} />
-                  <Stat label="Team" value={`${report.stages.length} agents`} sub={`${new Set(report.stages.map((s) => s.stage)).size} stages`} />
-                  <Stat label="Usage" value={`${report.usage.totalTokens.toLocaleString()} tokens`} sub={`$${report.usage.totalCostUsd.toFixed(4)}`} />
+                  <Stat
+                    icon={FileCode}
+                    label="Code"
+                    value={`${report.stack.totalFiles} files`}
+                    sub={`${report.stack.totalLines.toLocaleString()} lines · ${formatBytes(report.stack.totalBytes)}`}
+                  />
+                  <Stat
+                    icon={Users}
+                    label="Team"
+                    value={`${report.stages.length} agents`}
+                    sub={`${new Set(report.stages.map((s) => s.stage)).size} stages`}
+                  />
+                  <Stat
+                    icon={Coins}
+                    label="Usage"
+                    value={`${report.usage.totalTokens.toLocaleString()} tokens`}
+                    sub={`$${report.usage.totalCostUsd.toFixed(4)}`}
+                  />
                 </div>
 
-                <Section title="Goal">
-                  <blockquote className="whitespace-pre-wrap rounded-lg border-l-2 border-brand-500 bg-inset px-3.5 py-2.5 text-[13px] leading-relaxed text-ink">
-                    {report.goal}
-                  </blockquote>
+                {report.summary && (
+                  <Section title="Executive Summary">
+                    <div className="rounded-xl border border-brand-500/20 bg-brand-500/5 p-4 shadow-2xs">
+                      <div className="flex items-center gap-2 mb-2 font-bold text-xs text-brand-600 dark:text-brand-400">
+                        <Sparkles size={14} />
+                        <span>Execution Overview</span>
+                      </div>
+                      <MarkdownRenderer content={report.summary} />
+                    </div>
+                  </Section>
+                )}
+
+                <Section title="Project Goal & Specification">
+                  <div className="rounded-xl border border-line bg-surface overflow-hidden shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-line-subtle bg-inset/50 px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                          <Target size={14} />
+                        </span>
+                        <span className="text-xs font-bold text-ink">Mission Briefing & Requirements</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        icon={Copy}
+                        onClick={() => copy(report.goal, 'Goal copied')}
+                      >
+                        Copy Goal
+                      </Button>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto p-4 leading-relaxed">
+                      <MarkdownRenderer content={report.goal} />
+                    </div>
+                  </div>
                 </Section>
 
                 {report.run?.error && (
@@ -461,7 +532,11 @@ export function ProcessReportModal({ process, open, onClose }: ProcessReportModa
                     <div className="mt-0.5 text-xs text-ink-muted">
                       {[s.role, s.durationMs != null ? formatDuration(s.durationMs) : null, s.tokens ? `${s.tokens.toLocaleString()} tokens` : null].filter(Boolean).join(' · ')}
                     </div>
-                    {s.outcome && <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">{s.outcome}</p>}
+                    {s.outcome && (
+                      <div className="mt-2 text-[13px] leading-relaxed rounded-xl border border-line-subtle bg-inset/40 p-3.5">
+                        <MarkdownRenderer content={s.outcome} />
+                      </div>
+                    )}
                     {s.files.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
                         {s.files.map((f) => (
