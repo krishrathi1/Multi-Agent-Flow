@@ -355,12 +355,12 @@ export async function applyDirectWorkspaceEdit(params: {
   organizationId: string;
   preferredModel?: string;
 }): Promise<{ changedFiles: string[]; summary: string } | null> {
-  const EXTS = new Set(['.html', '.htm', '.css', '.js', '.jsx', '.ts', '.tsx', '.json', '.vue', '.svelte']);
-  const files: Array<{ path: string; content: string }> = [];
+  const UI_EXTS = new Set(['.html', '.htm', '.css', '.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte']);
+  const files: Array<{ path: string; content: string; priority: number }> = [];
   let totalBytes = 0;
 
   async function walk(dir: string, relPrefix = ''): Promise<void> {
-    if (totalBytes >= 140_000 || files.length >= 30) return;
+    if (totalBytes >= 18_000 || files.length >= 15) return;
     let entries;
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
@@ -368,27 +368,41 @@ export async function applyDirectWorkspaceEdit(params: {
       return;
     }
     for (const e of entries) {
-      if (totalBytes >= 140_000 || files.length >= 30) return;
+      if (totalBytes >= 18_000 || files.length >= 15) return;
       if (
         e.name === 'node_modules' ||
         e.name === '.git' ||
         e.name === 'dist' ||
         e.name === '.nexus-workspaces' ||
+        e.name === 'tests' ||
+        e.name === 'server' ||
         e.isSymbolicLink()
       ) continue;
-      if (e.name.endsWith('-output.md') || e.name === 'package-lock.json') continue;
+      if (
+        e.name.endsWith('-output.md') ||
+        e.name.endsWith('.json') ||
+        e.name.endsWith('.md') ||
+        e.name.endsWith('.config.ts') ||
+        e.name.endsWith('.config.js')
+      ) continue;
+
       const full = path.join(dir, e.name);
       const rel = relPrefix ? `${relPrefix}/${e.name}` : e.name;
       if (e.isDirectory()) {
         await walk(full, rel);
       } else if (e.isFile()) {
         const ext = path.extname(e.name).toLowerCase();
-        if (EXTS.has(ext)) {
+        if (UI_EXTS.has(ext)) {
           try {
             const stat = await fs.stat(full);
-            if (stat.size <= 50_000 && totalBytes + stat.size <= 140_000) {
+            if (stat.size <= 16_000 && totalBytes + stat.size <= 24_000) {
               const content = await fs.readFile(full, 'utf-8');
-              files.push({ path: rel, content });
+              // Prioritize index.html, App, and css files
+              let priority = 10;
+              const lower = rel.toLowerCase();
+              if (lower.includes('app.') || lower.includes('main.') || lower === 'index.html') priority = 1;
+              else if (lower.endsWith('.css')) priority = 2;
+              files.push({ path: rel, content, priority });
               totalBytes += stat.size;
             }
           } catch { /* ignore */ }
@@ -400,13 +414,18 @@ export async function applyDirectWorkspaceEdit(params: {
   await walk(params.workspace);
   if (files.length === 0) return null;
 
+  // Sort by priority so key files are included first
+  files.sort((a, b) => a.priority - b.priority);
+  // Keep up to 6 most relevant UI files (max ~12,000 bytes)
+  const targetFiles = files.slice(0, 6);
+
   const prompt = [
     `You are an expert full-stack web developer editing an active project workspace in REAL TIME for a live browser preview.`,
     `Project name: "${params.projectName}"`,
     `User instruction: "${params.instruction}"`,
     '',
     'Current project files:',
-    ...files.map((f) => `=== FILE: ${f.path} ===\n${f.content}\n=== END FILE ===`),
+    ...targetFiles.map((f) => `=== FILE: ${f.path} ===\n${f.content}\n=== END FILE ===`),
     '',
     'Instructions:',
     '1. Apply the user request accurately to the relevant project files (styling, CSS, colors, HTML content, components, scripts, layouts, buttons, etc.).',
