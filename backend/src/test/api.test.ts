@@ -174,11 +174,12 @@ describe('MyceliumOps Backend Integration Tests', () => {
       expect(refreshResult.refreshToken).not.toBe(originalRefresh);
       expect(refreshResult.accessToken).not.toBe(refreshUser.accessToken);
 
-      // Old refresh token should no longer exist in DB (rotation)
+      // Old refresh token has its expiration shortened to the grace window (rotation)
       const oldTokenInDb = await prisma.refreshToken.findUnique({
         where: { token: hashToken(originalRefresh) },
       });
-      expect(oldTokenInDb).toBeNull();
+      expect(oldTokenInDb).not.toBeNull();
+      expect(oldTokenInDb!.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 70_000);
 
       // New refresh token should exist in DB
       const newTokenInDb = await prisma.refreshToken.findUnique({
