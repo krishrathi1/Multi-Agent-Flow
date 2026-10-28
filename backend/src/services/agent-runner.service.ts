@@ -638,7 +638,7 @@ Finish with: <<<SUMMARY>>>one or two sentences on what you changed<<<END>>>`,
 
     // An edit must not break a preview that built before it.
     const after = await checkPreviewBuild(params.processId);
-    const newErrors = after.errors.filter((e) => !before.errors.includes(e));
+    const newErrors = after.errors.filter((e: string) => !before.errors.includes(e));
     if (newErrors.length) {
       await revert();
       lastReason = `The edit broke the preview build, so it was undone: ${newErrors[0]}`;
