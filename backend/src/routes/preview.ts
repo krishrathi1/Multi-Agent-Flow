@@ -379,11 +379,19 @@ async function ensureDependencies(wsDir: string): Promise<void> {
   const declaresAny = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).length > 0;
   if (!declaresAny || (fsSync.existsSync(path.join(wsDir, 'node_modules')) && missing.length === 0)) return;
   if (!installs.has(wsDir)) {
-    installs.set(wsDir, execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    const promise = execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
       ['install', '--no-audit', '--no-fund', '--ignore-scripts', '--loglevel=error'],
       { cwd: wsDir, timeout: 180_000, windowsHide: true, shell: process.platform === 'win32' })
       .then(() => undefined)
-      .catch((e) => { console.warn('Preview dependency install failed:', (e as Error).message); }));
+      .catch((e) => {
+        installs.delete(wsDir);
+        console.warn('Preview dependency install failed:', (e as Error).message);
+      })
+      .finally(() => {
+        const timer = setTimeout(() => installs.delete(wsDir), 10 * 60 * 1000);
+        timer.unref?.();
+      });
+    installs.set(wsDir, promise);
   }
   await installs.get(wsDir);
 }

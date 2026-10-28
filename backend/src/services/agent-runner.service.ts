@@ -484,12 +484,21 @@ function editTarget(workspace: string, rel: string): string | null {
   return !relFromWs.startsWith('..') && !path.isAbsolute(relFromWs) ? abs : null;
 }
 
-/** Replaces `find` in `text`, tolerating indentation and trailing-space drift. */
+/** Replaces `find` in `text`, tolerating indentation, line-ending differences, and trailing-space drift. */
 function replaceOnce(text: string, find: string, replace: string): string | null {
   if (!find.trim()) return null;
-  if (text.includes(find)) return text.replace(find, () => replace);
-  const lines = text.split('\n');
-  const want = find.split('\n').map((l) => l.trim()).filter((l, i, a) => l || (i > 0 && i < a.length - 1));
+  const hasCRLF = text.includes('\r\n');
+  const normText = text.replace(/\r\n/g, '\n');
+  const normFind = find.replace(/\r\n/g, '\n');
+  const normReplace = replace.replace(/\r\n/g, '\n');
+
+  if (normText.includes(normFind)) {
+    const res = normText.replace(normFind, () => normReplace);
+    return hasCRLF ? res.replace(/\n/g, '\r\n') : res;
+  }
+
+  const lines = normText.split('\n');
+  const want = normFind.split('\n').map((l) => l.trim()).filter((l, i, a) => l || (i > 0 && i < a.length - 1));
   if (!want.length) return null;
   for (let i = 0; i + want.length <= lines.length; i++) {
     let j = 0;
@@ -501,9 +510,10 @@ function replaceOnce(text: string, find: string, replace: string): string | null
     }
     if (j === want.length) {
       const indent = lines[i].match(/^\s*/)?.[0] ?? '';
-      const minIndent = Math.min(...replace.split('\n').filter((l) => l.trim()).map((l) => l.match(/^\s*/)![0].length));
-      const shifted = replace.split('\n').map((l) => (l.trim() ? indent + l.slice(Number.isFinite(minIndent) ? minIndent : 0) : l));
-      return [...lines.slice(0, i), ...shifted, ...lines.slice(k)].join('\n');
+      const minIndent = Math.min(...normReplace.split('\n').filter((l) => l.trim()).map((l) => l.match(/^\s*/)![0].length));
+      const shifted = normReplace.split('\n').map((l) => (l.trim() ? indent + l.slice(Number.isFinite(minIndent) ? minIndent : 0) : l));
+      const res = [...lines.slice(0, i), ...shifted, ...lines.slice(k)].join('\n');
+      return hasCRLF ? res.replace(/\n/g, '\r\n') : res;
     }
   }
   return null;
@@ -602,24 +612,32 @@ Finish with: <<<SUMMARY>>>one or two sentences on what you changed<<<END>>>`,
 
     const originals = new Map<string, string | null>();
     const failures: string[] = [];
-    const blockRe = /<<<(EDIT|NEW)\s+([^>\n]+?)>>>\s*\n([\s\S]*?)<<<END>>>/g;
+    const blockRe = /<<<(EDIT|NEW)\s+([^>\n]+?)>>>[ \t]*\r?\n([\s\S]*?)<<<END(?:\s*(?:EDIT|NEW))?>>>/gi;
     for (const m of reply.text.matchAll(blockRe)) {
       const [, kind, rel, body] = m;
       const abs = editTarget(workspace, rel);
       const relClean = abs ? path.relative(workspace, abs).replace(/\\/g, '/') : rel.trim();
       if (!abs) { failures.push(`${rel.trim()}: not a path inside the project`); continue; }
       const current = await fs.readFile(abs, 'utf-8').catch(() => null);
-      if (kind === 'NEW') {
+      if (kind.toUpperCase() === 'NEW') {
         if (current !== null && shown.get(relClean) !== 'whole') { failures.push(`${relClean}: already exists; edit it with FIND/REPLACE`); continue; }
         if (!originals.has(relClean)) originals.set(relClean, current);
         await fs.mkdir(path.dirname(abs), { recursive: true });
-        await fs.writeFile(abs, body.replace(/^```[a-z0-9_-]*\n|\n```\s*$/gi, '').replace(/\s+$/, '') + '\n', 'utf-8');
+        await fs.writeFile(abs, body.replace(/^```[a-z0-9_-]*\r?\n|\r?\n```\s*$/gi, '').replace(/\s+$/, '') + '\n', 'utf-8');
         continue;
       }
       // Only the newline after a marker is dropped: the first line's indentation is part of the code.
       const parts = body.match(/^\s*<<<FIND>>>[ \t]*\r?\n([\s\S]*?)\r?\n?<<<REPLACE>>>[ \t]*\r?\n?([\s\S]*?)\s*$/);
       if (!parts || current === null) { failures.push(`${relClean}: ${current === null ? 'no such file' : 'malformed edit block'}`); continue; }
-      const next = replaceOnce(current, parts[1].replace(/\s+$/, ''), parts[2].replace(/\s+$/, ''));
+      let findText = parts[1].replace(/\s+$/, '');
+      let replaceText = parts[2].replace(/\s+$/, '');
+      if (/^```[a-zA-Z0-9_-]*\r?\n[\s\S]*\r?\n```$/.test(findText.trim())) {
+        findText = findText.trim().replace(/^```[a-zA-Z0-9_-]*\r?\n/, '').replace(/\r?\n```$/, '');
+      }
+      if (/^```[a-zA-Z0-9_-]*\r?\n[\s\S]*\r?\n```$/.test(replaceText.trim())) {
+        replaceText = replaceText.trim().replace(/^```[a-zA-Z0-9_-]*\r?\n/, '').replace(/\r?\n```$/, '');
+      }
+      const next = replaceOnce(current, findText, replaceText);
       if (next === null) { failures.push(`${relClean}: the FIND text is not in the file`); continue; }
       if (!originals.has(relClean)) originals.set(relClean, current);
       await fs.writeFile(abs, next, 'utf-8');
