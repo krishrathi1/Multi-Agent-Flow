@@ -692,6 +692,7 @@ export async function startWorkspaceEdit(
   instruction: string,
   emit: (event: string, payload: unknown) => void,
   requestedModel?: string,
+  targetAgentId?: string,
 ): Promise<WorkspaceEdit> {
   if (isRunning(processId)) {
     throw Object.assign(new Error('A production run is in progress; wait for it to finish before editing.'), { statusCode: 409 });
@@ -701,9 +702,13 @@ export async function startWorkspaceEdit(
   }
   const proc = await prisma.process.findFirst({
     where: { id: processId, organizationId },
-    include: { agents: { select: { id: true }, orderBy: { processStage: 'asc' }, take: 1 } },
+    include: { agents: { select: { id: true, displayName: true, name: true }, orderBy: { processStage: 'asc' } } },
   });
   if (!proc) throw Object.assign(new Error('Process not found'), { statusCode: 404 });
+
+  const respondingAgent = (targetAgentId ? proc.agents.find((a) => a.id === targetAgentId) : null) || proc.agents[0];
+  const agentId = respondingAgent?.id;
+  const agentName = respondingAgent?.displayName || respondingAgent?.name || 'Agent Specialist';
 
   const planned = proc.plannedBy?.includes(':') ? proc.plannedBy.slice(proc.plannedBy.indexOf(':') + 1) : '';
   const model = requestedModel?.trim() || (planned.includes('/') ? planned : config.opencodeModel);
@@ -717,9 +722,31 @@ export async function startWorkspaceEdit(
   editingProcesses.add(processId);
   emit('process:edit:updated', job);
 
+  // Record user's chat prompt in Activity immediately so chat is permanently saved
+  if (agentId) {
+    await prisma.activity.create({
+      data: {
+        organizationId,
+        processId,
+        agentId,
+        type: ActivityType.MESSAGE,
+        message: `User: ${instruction}`,
+        metadata: {
+          chat: true,
+          role: 'user',
+          content: instruction,
+          model,
+          agentName,
+          previewEdit: true,
+        },
+      },
+    }).catch(() => {});
+  }
+
   void (async () => {
     const workspace = workspaceFor(processId);
     let directFailure: string | null = null;
+    let recordedAssistantReply = false;
     try {
       // 1. Fast Real-Time Direct LLM Workspace Edit (seconds)
       try {
@@ -738,14 +765,34 @@ export async function startWorkspaceEdit(
           job.changedFiles = direct.changedFiles;
           job.summary = direct.summary;
           job.commit = await snapshotWorkspace(workspace, `Preview edit: ${instruction.replace(/\s+/g, ' ').slice(0, 72)}`);
-          if (proc.agents[0]) {
+          if (agentId) {
+            const fileList = direct.changedFiles.length
+              ? `\n\n**Updated Files (${direct.changedFiles.length}):**\n${direct.changedFiles.map((f: string) => `• \`${f}\``).join('\n')}`
+              : '';
+            const replyContent = direct.summary
+              ? `${direct.summary}${fileList}`
+              : `I have updated your application in real time per your instruction!${fileList}`;
+
             await prisma.activity.create({
               data: {
-                organizationId, processId, agentId: proc.agents[0].id, type: ActivityType.SYSTEM,
-                message: `Preview edit applied: "${instruction.slice(0, 120)}" (${direct.changedFiles.length} file${direct.changedFiles.length === 1 ? '' : 's'} changed)`,
-                metadata: { previewEdit: { jobId: job.id, changedFiles: direct.changedFiles, commit: job.commit } },
+                organizationId,
+                processId,
+                agentId,
+                type: ActivityType.MESSAGE,
+                message: `${agentName} replied: ${replyContent.slice(0, 160)}`,
+                metadata: {
+                  chat: true,
+                  role: 'assistant',
+                  content: replyContent,
+                  model: direct.model || model,
+                  agentName,
+                  changedFiles: direct.changedFiles,
+                  success: true,
+                  previewEdit: true,
+                },
               },
             }).catch(() => {});
+            recordedAssistantReply = true;
           }
           return;
         }
@@ -809,15 +856,6 @@ export async function startWorkspaceEdit(
         job.state = 'completed';
         job.changedFiles = changed;
         job.commit = await snapshotWorkspace(workspace, `Preview edit: ${instruction.replace(/\s+/g, ' ').slice(0, 72)}`);
-        if (proc.agents[0]) {
-          await prisma.activity.create({
-            data: {
-              organizationId, processId, agentId: proc.agents[0].id, type: ActivityType.SYSTEM,
-              message: `Preview edit applied: "${instruction.slice(0, 120)}" (${changed.length} file${changed.length === 1 ? '' : 's'} changed)`,
-              metadata: { previewEdit: { jobId: job.id, changedFiles: changed, commit: job.commit } },
-            },
-          }).catch(() => {});
-        }
       }
     } catch (err) {
       job.state = 'failed';
@@ -827,6 +865,37 @@ export async function startWorkspaceEdit(
       if (job.state === 'failed' && directFailure) job.error = `${directFailure} The agent fallback also failed: ${job.error}`;
       job.finishedAt = new Date().toISOString();
       editingProcesses.delete(processId);
+
+      // Record assistant's reply/resolution in Activity if not already saved
+      if (agentId && !recordedAssistantReply) {
+        const fileList = job.changedFiles?.length
+          ? `\n\n**Updated Files (${job.changedFiles.length}):**\n${job.changedFiles.map((f: string) => `• \`${f}\``).join('\n')}`
+          : '';
+        const replyContent = job.state === 'completed'
+          ? (job.summary ? `${job.summary}${fileList}` : `I have updated your application in real time per your instruction!${fileList}`)
+          : (job.error || 'The edit failed. Try describing the change more specifically.');
+
+        await prisma.activity.create({
+          data: {
+            organizationId,
+            processId,
+            agentId,
+            type: ActivityType.MESSAGE,
+            message: `${agentName} replied: ${replyContent.slice(0, 160)}`,
+            metadata: {
+              chat: true,
+              role: 'assistant',
+              content: replyContent,
+              model: job.model || model,
+              agentName,
+              changedFiles: job.changedFiles,
+              success: job.state === 'completed',
+              previewEdit: true,
+            },
+          },
+        }).catch(() => {});
+      }
+
       emit('process:edit:updated', job);
       logger.info({ processId, jobId: job.id, state: job.state, files: job.changedFiles.length }, 'Preview edit finished');
     }

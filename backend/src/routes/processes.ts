@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { ProcessStatus, ApprovalMode, MessagingMode } from '@prisma/client';
+import { ProcessStatus, ApprovalMode, ActivityType, MessagingMode } from '@prisma/client';
 import * as blackboard from '../services/blackboard.service.js';
 import * as processService from '../services/process.service.js';
 import * as runner from '../services/agent-runner.service.js';
@@ -294,8 +294,37 @@ router.get('/:id/run', async (req, res) => {
   if (!proc) return res.status(404).json({ error: 'Process not found' });
 
   const status = runner.getRunStatus(id);
-  if (!status) return res.status(404).json({ error: 'No run recorded for this process' });
-  res.json(status);
+  if (status) return res.json(status);
+
+  // Fall back to the latest persisted run from DB so history survives server restarts
+  const lastRun = await prisma.processRun.findFirst({
+    where: { processId: id, organizationId: req.organizationId! },
+    orderBy: { startedAt: 'desc' },
+    include: { steps: { orderBy: [{ stage: 'asc' }, { startedAt: 'asc' }] } },
+  });
+
+  if (!lastRun) return res.status(404).json({ error: 'No run recorded for this process' });
+
+  const fallbackStatus = {
+    processId: id,
+    runId: lastRun.id,
+    state: lastRun.state.toLowerCase(),
+    currentStage: lastRun.currentStage ?? 0,
+    totalStages: lastRun.totalStages ?? (lastRun.steps.length || 1),
+    steps: lastRun.steps.map((s) => ({
+      agentId: s.agentId,
+      agentName: s.agentName,
+      stage: s.stage,
+      ok: s.state === 'COMPLETED',
+      summary: s.summary || '',
+      durationMs: s.durationMs,
+      tokens: s.tokens,
+      costUsd: s.costUsd,
+    })),
+    error: lastRun.error ?? undefined,
+  };
+
+  res.json(fallbackStatus);
 });
 
 /** Files the chain produced, for the artifact list in the UI. */
@@ -638,11 +667,12 @@ router.post('/:id/edits', async (req, res) => {
   const id = paramId(req.params.id);
   const instruction = typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : '';
   const model = typeof req.body?.model === 'string' ? req.body.model.trim() : undefined;
+  const agentId = typeof req.body?.agentId === 'string' ? req.body.agentId.trim() : undefined;
   if (!instruction || instruction.length > 4000) {
     return res.status(400).json({ error: 'Describe the change (up to 4,000 characters)' });
   }
   const emit = (event: string, payload: unknown) => req.app.get('io')?.to(`org:${req.organizationId}`).emit(event, payload);
-  const job = await runner.startWorkspaceEdit(id, req.organizationId!, instruction, emit, model);
+  const job = await runner.startWorkspaceEdit(id, req.organizationId!, instruction, emit, model, agentId);
   res.status(202).json(job);
 });
 
@@ -650,6 +680,75 @@ router.get('/:id/edits/:jobId', async (req, res) => {
   const job = runner.getWorkspaceEdit(paramId(req.params.jobId), req.organizationId!);
   if (!job || job.processId !== paramId(req.params.id)) return res.status(404).json({ error: 'Edit not found' });
   res.json(job);
+});
+
+/**
+ * GET /:id/chat-history — returns persistent chat turns & preview edits for a process
+ */
+router.get('/:id/chat-history', async (req, res) => {
+  try {
+    const id = paramId(req.params.id);
+    const rows = await prisma.activity.findMany({
+      where: {
+        organizationId: req.organizationId!,
+        processId: id,
+        OR: [
+          { type: ActivityType.MESSAGE },
+          {
+            type: ActivityType.SYSTEM,
+            message: { startsWith: 'Preview edit applied' },
+          },
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        agent: {
+          select: { id: true, name: true, displayName: true, avatar: true },
+        },
+      },
+      take: 200,
+    });
+
+    const messages = rows.map((r) => {
+      const meta = (r.metadata || {}) as Record<string, any>;
+      const isUser =
+        meta.role === 'user' ||
+        r.message.startsWith('User:') ||
+        r.message.startsWith('Human →') ||
+        r.message.startsWith('Operator →');
+
+      const role: 'user' | 'assistant' = isUser ? 'user' : 'assistant';
+      const agentName =
+        meta.agentName || r.agent?.displayName || r.agent?.name || 'Agent Specialist';
+      const isSuccess = meta.success !== false;
+
+      let content = meta.content;
+      if (!content) {
+        content = r.message;
+      }
+
+      return {
+        id: r.id,
+        role,
+        type: role === 'user' ? ('user' as const) : isSuccess ? ('success' as const) : ('error' as const),
+        title:
+          role === 'user'
+            ? 'User Instruction'
+            : `${agentName} (${meta.model || 'AI'})`,
+        details: content,
+        content,
+        timestamp: r.createdAt.toISOString(),
+        agentId: r.agentId,
+        agentName,
+        model: meta.model,
+        changedFiles: meta.changedFiles,
+      };
+    });
+
+    res.json({ messages });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to load chat history', messages: [] });
+  }
 });
 
 router.post('/:id/ask-ai-fix', async (req, res) => {

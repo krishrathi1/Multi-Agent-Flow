@@ -32,7 +32,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { api, downloadWithAuth } from '../../lib/api';
-import { cn } from '../../lib/utils';
+import { cn, timeAgo } from '../../lib/utils';
 import { Button } from '../ui/Button';
 import { useToast } from '../ui/Toast';
 import type { Agent, Process, Task, WorkspaceArtifact } from '../../types';
@@ -237,40 +237,70 @@ export function WatchPreviewModal({
           });
         }
 
-        // 2. Fetch workspace files to display real generated deliverables
-        api.processes
-          .files(fullProc.id)
-          .then((files) => {
+        // Instant local cache hydration for chat messages
+        const localCacheKey = `maf_chat_${fullProc.id}`;
+        let initialChatItems: RealTimeItem[] = [];
+        try {
+          const raw = localStorage.getItem(localCacheKey);
+          if (raw) initialChatItems = JSON.parse(raw);
+        } catch { /* ignore */ }
+
+        // Fetch workspace files and persistent chat history in parallel
+        Promise.allSettled([
+          api.processes.files(fullProc.id),
+          api.processes.chatHistory(fullProc.id),
+        ])
+          .then(([filesRes, chatRes]) => {
             if (isCancelled) return;
-            setWorkspaceFiles(files);
 
-            // If files exist, attach them as concrete deliverables assigned across the agents
-            const interestingFiles = files.filter(
-              (f) =>
-                !f.path.includes('.git') &&
-                !f.path.includes('node_modules') &&
-                !f.path.includes('.env')
-            );
+            if (filesRes.status === 'fulfilled') {
+              const files = filesRes.value;
+              setWorkspaceFiles(files);
 
-            if (interestingFiles.length > 0 && fullProc.agents && fullProc.agents.length > 0) {
-              interestingFiles.slice(0, 6).forEach((f, idx) => {
-                const assignedAgent = fullProc.agents![idx % fullProc.agents!.length];
-                dynamicItems.push({
-                  id: `file-${idx}`,
-                  type: 'success',
-                  title: f.path,
-                  details: `Generated autonomous component (${Math.round((f.size / 1024) * 10) / 10} KB)`,
-                  timestamp: 'Deliverable',
-                  agentId: assignedAgent?.id,
-                  agentName: assignedAgent?.displayName || 'Agent',
+              // If files exist, attach them as concrete deliverables assigned across the agents
+              const interestingFiles = files.filter(
+                (f) =>
+                  !f.path.includes('.git') &&
+                  !f.path.includes('node_modules') &&
+                  !f.path.includes('.env')
+              );
+
+              if (interestingFiles.length > 0 && fullProc.agents && fullProc.agents.length > 0) {
+                interestingFiles.slice(0, 6).forEach((f, idx) => {
+                  const assignedAgent = fullProc.agents![idx % fullProc.agents!.length];
+                  dynamicItems.push({
+                    id: `file-${idx}`,
+                    type: 'success',
+                    title: f.path,
+                    details: `Generated autonomous component (${Math.round((f.size / 1024) * 10) / 10} KB)`,
+                    timestamp: 'Deliverable',
+                    agentId: assignedAgent?.id,
+                    agentName: assignedAgent?.displayName || 'Agent',
+                  });
                 });
-              });
+              }
             }
 
-            setRealTimeItems(dynamicItems);
+            let chatItems = initialChatItems;
+            if (chatRes.status === 'fulfilled' && chatRes.value?.messages && chatRes.value.messages.length > 0) {
+              chatItems = chatRes.value.messages.map((m) => ({
+                id: m.id,
+                type: m.type as 'user' | 'success' | 'error',
+                title: m.title,
+                details: m.details,
+                timestamp: timeAgo(m.timestamp) || 'Earlier',
+                agentId: m.agentId,
+                agentName: m.agentName,
+              }));
+              try {
+                localStorage.setItem(localCacheKey, JSON.stringify(chatItems));
+              } catch { /* ignore */ }
+            }
+
+            setRealTimeItems([...dynamicItems, ...chatItems]);
           })
           .catch(() => {
-            if (!isCancelled) setRealTimeItems(dynamicItems);
+            if (!isCancelled) setRealTimeItems([...dynamicItems, ...initialChatItems]);
           });
 
         // Dynamic project narrative summary from process prompt and summary
@@ -424,17 +454,31 @@ export function WatchPreviewModal({
     const runningId = `working-${Date.now()}`;
     const chosenModelName = allAvailableModels.find((m) => m.id === selectedModel)?.name || selectedModel;
 
+    const userItem: RealTimeItem = {
+      id: userItemId,
+      type: 'user',
+      title: 'User Instruction',
+      details: userPrompt,
+      timestamp: 'Just now',
+      agentId: targetAgent?.id,
+      agentName: targetName,
+    };
+
+    const appendLocalChat = (item: RealTimeItem) => {
+      if (!currentProcess?.id) return;
+      try {
+        const key = `maf_chat_${currentProcess.id}`;
+        const existing: RealTimeItem[] = JSON.parse(localStorage.getItem(key) || '[]');
+        const filtered = existing.filter((x) => x.id !== item.id);
+        localStorage.setItem(key, JSON.stringify([...filtered, item]));
+      } catch { /* ignore */ }
+    };
+
+    appendLocalChat(userItem);
+
     setRealTimeItems((prev) => [
       ...prev,
-      {
-        id: userItemId,
-        type: 'user',
-        title: 'User Instruction',
-        details: userPrompt,
-        timestamp: 'Just now',
-        agentId: targetAgent?.id,
-        agentName: targetName,
-      },
+      userItem,
       {
         id: runningId,
         type: 'running',
@@ -474,7 +518,7 @@ export function WatchPreviewModal({
           },
         ]);
 
-        const editJob = await api.processes.startEdit(currentProcess.id, userPrompt, selectedModel);
+        const editJob = await api.processes.startEdit(currentProcess.id, userPrompt, selectedModel, targetAgent?.id);
         let poll = editJob;
         const started = Date.now();
         // Wait for the edit itself: a fast edit takes seconds, but the agent
@@ -512,36 +556,42 @@ export function WatchPreviewModal({
             ? `${poll.summary}\n\n**Updated Files (${poll.changedFiles.length}):**\n${fileList}`
             : `I have updated your application in real time per your instruction!\n\n**Updated Files (${poll.changedFiles.length}):**\n${fileList}`;
 
+          const replyItem: RealTimeItem = {
+            id: `reply-${Date.now()}`,
+            type: 'success',
+            title: `${targetName} (${poll.model || chosenModelName})`,
+            details: summaryText,
+            timestamp: 'Just now',
+            agentId: targetAgent?.id,
+            agentName: targetName,
+          };
+
           setRealTimeItems((prev) => [
             ...prev.filter((i) => i.id !== runningId),
-            {
-              id: `reply-${Date.now()}`,
-              type: 'success',
-              title: `${targetName} (${poll.model || chosenModelName})`,
-              details: summaryText,
-              timestamp: 'Just now',
-              agentId: targetAgent?.id,
-              agentName: targetName,
-            },
+            replyItem,
           ]);
+          appendLocalChat(replyItem);
 
           toast.success('Preview updated in real time', `${poll.changedFiles.length} file(s) updated.`);
         } else if (poll.state === 'failed' || poll.state === 'running') {
           // Say the change wasn't made; a chat reply here read as if it had been.
+          const replyItem: RealTimeItem = {
+            id: `reply-${Date.now()}`,
+            type: 'error',
+            title: `${targetName} couldn't apply that change`,
+            details: poll.state === 'running'
+              ? 'The change is taking unusually long. The preview will show it once it lands; reload it in a minute.'
+              : `${poll.error || 'The edit failed.'}\n\nTry describing the change more specifically (for example the page or the text you see).`,
+            timestamp: 'Just now',
+            agentId: targetAgent?.id,
+            agentName: targetName,
+          };
+
           setRealTimeItems((prev) => [
             ...prev.filter((i) => i.id !== runningId),
-            {
-              id: `reply-${Date.now()}`,
-              type: 'error',
-              title: `${targetName} couldn't apply that change`,
-              details: poll.state === 'running'
-                ? 'The change is taking unusually long. The preview will show it once it lands; reload it in a minute.'
-                : `${poll.error || 'The edit failed.'}\n\nTry describing the change more specifically (for example the page or the text you see).`,
-              timestamp: 'Just now',
-              agentId: targetAgent?.id,
-              agentName: targetName,
-            },
+            replyItem,
           ]);
+          appendLocalChat(replyItem);
         } else {
           // Fall back to agent conversation turn if edit didn't change files
           let replyText = poll.error || '';
@@ -555,18 +605,21 @@ export function WatchPreviewModal({
             }
           }
 
+          const replyItem: RealTimeItem = {
+            id: `reply-${Date.now()}`,
+            type: 'success',
+            title: `${targetName} (${chosenModelName})`,
+            details: replyText,
+            timestamp: 'Just now',
+            agentId: targetAgent?.id,
+            agentName: targetName,
+          };
+
           setRealTimeItems((prev) => [
             ...prev.filter((i) => i.id !== runningId),
-            {
-              id: `reply-${Date.now()}`,
-              type: 'success',
-              title: `${targetName} (${chosenModelName})`,
-              details: replyText,
-              timestamp: 'Just now',
-              agentId: targetAgent?.id,
-              agentName: targetName,
-            },
+            replyItem,
           ]);
+          appendLocalChat(replyItem);
         }
       } else {
         // General direct conversational turn
@@ -594,33 +647,39 @@ export function WatchPreviewModal({
           replyText = `Agent received request: "${userPrompt}". ${chatErr?.message ? `(${chatErr.message})` : ''}`;
         }
 
-        // Display agent's real-time answer
-        setRealTimeItems((prev) => [
-          ...prev.filter((i) => i.id !== runningId),
-          {
-            id: `reply-${Date.now()}`,
-            type: 'success',
-            title: `${targetName} (${replyModel})`,
-            details: replyText,
-            timestamp: 'Just now',
-            agentId: targetAgent?.id,
-            agentName: targetName,
-          },
-        ]);
-      }
-    } catch (err: any) {
-      setRealTimeItems((prev) => [
-        ...prev.filter((i) => i.id !== runningId),
-        {
-          id: `err-${Date.now()}`,
-          type: 'error',
-          title: 'Communication Error',
-          details: err?.message || 'Could not complete agent conversation.',
+        const replyItem: RealTimeItem = {
+          id: `reply-${Date.now()}`,
+          type: 'success',
+          title: `${targetName} (${replyModel})`,
+          details: replyText,
           timestamp: 'Just now',
           agentId: targetAgent?.id,
           agentName: targetName,
-        },
+        };
+
+        // Display agent's real-time answer
+        setRealTimeItems((prev) => [
+          ...prev.filter((i) => i.id !== runningId),
+          replyItem,
+        ]);
+        appendLocalChat(replyItem);
+      }
+    } catch (err: any) {
+      const errItem: RealTimeItem = {
+        id: `err-${Date.now()}`,
+        type: 'error',
+        title: 'Communication Error',
+        details: err?.message || 'Could not complete agent conversation.',
+        timestamp: 'Just now',
+        agentId: targetAgent?.id,
+        agentName: targetName,
+      };
+
+      setRealTimeItems((prev) => [
+        ...prev.filter((i) => i.id !== runningId),
+        errItem,
       ]);
+      appendLocalChat(errItem);
     } finally {
       setIsProcessing(false);
       setTimeout(() => {

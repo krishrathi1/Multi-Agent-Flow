@@ -67,8 +67,14 @@ type Filter = 'all' | PersistedRunState;
 /** Expandable row showing a run and, when opened, its per-stage detail. */
 function RunRow({ run }: { run: ProcessRun }) {
   const [open, setOpen] = useState(false);
-  const [detail, setDetail] = useState<ProcessRun | null>(null);
+  const [detail, setDetail] = useState<ProcessRun | null>(run.steps && run.steps.length > 0 ? run : null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (run.steps && run.steps.length > 0) {
+      setDetail(run);
+    }
+  }, [run]);
 
   const tone = toneFor(run.state);
   const Icon = iconFor(run.state);
@@ -77,10 +83,13 @@ function RunRow({ run }: { run: ProcessRun }) {
   const toggle = async () => {
     const next = !open;
     setOpen(next);
-    if (next && !detail) {
+    if (next && (!detail || !detail.steps || detail.steps.length === 0)) {
       setLoading(true);
       try {
-        setDetail(await api.orchestration.run(run.id));
+        const fetched = await api.orchestration.run(run.id);
+        if (fetched) setDetail(fetched);
+      } catch (err) {
+        console.warn('Could not fetch run detail:', err);
       } finally {
         setLoading(false);
       }
@@ -246,7 +255,15 @@ function RunRow({ run }: { run: ProcessRun }) {
               </ul>
             </div>
           ) : (
-            <p className="py-4 text-center text-xs text-ink-muted">No step details recorded for this run.</p>
+            <div className="py-4 text-center text-xs text-ink-muted">
+              <p className="font-semibold text-ink">Run recorded (#{run.id.slice(0, 8)})</p>
+              <p className="mt-1 text-2xs">Trigger: {run.trigger.toLowerCase()} • Status: {run.state.toLowerCase()}</p>
+              {run.error && (
+                <p className="mt-2 text-xs text-rose-600 dark:text-rose-400 font-medium bg-rose-500/10 p-2.5 rounded-lg border border-rose-500/20 max-w-lg mx-auto text-left">
+                  {run.error}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
