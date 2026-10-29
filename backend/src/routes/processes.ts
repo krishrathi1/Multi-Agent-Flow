@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { ProcessStatus, ApprovalMode } from '@prisma/client';
+import { ProcessStatus, ApprovalMode, MessagingMode } from '@prisma/client';
+import * as blackboard from '../services/blackboard.service.js';
 import * as processService from '../services/process.service.js';
 import * as runner from '../services/agent-runner.service.js';
 import { prisma } from '../lib/prisma.js';
@@ -42,6 +43,15 @@ const updateSchema = z.object({
   maxTokens: z.number().int().min(0).max(50_000_000).nullable().optional(),
   // Human-in-the-loop gating between stages.
   approvalMode: z.nativeEnum(ApprovalMode).optional(),
+  // How agents share context: the shared blackboard or direct stage-to-stage messages.
+  messagingMode: z.nativeEnum(MessagingMode).optional(),
+});
+
+const blackboardPostSchema = z.object({
+  kind: z.enum(blackboard.ENTRY_KINDS),
+  topic: z.string().trim().min(1).max(140),
+  content: z.string().trim().min(1).max(4000),
+  to: z.string().trim().max(80).optional(),
 });
 
 router.get('/', async (req, res) => {
@@ -224,6 +234,53 @@ router.post('/:id/preview-session', async (req, res) => {
   });
 
   res.json({ success: true, previewUrl: `/preview/${id}?t=${sessionToken}` });
+});
+
+/**
+ * The production's blackboard — the shared state its agents read and post
+ * to — with each recent run's messaging stats so blackboard and peer-to-peer
+ * runs can be compared. `?runId=` narrows the entries to one run.
+ */
+router.get('/:id/blackboard', async (req, res) => {
+  const id = paramId(req.params.id);
+  const proc = await prisma.process.findFirst({
+    where: { id, organizationId: req.organizationId! },
+    select: { id: true, messagingMode: true },
+  });
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+  const runId = typeof req.query.runId === 'string' ? req.query.runId : undefined;
+  const [entries, runs] = await Promise.all([
+    prisma.blackboardEntry.findMany({
+      where: { processId: id, ...(runId ? { runId } : {}) },
+      orderBy: { createdAt: 'asc' },
+      take: 500,
+    }),
+    prisma.processRun.findMany({
+      where: { processId: id, organizationId: req.organizationId! },
+      orderBy: { startedAt: 'desc' },
+      take: 10,
+      select: {
+        id: true, state: true, startedAt: true, durationMs: true, totalTokens: true, totalCostUsd: true,
+        messagingMode: true, messaging: true, _count: { select: { steps: true } },
+      },
+    }),
+  ]);
+  res.json({ mode: proc.messagingMode, entries: entries.map(blackboard.publicEntry), runs });
+});
+
+/** A person's post on the board (guidance, an answer, an issue for a role), read by the agents' next steps. */
+router.post('/:id/blackboard', validate(blackboardPostSchema), async (req, res) => {
+  const id = paramId(req.params.id);
+  const proc = await prisma.process.findFirst({ where: { id, organizationId: req.organizationId! }, select: { id: true } });
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+  const entry = await blackboard.postOperatorEntry({
+    organizationId: req.organizationId!,
+    processId: id,
+    ...req.body,
+    authorName: req.user?.name ? `${req.user.name} (operator)` : 'Operator',
+  });
+  req.app.get('io')?.to(`org:${req.organizationId}`).emit('blackboard:updated', { processId: id });
+  res.status(201).json(blackboard.publicEntry(entry));
 });
 
 /** Live progress for a run in flight, or the last finished run. */

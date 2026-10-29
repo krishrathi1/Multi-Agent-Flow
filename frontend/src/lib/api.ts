@@ -1,4 +1,4 @@
-import type { Agent, AgentStats, Activity, Task, Thread, Message, Session, TokenUsage, MetricSnapshot, AlertRule, AlertEvent, Command, Gateway, GatewayHealth, ModelInfo, ChatHistory, ChatResponse, WorkspaceFile, LlmProvider, UsageCredit, Board, BoardGroup, Approval, Tag, TagAssignment, TaskCustomFieldDefinition, BoardTaskCustomField, TaskCustomFieldValue, MarketplaceSkill, SkillPack, AgentSkill, AgentIntegration, BoardWebhook, BoardWebhookPayload, BoardOnboardingSession, BoardGroupMemory, OrgInvite, SoulTemplate, Process, ProcessPlan, ProcessStats, ProcessStatus, ChainRunResult, WorkspaceArtifact, RunStatus, ProcessRun, RunStats, ProcessTemplate, ProcessSchedule, ProcessWebhookConfig, ChainGate, ApprovalMode, AppNotification, CostEstimate, AgentInsight, PreviewVisibility, RunComparison, ChainBundle, WebhookDelivery } from '../types';
+import type { Agent, AgentStats, Activity, Task, Thread, Message, Session, TokenUsage, MetricSnapshot, AlertRule, AlertEvent, Command, Gateway, GatewayHealth, ModelInfo, ChatHistory, ChatResponse, WorkspaceFile, LlmProvider, UsageCredit, Board, BoardGroup, Approval, Tag, TagAssignment, TaskCustomFieldDefinition, BoardTaskCustomField, TaskCustomFieldValue, MarketplaceSkill, SkillPack, AgentSkill, AgentIntegration, BoardWebhook, BoardWebhookPayload, BoardOnboardingSession, BoardGroupMemory, OrgInvite, SoulTemplate, Process, ProcessPlan, ProcessStats, ProcessStatus, ChainRunResult, WorkspaceArtifact, RunStatus, ProcessRun, RunStats, ProcessTemplate, ProcessSchedule, ProcessWebhookConfig, ChainGate, ApprovalMode, AppNotification, CostEstimate, AgentInsight, PreviewVisibility, RunComparison, ChainBundle, WebhookDelivery, MessagingMode, BlackboardView, BlackboardEntry, BlackboardKind } from '../types';
 import { useAuthStore } from '../stores/auth-store';
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
@@ -298,6 +298,11 @@ export const api = {
         method: 'POST',
       }),
     pause: (id: string) => request<Process>(`/processes/${id}/pause`, { method: 'POST' }),
+    /** The production's shared blackboard, plus each recent run's messaging stats. */
+    blackboard: (id: string, runId?: string) =>
+      request<BlackboardView>(`/processes/${id}/blackboard${runId ? `?runId=${encodeURIComponent(runId)}` : ''}`),
+    postToBlackboard: (id: string, data: { kind: BlackboardKind; topic: string; content: string; to?: string }) =>
+      request<BlackboardEntry>(`/processes/${id}/blackboard`, { method: 'POST', body: JSON.stringify(data) }),
     update: (
       id: string,
       data: {
@@ -308,6 +313,7 @@ export const api = {
         budgetUsd?: number | null;
         maxTokens?: number | null;
         approvalMode?: ApprovalMode;
+        messagingMode?: MessagingMode;
       },
     ) =>
       request<Process>(`/processes/${id}`, {

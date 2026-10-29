@@ -50,6 +50,18 @@ export interface ReportRunStep {
   command: string;
 }
 
+/** How the agents shared context, and how blackboard and peer-to-peer runs compare. */
+export interface ReportMessaging {
+  mode: string;
+  board: { total: number; byKind: Record<string, number>; open: number; resolved: number };
+  keyEntries: Array<{ kind: string; topic: string; author: string; content: string }>;
+  openItems: Array<{ kind: string; topic: string; author: string; to: string | null }>;
+  runs: Array<{
+    runId: string; mode: string; state: string; durationMs: number | null; tokens: number;
+    avgContextChars: number; entriesPosted: number; issuesRaised: number; issuesResolved: number; reworkSteps: number;
+  }>;
+}
+
 export interface ProjectReport {
   processId: string;
   processName: string;
@@ -90,6 +102,7 @@ export interface ProjectReport {
     targetRepo: string | null;
   };
   checks: ReportCheck[];
+  messaging: ReportMessaging;
   markdown: string;
 }
 
@@ -529,8 +542,35 @@ export async function generateProjectReport(processId: string, organizationId: s
     files,
     git: { local, github, targetRepo },
     checks,
+    messaging: await buildMessaging(proc.id, proc.messagingMode, proc.runs),
   };
   return { ...report, markdown: renderReportMarkdown(report) };
+}
+
+async function buildMessaging(
+  processId: string,
+  mode: string,
+  runs: Array<{ id: string; state: string; durationMs: number | null; totalTokens: number; messagingMode: string | null; messaging: unknown }>,
+): Promise<ReportMessaging> {
+  const entries = await prisma.blackboardEntry.findMany({ where: { processId }, orderBy: { createdAt: 'asc' }, take: 500 });
+  const byKind: Record<string, number> = {};
+  for (const e of entries) byKind[e.kind] = (byKind[e.kind] ?? 0) + 1;
+  return {
+    mode,
+    board: { total: entries.length, byKind, open: entries.filter((e) => e.status === 'open').length, resolved: entries.filter((e) => e.status === 'resolved').length },
+    keyEntries: entries.filter((e) => e.kind === 'decision' || e.kind === 'contract').slice(-10)
+      .map((e) => ({ kind: e.kind, topic: e.topic, author: e.authorName, content: e.content.slice(0, 400) })),
+    openItems: entries.filter((e) => e.status === 'open').map((e) => ({ kind: e.kind, topic: e.topic, author: e.authorName, to: e.toRole })),
+    runs: runs.filter((r) => r.messaging).slice(0, 8).map((r) => {
+      const m = r.messaging as Partial<import('./blackboard.service.js').MessagingStats>;
+      const ctx = m.contextChars ?? [];
+      return {
+        runId: r.id, mode: r.messagingMode ?? m.mode ?? '?', state: r.state, durationMs: r.durationMs, tokens: r.totalTokens,
+        avgContextChars: ctx.length ? Math.round(ctx.reduce((a, b) => a + b, 0) / ctx.length) : 0,
+        entriesPosted: m.entriesPosted ?? 0, issuesRaised: m.issuesRaised ?? 0, issuesResolved: m.issuesResolved ?? 0, reworkSteps: m.reworkSteps ?? 0,
+      };
+    }),
+  };
 }
 
 // ─── Markdown ──────────────────────────────────────────────────────────────
@@ -602,6 +642,33 @@ export function renderReportMarkdown(r: Omit<ProjectReport, 'markdown'>): string
     out.push(`*${s.role || 'Agent'}* — ${facts.join(' · ')}`, '');
     if (s.outcome) out.push(s.outcome, '');
     if (s.files.length) out.push(`Files: ${s.files.slice(0, 12).map((f) => `\`${f}\``).join(', ')}${s.files.length > 12 ? `, and ${s.files.length - 12} more` : ''}`, '');
+  }
+
+  // Context sharing
+  const mm = r.messaging;
+  out.push('## Context sharing', '');
+  out.push(mm.mode === 'PEER_TO_PEER'
+    ? 'Agents pass their output **peer-to-peer**: each stage sends its summaries directly to the next stage only.'
+    : 'Agents share context through a **blackboard**: one shared state every agent reads before working and posts decisions, contracts, artifacts and issues to when done.', '');
+  if (mm.board.total) {
+    out.push(`The board holds **${mm.board.total}** entries (${Object.entries(mm.board.byKind).map(([k, n]) => `${n} ${k}`).join(', ')}); ${mm.board.resolved} resolved, ${mm.board.open} still open.`, '');
+  }
+  if (mm.keyEntries.length) {
+    out.push('**Decisions and contracts on the board**', '');
+    for (const e of mm.keyEntries) out.push(`- **${e.kind}** · ${e.topic} — *${e.author}*: ${cell(e.content)}`);
+    out.push('');
+  }
+  if (mm.openItems.length) {
+    out.push('**Open items**', '');
+    for (const e of mm.openItems) out.push(`- ${e.kind} · ${e.topic} — from ${e.author}${e.to ? ` to ${e.to}` : ''}`);
+    out.push('');
+  }
+  if (mm.runs.length) {
+    out.push('**Blackboard vs peer-to-peer, by run**', '', '| Run | Mode | Result | Time | Tokens | Avg. context per agent | Entries | Issues raised / resolved | Follow-up steps |', '|---|---|---|---|--:|--:|--:|---|--:|');
+    for (const x of mm.runs) {
+      out.push(`| \`${x.runId.slice(0, 8)}\` | ${x.mode === 'PEER_TO_PEER' ? 'Peer-to-peer' : 'Blackboard'} | ${STATE_LABEL[x.state] ?? x.state} | ${x.durationMs ? formatDuration(x.durationMs) : '—'} | ${x.tokens.toLocaleString('en-US')} | ${x.avgContextChars.toLocaleString('en-US')} chars | ${x.entriesPosted} | ${x.issuesRaised} / ${x.issuesResolved} | ${x.reworkSteps} |`);
+    }
+    out.push('');
   }
 
   // Structure

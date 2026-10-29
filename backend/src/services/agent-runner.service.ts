@@ -2,7 +2,7 @@ import { promises as fs, existsSync } from 'node:fs';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import path from 'node:path';
-import { ActivityType, ProcessStatus, RunState, RunTrigger, ApprovalMode, ApprovalStatus, Prisma } from '@prisma/client';
+import { ActivityType, ProcessStatus, RunState, RunTrigger, ApprovalMode, ApprovalStatus, MessagingMode, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { runClaudeCli, isClaudeCliEnabled } from '../lib/claude-cli.js';
@@ -15,6 +15,7 @@ import { run as runOpenCode, OpenCodeUnavailableError } from './opencode.service
 import { getOrganizationIntegrationToken } from './org.service.js';
 import { getGroqApiKey, groqModel, getGrokApiKey, grokModel } from './llm-provider.service.js';
 import * as repoService from './repo.service.js';
+import * as blackboard from './blackboard.service.js';
 
 import { config } from '../config.js';
 /**
@@ -2455,7 +2456,8 @@ export interface WorkspaceFile {
   modifiedAt: string;
 }
 
-const IGNORED_ENTRIES = new Set(['.git', 'node_modules', '.claude']);
+// .blackboard is the agents' shared state, not part of what they built.
+const IGNORED_ENTRIES = new Set(['.git', 'node_modules', '.claude', '.blackboard']);
 
 /** Bounds so a runaway agent can't make listing or zipping unbounded work. */
 const MAX_WORKSPACE_FILES = 2000;
@@ -2759,12 +2761,15 @@ function taskPrompt(
   role: string,
   handoffs: Array<{ agent: string; summary: string }>,
   files: WorkspaceFile[],
+  shared?: StepContext,
 ): string {
   const parts = [`# Production goal\n${goal}`, `\n# Your job\n${role}`];
 
+  if (shared?.rework) parts.push(`\n# Follow-up on the blackboard\n${shared.rework}`);
+  if (shared?.board) parts.push(`\n${shared.board}`);
   if (handoffs.length > 0) {
     parts.push(
-      '\n# Handoff from earlier stages\n' +
+      '\n# Messages from the previous stage\n' +
         handoffs.map((h) => `## ${h.agent}\n${h.summary}`).join('\n\n'),
     );
   }
@@ -2787,6 +2792,14 @@ export interface RunStepResult {
   durationMs: number;
   tokens: number;
   costUsd: number;
+  /** Files the step created. */
+  files?: string[];
+}
+
+/** Shared context a step gets besides direct messages: the blackboard, and any follow-up it owes. */
+interface StepContext {
+  board?: string;
+  rework?: string;
 }
 
 const formatUsd = (n: number) => `$${n.toFixed(4)}`;
@@ -2821,6 +2834,7 @@ async function runStep(
   emit: Emit,
   runId?: string,
   preferredModel?: string,
+  shared?: StepContext,
 ): Promise<RunStepResult> {
   const workspace = workspaceFor(processId);
   await fs.mkdir(workspace, { recursive: true });
@@ -2937,7 +2951,7 @@ async function runStep(
       agent,
       goal,
       systemPrompt: systemPromptFor(agent),
-      userPrompt: taskPrompt(goal, agent.processRole ?? agent.description, handoffs, filesBefore),
+      userPrompt: taskPrompt(goal, agent.processRole ?? agent.description, handoffs, filesBefore, shared),
       workspace,
       timeoutMs: Number(process.env.AGENT_RUN_TIMEOUT_MS ?? 900_000),
       preferredModel,
@@ -3116,7 +3130,7 @@ async function runStep(
 
   return {
     agentId: agent.id, agentName: agent.displayName, stage: agent.processStage,
-    ok: true, summary: res.text, durationMs, tokens, costUsd: res.costUsd,
+    ok: true, summary: res.text, durationMs, tokens, costUsd: res.costUsd, files: newFiles,
   };
 }
 
@@ -3792,6 +3806,18 @@ export async function runProcessChain(
   const handoffs: Array<{ agent: string; summary: string }> = [];
   if (live) live.totalStages = stages.length;
 
+  // Blackboard: every agent reads and posts to one shared state. Peer-to-peer:
+  // each stage messages only the next one. Stats are kept for comparing them.
+  const mode = proc.messagingMode ?? MessagingMode.BLACKBOARD;
+  const useBoard = mode === MessagingMode.BLACKBOARD;
+  const stats = blackboard.emptyStats(mode);
+  const workspace = workspaceFor(processId);
+  /** Direct messages for the next stage (peer-to-peer mode). */
+  let lastStageMessages: Array<{ agent: string; summary: string }> = [];
+  /** Board items the controller already sent someone back for in this run. */
+  const followedUp = new Set<string>();
+  await prisma.processRun.update({ where: { id: runRow.id }, data: { messagingMode: mode } }).catch(() => {});
+
   let stoppedReason: string | null = null;
   let awaitingApproval: number | null = null;
   // Stages already cleared by a human, so a resumed run doesn't re-ask.
@@ -3812,6 +3838,9 @@ export async function runProcessChain(
     for (const p of prior) {
       if (p.summary) handoffs.push({ agent: p.agentName, summary: p.summary });
     }
+    const lastPriorStage = Math.max(...prior.map((p) => p.stage));
+    lastStageMessages = prior.filter((p) => p.stage === lastPriorStage && p.summary)
+      .map((p) => ({ agent: p.agentName, summary: p.summary! }));
     logger.info(
       { processId, fromStage, replayed: prior.length },
       'Retrying chain from a later stage',
@@ -3915,12 +3944,33 @@ export async function runProcessChain(
       undefined;
     const results: RunStepResult[] = [];
     const FAN_OUT = Number(process.env.MAX_STAGE_PARALLELISM ?? 3);
+
+    // What each agent of this stage is given to work from.
+    const contextFor = new Map<string, { messages: typeof handoffs; shared?: StepContext }>();
+    if (useBoard) {
+      const board = await blackboard.readBoard(processId, runRow.id);
+      await blackboard.publishBoard(workspace, board, inStage);
+      for (const a of inStage) {
+        const { text, forMe } = blackboard.boardForAgent(board, a);
+        const shared = { board: blackboard.boardInstructions(a, text, forMe) };
+        contextFor.set(a.id, { messages: [], shared });
+        stats.contextChars.push(text.length); // the shared content, not the posting instructions
+        stats.deliveries += 1;
+      }
+    } else {
+      for (const a of inStage) {
+        contextFor.set(a.id, { messages: [...lastStageMessages] });
+        stats.contextChars.push(lastStageMessages.reduce((n, m) => n + m.summary.length, 0));
+        stats.deliveries += lastStageMessages.length;
+      }
+    }
+
     for (let i = 0; i < inStage.length; i += FAN_OUT) {
       const batch = inStage.slice(i, i + FAN_OUT);
       results.push(
         ...(await Promise.all(
           batch.map((a) =>
-            runStep(a, organizationId, processId, proc.prompt, [...handoffs], emit, runRow.id, preferredModel),
+            runStep(a, organizationId, processId, proc.prompt, contextFor.get(a.id)!.messages, emit, runRow.id, preferredModel, contextFor.get(a.id)!.shared),
           ),
         )),
       );
@@ -3968,6 +4018,66 @@ export async function runProcessChain(
     for (const r of results) {
       if (r.ok) handoffs.push({ agent: r.agentName, summary: r.summary });
     }
+    lastStageMessages = results.filter((r) => r.ok).map((r) => ({ agent: r.agentName, summary: r.summary }));
+
+    if (useBoard) {
+      // Issues a stage raises without naming anyone go to the stage whose work it reviewed.
+      const prevStage = stages[stages.indexOf(stage) - 1];
+      const defaultTo = proc.agents.find((a) => a.processStage === prevStage)?.displayName;
+      for (const r of results.filter((x) => x.ok)) {
+        const agent = inStage.find((a) => a.id === r.agentId)!;
+        const { posted, resolved } = await blackboard.collectPosts({
+          organizationId, processId, runId: runRow.id, workspace, agent,
+          summary: r.summary, files: r.files ?? [], defaultTo,
+        }).catch((err) => {
+          logger.warn({ err, processId }, 'Could not collect blackboard posts');
+          return { posted: [], resolved: 0 };
+        });
+        stats.entriesPosted += posted.length;
+        stats.issuesRaised += posted.filter((p) => p.status === 'open').length;
+        stats.issuesResolved += resolved;
+      }
+      emit('blackboard:updated', { processId, runId: runRow.id });
+
+      // The controller: whoever already worked and has open items addressed
+      // to them on the board goes back to resolve them before the chain moves
+      // on. One follow-up round per stage keeps the spend bounded.
+      if (!stoppedReason && !isCancelled(processId)) {
+        const board = await blackboard.readBoard(processId, runRow.id);
+        const done = proc.agents.filter((a) => a.processStage <= stage && !pausedIds.has(a.id));
+        // An item gets one follow-up per run: one that stays open after it
+        // would otherwise send the same agent back after every later stage.
+        const owed = [...blackboard.openItemsByAgent(board.filter((e) => !followedUp.has(e.id)), done)].slice(0, 3);
+        for (const [agentId, items] of owed) {
+          for (const e of items) followedUp.add(e.id);
+          if (stats.reworkSteps >= 4 || isCancelled(processId)) break;
+          const agent = proc.agents.find((a) => a.id === agentId)!;
+          await blackboard.publishBoard(workspace, board, [agent]);
+          const { text, forMe } = blackboard.boardForAgent(board, agent);
+          const shared: StepContext = {
+            board: blackboard.boardInstructions(agent, text, forMe),
+            rework: `Other agents left ${items.length} open item${items.length === 1 ? '' : 's'} for you on the blackboard. Resolve them in the code now, then post an answer for each with "resolves":["<id>"]:\n` +
+              items.map((e) => `- (${e.id.slice(0, 8)}) ${e.kind} from ${e.authorName}: ${e.topic} — ${e.content.slice(0, 600)}`).join('\n'),
+          };
+          stats.contextChars.push(text.length + shared.rework!.length);
+          stats.deliveries += 1;
+          stats.reworkSteps += 1;
+          logger.info({ processId, agent: agent.displayName, items: items.length }, 'Blackboard controller: follow-up step');
+          const r = await runStep(agent, organizationId, processId, proc.prompt, [], emit, runRow.id, preferredModel, shared);
+          steps.push(r);
+          if (live) live.steps = [...steps];
+          if (!r.ok) continue;
+          const { posted, resolved } = await blackboard.collectPosts({
+            organizationId, processId, runId: runRow.id, workspace, agent, summary: r.summary, files: r.files ?? [],
+          }).catch(() => ({ posted: [], resolved: 0 }));
+          stats.entriesPosted += posted.length;
+          stats.issuesRaised += posted.filter((p) => p.status === 'open').length;
+          stats.issuesResolved += resolved;
+          emit('blackboard:updated', { processId, runId: runRow.id });
+        }
+      }
+    }
+    await prisma.processRun.update({ where: { id: runRow.id }, data: { messaging: stats as unknown as Prisma.InputJsonValue } }).catch(() => {});
 
     // A mid-stage guardrail stop ends the run, not just the batch loop — the
     // work done so far is still recorded above before we leave.

@@ -6,11 +6,12 @@ import {
   Globe,
   KeyRound,
   Lock,
+  Network,
   ShieldCheck,
   SlidersHorizontal,
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import type { ApprovalMode, PreviewVisibility, Process } from '../../types';
+import type { ApprovalMode, MessagingMode, PreviewVisibility, Process } from '../../types';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input, Select } from '../ui/Input';
@@ -30,9 +31,22 @@ const MODES: Array<{ value: ApprovalMode; label: string; hint: string }> = [
   },
 ];
 
+const MESSAGING: Array<{ value: MessagingMode; label: string; hint: string }> = [
+  {
+    value: 'BLACKBOARD',
+    label: 'Blackboard — shared state',
+    hint: 'Agents read and post to one shared board; open issues send the owner back to fix them.',
+  },
+  {
+    value: 'PEER_TO_PEER',
+    label: 'Peer-to-peer — direct messages',
+    hint: 'Each stage sends its summary to the next stage only. Useful as a comparison.',
+  },
+];
+
 /**
- * Guardrails for a chain: where a human must sign off, and the ceiling a run
- * may not spend past.
+ * Guardrails for a chain: where a human must sign off, how agents share
+ * context, and the ceiling a run may not spend past.
  */
 export function ChainSettingsModal({
   process,
@@ -47,6 +61,7 @@ export function ChainSettingsModal({
 }) {
   const toast = useToast();
   const [mode, setMode] = useState<ApprovalMode>(process.approvalMode ?? 'NONE');
+  const [messaging, setMessaging] = useState<MessagingMode>(process.messagingMode ?? 'BLACKBOARD');
   const [budget, setBudget] = useState(
     process.budgetUsd != null ? String(process.budgetUsd) : '',
   );
@@ -103,6 +118,7 @@ export function ChainSettingsModal({
     try {
       await api.processes.update(process.id, {
         approvalMode: mode,
+        messagingMode: messaging,
         budgetUsd: budgetNum,
         maxTokens: tokenNum === null ? null : Math.round(tokenNum),
       });
@@ -158,6 +174,39 @@ export function ChainSettingsModal({
                   value={m.value}
                   checked={mode === m.value}
                   onChange={() => setMode(m.value)}
+                  className="mt-0.5 accent-brand-600"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-ink">{m.label}</span>
+                  <span className="mt-0.5 block text-xs text-ink-subtle">{m.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.09em] text-ink-faint">
+            <Network size={12} strokeWidth={2} aria-hidden />
+            Context sharing between agents
+          </p>
+          <div className="space-y-1.5">
+            {MESSAGING.map((m) => (
+              <label
+                key={m.value}
+                className={
+                  'flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 transition-colors ' +
+                  (messaging === m.value
+                    ? 'border-brand-600/40 bg-brand-500/10 dark:border-brand-500/40'
+                    : 'border-line bg-inset hover:border-line-strong')
+                }
+              >
+                <input
+                  type="radio"
+                  name="messaging-mode"
+                  value={m.value}
+                  checked={messaging === m.value}
+                  onChange={() => setMessaging(m.value)}
                   className="mt-0.5 accent-brand-600"
                 />
                 <span className="min-w-0">
