@@ -1,7 +1,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { config } from '../config.js';
@@ -193,6 +194,29 @@ export function withWorkspaceBoundary(configContent?: string): string {
   });
 }
 
+/** Environment variable that marks every process an agent session starts. */
+const SESSION_TAG = 'MYCELIUM_AGENT_SESSION';
+
+/**
+ * Stops every process still carrying this session's tag. OpenCode runs each
+ * shell command in its own process group, so servers and headless browsers
+ * an agent started outlived the session, killed or finished; the tag is
+ * inherited through all of them. Linux only (reads /proc).
+ */
+export async function stopSessionProcesses(tag: string): Promise<number> {
+  if (process.platform !== 'linux') return 0;
+  const marker = `${SESSION_TAG}=${tag}`;
+  let stopped = 0;
+  for (const entry of await readdir('/proc').catch(() => [] as string[])) {
+    const pid = Number(entry);
+    if (!Number.isInteger(pid) || pid === process.pid) continue;
+    const environ = await readFile(`/proc/${pid}/environ`, 'latin1').catch(() => '');
+    if (!environ.split('\0').includes(marker)) continue;
+    try { process.kill(pid, 'SIGTERM'); stopped++; } catch { /* already gone */ }
+  }
+  return stopped;
+}
+
 export async function run(
   prompt: string,
   model?: string,
@@ -211,6 +235,8 @@ export async function run(
 
   const effectiveTimeout = timeoutMs || config.opencodeTimeoutMs;
 
+  const sessionTag = randomUUID();
+
   return new Promise((resolve, reject) => {
     const child = spawn(commandName(), args, {
       cwd: workingDirectory,
@@ -224,6 +250,7 @@ export async function run(
         ...opts.env,
         PWD: workingDirectory,
         OPENCODE_CONFIG_CONTENT: withWorkspaceBoundary(opts.env?.OPENCODE_CONFIG_CONTENT),
+        [SESSION_TAG]: sessionTag,
       },
     });
 
@@ -231,9 +258,17 @@ export async function run(
     let stderr = '';
     let isTimedOut = false;
 
+    // Stops the session and anything it left running.
+    const stopAll = () => {
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      stopSessionProcesses(sessionTag)
+        .then((n) => { if (n) logger.info({ stopped: n, cwd: workingDirectory }, 'Stopped processes an agent session left running'); })
+        .catch(() => {});
+    };
+
     const timer = setTimeout(() => {
       isTimedOut = true;
-      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      stopAll();
       reject(new Error(`OpenCode execution timed out after ${effectiveTimeout}ms`));
     }, effectiveTimeout);
 
@@ -247,7 +282,7 @@ export async function run(
       if (fatal) {
         isTimedOut = true; // reuse the flag: we've settled, ignore 'close'
         clearTimeout(timer);
-        try { child.kill('SIGTERM'); } catch { /* ignore */ }
+        stopAll();
         reject(new OpenCodeUnavailableError(`OpenCode model unavailable: ${fatal.replace(/^AI_\w+:\s*/, '').slice(0, 240)}`));
       }
     });
@@ -256,6 +291,10 @@ export async function run(
       clearTimeout(timer);
       if (!isTimedOut) reject(err);
     });
+
+    // OpenCode itself is done: stop what it leaves behind. A server it
+    // started would also hold stdout open and delay 'close' indefinitely.
+    child.on('exit', () => stopAll());
 
     child.on('close', (code) => {
       clearTimeout(timer);

@@ -68,7 +68,7 @@ export interface StageOutput {
 type StepAgent = { displayName: string; processRole?: string | null; processStage: number };
 
 const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agent';
-export const outputFile = (agent: StepAgent) => `${OUTPUT_DIR}/${slug(agent.displayName)}.json`;
+export const outputFile = (agent: Pick<StepAgent, 'displayName'>) => `${OUTPUT_DIR}/${slug(agent.displayName)}.json`;
 
 /** Clears the agent's file from an earlier run so a stale output is never read as this one's. */
 export async function resetStageOutput(workspace: string, agent: StepAgent): Promise<void> {
@@ -93,7 +93,7 @@ export function stageOutputInstructions(agent: StepAgent): string {
   };
   return [
     '# Structured output (required)',
-    `When you finish, write your final output as JSON to \`${outputFile(agent)}\`. It is validated against a schema, so use exactly these fields:`,
+    `As soon as your main work is done — before any optional extra checks — write your output as JSON to \`${outputFile(agent)}\`, and update it if you find more. It is validated against a schema, so use exactly these fields:`,
     '```json',
     JSON.stringify(example, null, 2),
     '```',
@@ -103,6 +103,19 @@ export function stageOutputInstructions(agent: StepAgent): string {
       ? '- As a reviewer, set `verdict` to "approved" or "changes_requested", and list each problem you found in `issues`.'
       : '- Put anything unfinished or broken in `issues`, honestly.',
   ].join('\n');
+}
+
+/**
+ * The summary from the StageOutput an agent has already written, if any.
+ * Lets a session that ran out of time after finishing its work count as done.
+ */
+export async function writtenStageSummary(workspace: string, agent: Pick<StepAgent, 'displayName'>): Promise<string | null> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(path.join(workspace, outputFile(agent)), 'utf8'));
+    return typeof parsed?.summary === 'string' && parsed.summary.trim().length >= 10 ? parsed.summary.trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The last paragraph of an agent's transcript, which is where it summarises its work. */
