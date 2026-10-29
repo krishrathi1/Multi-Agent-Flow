@@ -170,6 +170,9 @@ const CHAT_AGENT_CONFIG = JSON.stringify({
 /** Thrown when the model provider refuses outright (quota, auth, billing). */
 export class OpenCodeUnavailableError extends Error {}
 
+/** Thrown when the session was stopped through its abort handle (a cancelled run). */
+export class OpenCodeCancelledError extends Error {}
+
 /**
  * Provider errors OpenCode keeps retrying silently. "Free usage limit
  * reached" left every chat, Q&A and agent hanging until its timeout.
@@ -222,7 +225,12 @@ export async function run(
   model?: string,
   cwd?: string,
   timeoutMs?: number,
-  opts: { agent?: string; env?: Record<string, string> } = {},
+  opts: {
+    agent?: string;
+    env?: Record<string, string>;
+    /** Receives a handle that stops the session, e.g. so a cancelled run can kill it. */
+    onSpawn?: (abort: () => void) => void;
+  } = {},
 ): Promise<{ result: string; model: string | null; exitCode: number | null }> {
   const args = ['run', prompt];
   if (model?.trim()) args.push('--model', model.trim());
@@ -290,6 +298,14 @@ export async function run(
     child.on('error', (err) => {
       clearTimeout(timer);
       if (!isTimedOut) reject(err);
+    });
+
+    opts.onSpawn?.(() => {
+      if (isTimedOut) return;
+      isTimedOut = true; // settled: ignore 'close'
+      clearTimeout(timer);
+      stopAll();
+      reject(new OpenCodeCancelledError('Cancelled'));
     });
 
     // OpenCode itself is done: stop what it leaves behind. A server it

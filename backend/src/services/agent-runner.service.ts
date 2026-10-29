@@ -11,7 +11,7 @@ import { safeFetch } from '../lib/url-validator.js';
 import { fireWebhooks } from './process-extras.service.js';
 import { notify } from './insights.service.js';
 import { pushWorkspaceToGitHub, deployToVercel, snapshotWorkspace } from './git-deploy.service.js';
-import { run as runOpenCode, OpenCodeUnavailableError } from './opencode.service.js';
+import { run as runOpenCode, OpenCodeUnavailableError, OpenCodeCancelledError } from './opencode.service.js';
 import { getOrganizationIntegrationToken } from './org.service.js';
 import { getGroqApiKey, groqModel, getGrokApiKey, grokModel } from './llm-provider.service.js';
 import * as repoService from './repo.service.js';
@@ -86,7 +86,8 @@ async function executeAgentWork(params: {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const before = await workspaceSignature(params.workspace);
-        const opencodeRes = await runOpenCode(promptText, model, params.workspace, undefined, { env: { ...params.toolEnv, ...providerEnv } });
+        // onSpawn registers the session with the run, so cancelling the run stops it.
+        const opencodeRes = await runOpenCode(promptText, model, params.workspace, undefined, { env: { ...params.toolEnv, ...providerEnv }, onSpawn: params.onSpawn });
         const changed = before !== (await workspaceSignature(params.workspace));
         const cleanExit = opencodeRes.exitCode === 0;
         if (opencodeRes.result && cleanExit && (changed || (attempt === 2 && isReviewer))) {
@@ -102,6 +103,8 @@ async function executeAgentWork(params: {
           ? `OpenCode exited with code ${opencodeRes.exitCode} before finishing`
           : 'the session ended without changing any files';
       } catch (err) {
+        // A cancelled run must not start the step again.
+        if (err instanceof OpenCodeCancelledError) throw err;
         lastProblem = (err as Error).message;
         // Out of time, but the agent had already written its structured output:
         // its work is done and it was on optional extra checks. Starting over
