@@ -11,6 +11,7 @@ import { askAiAndSpawnFixerAgent } from './process.service.js';
 import { ask as askOpenCode } from './opencode.service.js';
 import { outcomeOf } from './project-report.service.js';
 import { retrieveCodeContext, numberLines, CODE_QUOTING_RULE } from './code-intelligence.service.js';
+import { readBoard, renderBoard } from './blackboard.service.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getOrganizationIntegrationToken } from './org.service.js';
@@ -949,6 +950,13 @@ export async function chatWithMother(
         if (codeExcerpts) codeExcerpts += `\n\n${CODE_QUOTING_RULE}`;
       } catch { /* code index unavailable */ }
 
+      // The agents' shared state: what they decided, agreed and still have open.
+      let boardText = '';
+      try {
+        const board = await readBoard(processId);
+        boardText = board.length ? renderBoard(board.slice(-40)).slice(0, 2500) : '';
+      } catch { /* board unavailable */ }
+
       processContext = `
 Production Block: "${proc.name}"
 Status: ${proc.status}
@@ -961,6 +969,9 @@ Currently Working: ${workingNow.join(', ') || (latestRun?.state === 'RUNNING' ? 
 Stage-by-Stage Progress:
 ${latestStepsSummary.join('\n') || 'None'}
 ${previousSummary}
+Context Sharing: ${proc.messagingMode === 'PEER_TO_PEER' ? 'peer-to-peer (each stage messages the next directly)' : 'shared blackboard (agents read and post to one shared state)'}
+Blackboard (latest entries; ids in parentheses):
+${boardText || 'Empty'}
 Agent Notes (excerpts):
 ${notes.join('\n\n') || 'None yet'}
 Relevant Code (excerpts matched to this question):

@@ -1091,6 +1091,8 @@ model Process {
   shareToken     String?           @unique
   /// Operator guidance injected into the next run's prompts.
   guidance       String?           @db.Text
+  /// How agents share context: a shared blackboard, or direct stage-to-stage messages.
+  messagingMode  MessagingMode     @default(BLACKBOARD)
   startedAt      DateTime?
   completedAt    DateTime?
   createdAt      DateTime      @default(now())
@@ -1100,6 +1102,7 @@ model Process {
   activities Activity[]
   tasks      Task[]
   runs           ProcessRun[]
+  blackboard     BlackboardEntry[]
   schedules      ProcessSchedule[]
   webhooks       ProcessWebhook[]
   chainApprovals ChainApproval[]
@@ -1124,6 +1127,14 @@ enum ApprovalMode {
   NONE
   EVERY_STAGE
   FINAL_STAGE
+}
+
+/// How a chain's agents share intermediate work.
+enum MessagingMode {
+  /// Every agent reads and posts to one shared board for the production.
+  BLACKBOARD
+  /// Each stage sends its summaries directly to the next stage only.
+  PEER_TO_PEER
 }
 
 enum RunState {
@@ -1173,7 +1184,12 @@ model ProcessRun {
   /// permanently blocked the "already running" guard for that chain. A reaper
   /// uses this to tell a live run from an abandoned one.
   heartbeatAt    DateTime?
+  /// Messaging mode this run used, and what it shared: context sizes, board
+  /// entries, issues raised and resolved, rework steps. Compared across runs.
+  messagingMode  MessagingMode?
+  messaging      Json?
   steps          ProcessRunStep[]
+  blackboard     BlackboardEntry[]
 
   @@index([organizationId])
   @@index([processId])
@@ -1202,6 +1218,37 @@ model ProcessRunStep {
 
   @@index([runId])
   @@index([agentId])
+}
+
+/// One entry on a production's blackboard: the shared state its agents read
+/// before working and post to when done (decisions, contracts, issues…).
+model BlackboardEntry {
+  id             String      @id @default(uuid())
+  organizationId String
+  processId      String
+  process        Process     @relation(fields: [processId], references: [id], onDelete: Cascade)
+  runId          String?
+  run            ProcessRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  /// decision | contract | artifact | issue | question | answer | note
+  kind           String
+  topic          String
+  content        String      @db.Text
+  /// Agent that posted it; null with authorName "Operator" for a human post.
+  authorAgentId  String?
+  authorName     String
+  stage          Int?
+  /// Role or agent name the entry is for; null means everyone.
+  toRole         String?
+  /// open (needs action) | resolved | info
+  status         String      @default("info")
+  resolvedBy     String?
+  resolution     String?     @db.Text
+  resolvedAt     DateTime?
+  createdAt      DateTime    @default(now())
+
+  @@index([processId, createdAt])
+  @@index([runId])
+  @@index([organizationId])
 }
 
 /// A human gate between two stages of a chain.

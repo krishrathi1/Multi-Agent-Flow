@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Cloud,
   Cpu,
+  Network,
 } from 'lucide-react';
 import { cn, timeAgo } from '../lib/utils';
 import { tones } from '../lib/design';
@@ -35,6 +36,7 @@ import { EditProcessModal } from '../components/process/EditProcessModal';
 import { DeploymentLogsModal } from '../components/process/DeploymentLogsModal';
 import { WatchPreviewModal } from '../components/process/WatchPreviewModal';
 import { ProcessMcpGatewaysModal } from '../components/process/ProcessMcpGatewaysModal';
+import { BlackboardModal } from '../components/process/BlackboardModal';
 import { IconReportAnalytics } from '../components/ui/NaturalIcons';
 import { api } from '../lib/api';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -68,6 +70,7 @@ function ProcessCard({
   onEdit,
   onSettings,
   onMcpGateways,
+  onBlackboard,
   busy,
   hasSite,
 }: {
@@ -82,6 +85,7 @@ function ProcessCard({
   onEdit: (p: Process) => void;
   onSettings: (p: Process) => void;
   onMcpGateways: (p: Process) => void;
+  onBlackboard: (p: Process) => void;
   busy: boolean;
   hasSite: boolean;
 }) {
@@ -262,6 +266,18 @@ function ProcessCard({
           <Button
             variant="secondary"
             size="xs"
+            icon={Network}
+            onClick={() => onBlackboard(process)}
+            className="text-violet-600 dark:text-violet-400 border-violet-500/30 hover:bg-violet-500/10 shadow-2xs font-semibold"
+            aria-label={`Open blackboard for ${process.name}`}
+            title={process.messagingMode === 'PEER_TO_PEER' ? 'Peer-to-peer messaging' : 'Shared blackboard'}
+          >
+            {process.messagingMode === 'PEER_TO_PEER' ? 'Messages (P2P)' : 'Blackboard'}
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="xs"
             icon={IconReportAnalytics as any}
             onClick={() => onReport(process)}
             aria-label={`View audit report for ${process.name}`}
@@ -364,6 +380,7 @@ export function Processes() {
   const [editTarget, setEditTarget] = useState<Process | null>(null);
   const [settingsTarget, setSettingsTarget] = useState<Process | null>(null);
   const [mcpGwTarget, setMcpGwTarget] = useState<Process | null>(null);
+  const [blackboardTarget, setBlackboardTarget] = useState<Process | null>(null);
   const [sites, setSites] = useState<Record<string, boolean>>({});
 
   const runControl = async (p: Process, action: 'start' | 'pause') => {
@@ -512,6 +529,7 @@ export function Processes() {
                 onEdit={setEditTarget}
                 onSettings={setSettingsTarget}
                 onMcpGateways={setMcpGwTarget}
+                onBlackboard={setBlackboardTarget}
                 hasSite={!!sites[p.id]}
               />
             ))}
@@ -526,6 +544,15 @@ export function Processes() {
           process={watchPreviewTarget}
           open={!!watchPreviewTarget}
           onClose={() => setWatchPreviewTarget(null)}
+        />
+      )}
+
+      {blackboardTarget && (
+        <BlackboardModal
+          process={blackboardTarget}
+          open
+          onClose={() => setBlackboardTarget(null)}
+          onModeChanged={fetchProcesses}
         />
       )}
 

@@ -674,6 +674,8 @@ export interface Process {
   budgetUsd?: number | null;
   maxTokens?: number | null;
   approvalMode?: ApprovalMode;
+  /** How agents share context: a shared blackboard, or direct stage-to-stage messages. */
+  messagingMode?: MessagingMode;
   /** Who may open the chain's generated artifacts. */
   previewVisibility?: PreviewVisibility;
   /** Operator guidance injected into the next run. */
@@ -859,6 +861,54 @@ export interface WebhookDelivery {
 }
 
 export type ApprovalMode = 'NONE' | 'EVERY_STAGE' | 'FINAL_STAGE';
+
+export type MessagingMode = 'BLACKBOARD' | 'PEER_TO_PEER';
+export type BlackboardKind = 'decision' | 'contract' | 'artifact' | 'issue' | 'question' | 'answer' | 'note';
+
+/** One entry on a production's shared blackboard. */
+export interface BlackboardEntry {
+  id: string;
+  runId: string | null;
+  kind: BlackboardKind;
+  topic: string;
+  content: string;
+  author: string;
+  authorAgentId: string | null;
+  stage: number | null;
+  to: string | null;
+  status: 'open' | 'resolved' | 'info';
+  resolvedBy: string | null;
+  resolution: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+/** What a run shared, for comparing blackboard and peer-to-peer runs. */
+export interface MessagingStats {
+  mode: MessagingMode;
+  contextChars: number[];
+  entriesPosted: number;
+  issuesRaised: number;
+  issuesResolved: number;
+  reworkSteps: number;
+  deliveries: number;
+}
+
+export interface BlackboardView {
+  mode: MessagingMode;
+  entries: BlackboardEntry[];
+  runs: Array<{
+    id: string;
+    state: string;
+    startedAt: string;
+    durationMs: number | null;
+    totalTokens: number;
+    totalCostUsd: number;
+    messagingMode: MessagingMode | null;
+    messaging: MessagingStats | null;
+    _count: { steps: number };
+  }>;
+}
 
 /** A human gate blocking a chain between stages. */
 export interface ChainGate {

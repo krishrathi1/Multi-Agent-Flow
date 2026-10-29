@@ -27,6 +27,7 @@ function fixture(over: Partial<ProjectReport> = {}): Omit<ProjectReport, 'markdo
     files: [{ path: 'src/store.ts', language: 'TypeScript', lines: 120, bytes: 3000, description: 'Exports ExpenseStore.' }],
     git: { local: null, github: null, targetRepo: null },
     checks: [{ name: 'Latest run', status: 'pass', detail: 'All 2 agent steps completed.' }],
+    messaging: { mode: 'BLACKBOARD', board: { total: 0, byKind: {}, open: 0, resolved: 0 }, keyEntries: [], openItems: [], runs: [] },
     ...over,
   };
 }
@@ -51,6 +52,28 @@ describe('project report markdown', () => {
     // Sections with nothing in them are left out.
     expect(md).not.toContain('## API endpoints');
     expect(md).not.toContain('## Environment variables');
+  });
+});
+
+describe('project report context sharing', () => {
+  it('shows the board and compares blackboard with peer-to-peer runs', () => {
+    const md = renderReportMarkdown(fixture({
+      messaging: {
+        mode: 'BLACKBOARD',
+        board: { total: 5, byKind: { contract: 1, artifact: 3, issue: 1 }, open: 0, resolved: 1 },
+        keyEntries: [{ kind: 'contract', topic: 'Expense shape', author: 'State Engineer', content: '{ id, amount | null }' }],
+        openItems: [],
+        runs: [
+          { runId: 'aaaaaaaa1111', mode: 'BLACKBOARD', state: 'COMPLETED', durationMs: 60000, tokens: 1200, avgContextChars: 3100, entriesPosted: 5, issuesRaised: 1, issuesResolved: 1, reworkSteps: 1 },
+          { runId: 'bbbbbbbb2222', mode: 'PEER_TO_PEER', state: 'COMPLETED', durationMs: 50000, tokens: 1000, avgContextChars: 900, entriesPosted: 0, issuesRaised: 0, issuesResolved: 0, reworkSteps: 0 },
+        ],
+      },
+    }));
+    expect(md).toContain('## Context sharing');
+    expect(md).toContain('through a **blackboard**');
+    expect(md).toContain('- **contract** · Expense shape — *State Engineer*: { id, amount \\| null }');
+    expect(md).toContain('| `aaaaaaaa` | Blackboard | ✅ Completed | 1 min 0 s | 1,200 | 3,100 chars | 5 | 1 / 1 | 1 |');
+    expect(md).toContain('| `bbbbbbbb` | Peer-to-peer |');
   });
 });
 
