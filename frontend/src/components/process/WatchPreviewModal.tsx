@@ -32,7 +32,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { api, downloadWithAuth } from '../../lib/api';
-import { cn } from '../../lib/utils';
+import { cn, timeAgo } from '../../lib/utils';
 import { Button } from '../ui/Button';
 import { useToast } from '../ui/Toast';
 import type { Agent, Process, Task, WorkspaceArtifact } from '../../types';
