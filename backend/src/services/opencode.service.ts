@@ -175,6 +175,24 @@ export class OpenCodeUnavailableError extends Error {}
  */
 const FATAL_PROVIDER_ERROR = /usage limit|quota|rate limit|insufficient|billing|subscribe|unauthori[sz]ed|invalid api key|api key|forbidden|\b40[13]\b/i;
 
+/**
+ * Adds a "deny" rule for paths outside the workspace to the session's config.
+ * Unattended, OpenCode auto-rejects such access (a QA agent writing a scratch
+ * file to /tmp, say) and a rejection ends the whole session with no output,
+ * so the step failed. Under a deny rule the tool call fails and the agent
+ * carries on inside its workspace.
+ */
+export function withWorkspaceBoundary(configContent?: string): string {
+  let cfg: Record<string, any> = {};
+  try { cfg = configContent ? JSON.parse(configContent) : {}; } catch { /* replace unparseable config */ }
+  const permission = typeof cfg.permission === 'object' && cfg.permission ? cfg.permission : {};
+  return JSON.stringify({
+    $schema: 'https://opencode.ai/config.json',
+    ...cfg,
+    permission: { external_directory: 'deny', ...permission },
+  });
+}
+
 export async function run(
   prompt: string,
   model?: string,
@@ -201,7 +219,12 @@ export async function run(
       // OpenCode resolves its project directory from PWD, not the spawn cwd,
       // so an inherited PWD would point agents at the backend's own source.
       // opts.env carries a provider key (e.g. GROQ_API_KEY) for this run only.
-      env: { ...process.env, ...opts.env, PWD: workingDirectory },
+      env: {
+        ...process.env,
+        ...opts.env,
+        PWD: workingDirectory,
+        OPENCODE_CONFIG_CONTENT: withWorkspaceBoundary(opts.env?.OPENCODE_CONFIG_CONTENT),
+      },
     });
 
     let stdout = '';

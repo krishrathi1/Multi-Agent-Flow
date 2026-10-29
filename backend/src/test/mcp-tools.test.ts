@@ -137,4 +137,12 @@ describe('built-in MCP servers', () => {
     expect(cfg.mcp.analytics.headers.Authorization).toMatch(/^Bearer /);
     expect(toolsPromptSection()).toContain('`analytics_forecast`');
   });
+
+  it('keeps the tool servers when the launcher adds the workspace boundary', async () => {
+    const { withWorkspaceBoundary } = await import('../services/opencode.service.js');
+    const merged = JSON.parse(withWorkspaceBoundary(openCodeToolEnv(ctx).OPENCODE_CONFIG_CONTENT));
+    expect(Object.keys(merged.mcp)).toEqual(['research', 'analytics']);
+    expect(merged.permission).toEqual({ external_directory: 'deny' });
+    expect(JSON.parse(withWorkspaceBoundary()).permission).toEqual({ external_directory: 'deny' });
+  });
 });
