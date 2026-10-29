@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { ProcessStatus, ApprovalMode } from '@prisma/client';
+import { ProcessStatus, ApprovalMode, ActivityType } from '@prisma/client';
 import * as processService from '../services/process.service.js';
 import * as runner from '../services/agent-runner.service.js';
 import { prisma } from '../lib/prisma.js';
@@ -581,11 +581,12 @@ router.post('/:id/edits', async (req, res) => {
   const id = paramId(req.params.id);
   const instruction = typeof req.body?.instruction === 'string' ? req.body.instruction.trim() : '';
   const model = typeof req.body?.model === 'string' ? req.body.model.trim() : undefined;
+  const agentId = typeof req.body?.agentId === 'string' ? req.body.agentId.trim() : undefined;
   if (!instruction || instruction.length > 4000) {
     return res.status(400).json({ error: 'Describe the change (up to 4,000 characters)' });
   }
   const emit = (event: string, payload: unknown) => req.app.get('io')?.to(`org:${req.organizationId}`).emit(event, payload);
-  const job = await runner.startWorkspaceEdit(id, req.organizationId!, instruction, emit, model);
+  const job = await runner.startWorkspaceEdit(id, req.organizationId!, instruction, emit, model, agentId);
   res.status(202).json(job);
 });
 
@@ -593,6 +594,75 @@ router.get('/:id/edits/:jobId', async (req, res) => {
   const job = runner.getWorkspaceEdit(paramId(req.params.jobId), req.organizationId!);
   if (!job || job.processId !== paramId(req.params.id)) return res.status(404).json({ error: 'Edit not found' });
   res.json(job);
+});
+
+/**
+ * GET /:id/chat-history — returns persistent chat turns & preview edits for a process
+ */
+router.get('/:id/chat-history', async (req, res) => {
+  try {
+    const id = paramId(req.params.id);
+    const rows = await prisma.activity.findMany({
+      where: {
+        organizationId: req.organizationId!,
+        processId: id,
+        OR: [
+          { type: ActivityType.MESSAGE },
+          {
+            type: ActivityType.SYSTEM,
+            message: { startsWith: 'Preview edit applied' },
+          },
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        agent: {
+          select: { id: true, name: true, displayName: true, avatar: true },
+        },
+      },
+      take: 200,
+    });
+
+    const messages = rows.map((r) => {
+      const meta = (r.metadata || {}) as Record<string, any>;
+      const isUser =
+        meta.role === 'user' ||
+        r.message.startsWith('User:') ||
+        r.message.startsWith('Human →') ||
+        r.message.startsWith('Operator →');
+
+      const role: 'user' | 'assistant' = isUser ? 'user' : 'assistant';
+      const agentName =
+        meta.agentName || r.agent?.displayName || r.agent?.name || 'Agent Specialist';
+      const isSuccess = meta.success !== false;
+
+      let content = meta.content;
+      if (!content) {
+        content = r.message;
+      }
+
+      return {
+        id: r.id,
+        role,
+        type: role === 'user' ? ('user' as const) : isSuccess ? ('success' as const) : ('error' as const),
+        title:
+          role === 'user'
+            ? 'User Instruction'
+            : `${agentName} (${meta.model || 'AI'})`,
+        details: content,
+        content,
+        timestamp: r.createdAt.toISOString(),
+        agentId: r.agentId,
+        agentName,
+        model: meta.model,
+        changedFiles: meta.changedFiles,
+      };
+    });
+
+    res.json({ messages });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to load chat history', messages: [] });
+  }
 });
 
 router.post('/:id/ask-ai-fix', async (req, res) => {
