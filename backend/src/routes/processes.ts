@@ -237,8 +237,37 @@ router.get('/:id/run', async (req, res) => {
   if (!proc) return res.status(404).json({ error: 'Process not found' });
 
   const status = runner.getRunStatus(id);
-  if (!status) return res.status(404).json({ error: 'No run recorded for this process' });
-  res.json(status);
+  if (status) return res.json(status);
+
+  // Fall back to the latest persisted run from DB so history survives server restarts
+  const lastRun = await prisma.processRun.findFirst({
+    where: { processId: id, organizationId: req.organizationId! },
+    orderBy: { startedAt: 'desc' },
+    include: { steps: { orderBy: [{ stage: 'asc' }, { startedAt: 'asc' }] } },
+  });
+
+  if (!lastRun) return res.status(404).json({ error: 'No run recorded for this process' });
+
+  const fallbackStatus = {
+    processId: id,
+    runId: lastRun.id,
+    state: lastRun.state.toLowerCase(),
+    currentStage: lastRun.currentStage ?? 0,
+    totalStages: lastRun.totalStages ?? (lastRun.steps.length || 1),
+    steps: lastRun.steps.map((s) => ({
+      agentId: s.agentId,
+      agentName: s.agentName,
+      stage: s.stage,
+      ok: s.state === 'COMPLETED',
+      summary: s.summary || '',
+      durationMs: s.durationMs,
+      tokens: s.tokens,
+      costUsd: s.costUsd,
+    })),
+    error: lastRun.error ?? undefined,
+  };
+
+  res.json(fallbackStatus);
 });
 
 /** Files the chain produced, for the artifact list in the UI. */

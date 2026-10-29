@@ -25,6 +25,7 @@ export async function listRuns(
     include: {
       process: { select: { id: true, name: true, color: true } },
       _count: { select: { steps: true } },
+      steps: { orderBy: [{ stage: 'asc' }, { startedAt: 'asc' }] },
     },
   });
 }
