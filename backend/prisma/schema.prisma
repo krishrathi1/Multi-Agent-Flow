@@ -1189,6 +1189,8 @@ model ProcessRun {
   /// entries, issues raised and resolved, rework steps. Compared across runs.
   messagingMode  MessagingMode?
   messaging      Json?
+  /// The run's FinalOutput: { data, markdown, errors }, validated by Pydantic.
+  output         Json?
   steps          ProcessRunStep[]
   blackboard     BlackboardEntry[]
   toolCalls      ToolCall[]
@@ -1215,6 +1217,8 @@ model ProcessRunStep {
   costUsd    Float      @default(0)
   /// Files this step created or changed.
   files      Json?
+  /// The agent's StageOutput, validated by the Pydantic models in structured/.
+  output     Json?
   startedAt  DateTime   @default(now())
   finishedAt DateTime?
 

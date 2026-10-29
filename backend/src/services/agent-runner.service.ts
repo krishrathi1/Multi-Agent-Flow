@@ -17,6 +17,7 @@ import { getGroqApiKey, groqModel, getGrokApiKey, grokModel } from './llm-provid
 import * as repoService from './repo.service.js';
 import * as blackboard from './blackboard.service.js';
 import * as mcpTools from '../mcp/builtin-servers.js';
+import * as structured from './structured-output.service.js';
 
 import { config } from '../config.js';
 /** OpenCode runs agents for any "provider/model" choice except local models. */
@@ -2533,7 +2534,7 @@ export interface WorkspaceFile {
 }
 
 // .blackboard is the agents' shared state, not part of what they built.
-const IGNORED_ENTRIES = new Set(['.git', 'node_modules', '.claude', '.blackboard']);
+const IGNORED_ENTRIES = new Set(['.git', 'node_modules', '.claude', '.blackboard', '.agent-output']);
 
 /** Bounds so a runaway agent can't make listing or zipping unbounded work. */
 const MAX_WORKSPACE_FILES = 2000;
@@ -2844,6 +2845,7 @@ function taskPrompt(
   if (shared?.rework) parts.push(`\n# Follow-up on the blackboard\n${shared.rework}`);
   if (shared?.board) parts.push(`\n${shared.board}`);
   if (shared?.tools) parts.push(`\n${shared.tools}`);
+  if (shared?.output) parts.push(`\n${shared.output}`);
   if (handoffs.length > 0) {
     parts.push(
       '\n# Messages from the previous stage\n' +
@@ -2879,6 +2881,8 @@ interface StepContext {
   rework?: string;
   /** The MCP tools section, when the session has the tool servers. */
   tools?: string;
+  /** How to write the StageOutput the step ends with. */
+  output?: string;
 }
 
 const formatUsd = (n: number) => `$${n.toFixed(4)}`;
@@ -3021,7 +3025,12 @@ async function runStep(
   // ties each call to this production, run and agent.
   const withTools = usesOpenCode(preferredModel) && mcpTools.toolsEnabled();
   const toolEnv = withTools ? mcpTools.openCodeToolEnv({ organizationId, processId, runId, caller: agent.displayName }) : undefined;
-  const stepContext: StepContext | undefined = withTools ? { ...shared, tools: mcpTools.toolsPromptSection() } : shared;
+  const stepContext: StepContext = {
+    ...shared,
+    ...(withTools ? { tools: mcpTools.toolsPromptSection() } : {}),
+    output: structured.stageOutputInstructions(agent),
+  };
+  await structured.resetStageOutput(workspace, agent);
 
   // Each parallel agent registers its own kill handle and removes only its
   // own — a shared slot would let one finishing agent un-register a sibling
@@ -3190,11 +3199,22 @@ async function runStep(
     } catch { /* ignore */ }
   }
 
+  // The agent's StageOutput, validated by the Pydantic models.
+  const toolsUsed = runId
+    ? (await prisma.toolCall.findMany({ where: { runId, caller: agent.displayName }, select: { server: true, tool: true }, distinct: ['server', 'tool'] }))
+      .map((c) => `${c.server}_${c.tool}`)
+    : [];
+  const stageOutput = await structured.collectStageOutput({ workspace, agent, ok: true, summary: res.text, files: newFiles, toolsUsed });
+  if (stageOutput.agentErrors) {
+    logger.info({ agent: agent.displayName, errors: stageOutput.agentErrors.slice(0, 5) }, 'Agent structured output missing or invalid; using derived output');
+  }
+
   if (stepRow) {
     await prisma.processRunStep.update({
       where: { id: stepRow.id },
       data: {
         state: RunState.COMPLETED,
+        ...(stageOutput.output ? { output: stageOutput.output as unknown as Prisma.InputJsonValue } : {}),
         summary: res.text.slice(0, 8000),
         durationMs,
         tokens,
@@ -4210,6 +4230,14 @@ export async function runProcessChain(
   });
   emit('process:updated', { id: processId, status: allOk ? 'COMPLETED' : 'FAILED' });
   emit('process:run:updated', { processId, runId: runRow.id, state: finalState });
+
+  // The run's structured FinalOutput: assembled from the stage outputs,
+  // validated and rendered as Markdown/JSON by the Pydantic models.
+  if (!awaitingApproval) {
+    await structured.buildFinalOutput(runRow.id)
+      .then((out) => emit('process:output:updated', { processId, runId: runRow.id, valid: !out.errors }))
+      .catch((err) => logger.warn({ err, runId: runRow.id }, 'Could not build the final output'));
+  }
 
   cancelled.delete(processId);
   activeChildren.delete(processId);

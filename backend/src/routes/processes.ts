@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ProcessStatus, ApprovalMode, ActivityType, MessagingMode } from '@prisma/client';
 import * as blackboard from '../services/blackboard.service.js';
 import * as mcpTools from '../mcp/builtin-servers.js';
+import * as structured from '../services/structured-output.service.js';
 import * as processService from '../services/process.service.js';
 import * as runner from '../services/agent-runner.service.js';
 import { prisma } from '../lib/prisma.js';
@@ -336,6 +337,36 @@ router.post('/:id/tools/:server/:tool', validate(toolCallSchema), async (req, re
   } finally {
     await client.close().catch(() => {});
   }
+});
+
+/**
+ * A run's structured final output, validated by the Pydantic models: JSON
+ * plus rendered Markdown. Defaults to the latest finished run; built on
+ * demand for runs from before structured output (or with ?refresh=1).
+ * ?format=md or ?format=json downloads just that form.
+ */
+router.get('/:id/output', async (req, res) => {
+  const id = paramId(req.params.id);
+  const runId = typeof req.query.runId === 'string' ? req.query.runId : undefined;
+  const run = await prisma.processRun.findFirst({
+    where: { processId: id, organizationId: req.organizationId!, ...(runId ? { id: runId } : { state: { notIn: ['RUNNING', 'QUEUED'] } }) },
+    orderBy: { startedAt: 'desc' },
+    select: { id: true, state: true, startedAt: true, output: true },
+  });
+  if (!run) return res.status(404).json({ error: runId ? 'Run not found' : 'This production has no finished run yet' });
+
+  const output = !run.output || req.query.refresh === '1'
+    ? await structured.buildFinalOutput(run.id)
+    : (run.output as unknown as structured.StoredFinalOutput);
+
+  const name = `final-output-${run.id.slice(0, 8)}`;
+  if (req.query.format === 'md' && output.markdown) {
+    return res.type('text/markdown').attachment(`${name}.md`).send(output.markdown);
+  }
+  if (req.query.format === 'json' && output.data) {
+    return res.type('application/json').attachment(`${name}.json`).send(JSON.stringify(output.data, null, 2));
+  }
+  res.json({ runId: run.id, state: run.state, startedAt: run.startedAt, ...output });
 });
 
 /** Live progress for a run in flight, or the last finished run. */

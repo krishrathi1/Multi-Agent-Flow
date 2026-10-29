@@ -938,6 +938,52 @@ export interface ToolsView {
   calls: ToolCall[];
 }
 
+/** Structured output, validated by the Pydantic models in backend/structured/. */
+export type OutputStatus = 'completed' | 'partial' | 'blocked' | 'failed';
+
+export interface StageOutput {
+  agent: string;
+  role: string | null;
+  stage: number;
+  status: OutputStatus;
+  summary: string;
+  deliverables: Array<{ path: string; description: string }>;
+  decisions: string[];
+  issues: Array<{ severity: 'critical' | 'major' | 'minor' | 'info'; description: string; resolved: boolean }>;
+  tests: { ran: boolean; passed: boolean | null; command: string | null; details: string | null } | null;
+  tools_used: string[];
+  next_steps: string[];
+  verdict: 'approved' | 'changes_requested' | null;
+  source: 'agent' | 'derived';
+}
+
+export interface FinalOutputData {
+  schema_version: string;
+  production: string;
+  goal: string;
+  run_id: string;
+  status: OutputStatus;
+  messaging_mode: MessagingMode;
+  generated_at: string;
+  stages: StageOutput[];
+  deliverables: Array<{ path: string; description: string }>;
+  open_issues: StageOutput['issues'];
+  qa_verdict: 'approved' | 'changes_requested' | null;
+  metrics: { duration_seconds: number | null; tokens: number; cost_usd: number; agent_steps: number; tool_calls: number; blackboard_entries: number };
+  preview_url: string | null;
+}
+
+export interface FinalOutputView {
+  runId: string;
+  state: string;
+  startedAt: string;
+  data: FinalOutputData | null;
+  markdown: string | null;
+  errors: Array<{ loc: string; msg: string; type: string }> | null;
+  validatedBy: string;
+  generatedAt: string;
+}
+
 /** A human gate blocking a chain between stages. */
 export interface ChainGate {
   id: string;
