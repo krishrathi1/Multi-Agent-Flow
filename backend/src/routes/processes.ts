@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { ProcessStatus, ApprovalMode, ActivityType, MessagingMode } from '@prisma/client';
 import * as blackboard from '../services/blackboard.service.js';
+import * as mcpTools from '../mcp/builtin-servers.js';
 import * as processService from '../services/process.service.js';
 import * as runner from '../services/agent-runner.service.js';
 import { prisma } from '../lib/prisma.js';
@@ -281,6 +282,60 @@ router.post('/:id/blackboard', validate(blackboardPostSchema), async (req, res) 
   });
   req.app.get('io')?.to(`org:${req.organizationId}`).emit('blackboard:updated', { processId: id });
   res.status(201).json(blackboard.publicEntry(entry));
+});
+
+/**
+ * The built-in MCP tool servers as this production's agents see them (listed
+ * over MCP), and the calls agents, Mother Chat and operators have made.
+ */
+router.get('/:id/tools', async (req, res) => {
+  const id = paramId(req.params.id);
+  const proc = await prisma.process.findFirst({ where: { id, organizationId: req.organizationId! }, select: { id: true } });
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+  const ctx = { organizationId: req.organizationId!, processId: id, caller: 'Operator', workspace: runner.workspaceFor(id) };
+  const servers = await Promise.all(mcpTools.SERVERS.map(async (server) => {
+    const client = await mcpTools.connectToolServer(server, ctx);
+    try {
+      const { tools } = await client.listTools();
+      return { server, tools: tools.map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema })) };
+    } finally {
+      await client.close().catch(() => {});
+    }
+  }));
+  const runId = typeof req.query.runId === 'string' ? req.query.runId : undefined;
+  const calls = await prisma.toolCall.findMany({
+    where: { processId: id, ...(runId ? { runId } : {}) },
+    orderBy: { createdAt: 'desc' },
+    take: 200,
+  });
+  res.json({ enabled: mcpTools.toolsEnabled(), servers, calls });
+});
+
+const toolCallSchema = z.object({ arguments: z.record(z.unknown()).default({}) });
+
+/** Runs one tool for an operator through the MCP client, recorded like an agent's call. */
+router.post('/:id/tools/:server/:tool', validate(toolCallSchema), async (req, res) => {
+  const id = paramId(req.params.id);
+  const server = req.params.server as mcpTools.ServerName;
+  if (!mcpTools.SERVERS.includes(server)) return res.status(404).json({ error: 'Unknown tool server' });
+  const proc = await prisma.process.findFirst({ where: { id, organizationId: req.organizationId! }, select: { id: true } });
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+  const client = await mcpTools.connectToolServer(server, {
+    organizationId: req.organizationId!,
+    processId: id,
+    caller: req.user?.name ? `${req.user.name} (operator)` : 'Operator',
+    workspace: runner.workspaceFor(id),
+  });
+  try {
+    const started = Date.now();
+    const result = await client.callTool({ name: String(req.params.tool), arguments: req.body.arguments });
+    const text = ((result.content as Array<{ type: string; text?: string }>) ?? []).map((c) => c.text ?? '').join('\n');
+    res.json({ ok: !result.isError, text, durationMs: Date.now() - started });
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  } finally {
+    await client.close().catch(() => {});
+  }
 });
 
 /** Live progress for a run in flight, or the last finished run. */

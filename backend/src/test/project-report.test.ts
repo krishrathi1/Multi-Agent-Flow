@@ -28,6 +28,7 @@ function fixture(over: Partial<ProjectReport> = {}): Omit<ProjectReport, 'markdo
     git: { local: null, github: null, targetRepo: null },
     checks: [{ name: 'Latest run', status: 'pass', detail: 'All 2 agent steps completed.' }],
     messaging: { mode: 'BLACKBOARD', board: { total: 0, byKind: {}, open: 0, resolved: 0 }, keyEntries: [], openItems: [], runs: [] },
+    tools: { total: 0, failed: 0, byTool: [], recent: [] },
     ...over,
   };
 }
@@ -74,6 +75,28 @@ describe('project report context sharing', () => {
     expect(md).toContain('- **contract** · Expense shape — *State Engineer*: { id, amount \\| null }');
     expect(md).toContain('| `aaaaaaaa` | Blackboard | ✅ Completed | 1 min 0 s | 1,200 | 3,100 chars | 5 | 1 / 1 | 1 |');
     expect(md).toContain('| `bbbbbbbb` | Peer-to-peer |');
+  });
+});
+
+describe('project report tool use', () => {
+  it('lists each MCP tool with its calls and callers', () => {
+    const md = renderReportMarkdown(fixture({
+      tools: {
+        total: 3, failed: 1,
+        byTool: [
+          { server: 'research', tool: 'package_info', calls: 2, failed: 1, avgMs: 412, callers: ['Frontend Developer', 'QA Reviewer'] },
+          { server: 'analytics', tool: 'forecast', calls: 1, failed: 0, avgMs: 9, callers: ['Mother Chat'] },
+        ],
+        recent: [],
+      },
+    }));
+    expect(md).toContain('## Tool use (MCP)');
+    expect(md).toContain('made **3** calls to the built-in MCP tool servers (1 failed)');
+    expect(md).toContain('| `package_info` | research | 2 | 1 | 412 ms | Frontend Developer, QA Reviewer |');
+  });
+
+  it('says so when no tool was called', () => {
+    expect(renderReportMarkdown(fixture())).toContain('No MCP tools were called yet.');
   });
 });
 

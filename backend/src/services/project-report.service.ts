@@ -62,6 +62,14 @@ export interface ReportMessaging {
   }>;
 }
 
+/** Which external tools (built-in MCP servers) fed the work, and who called them. */
+export interface ReportTools {
+  total: number;
+  failed: number;
+  byTool: Array<{ server: string; tool: string; calls: number; failed: number; avgMs: number; callers: string[] }>;
+  recent: Array<{ server: string; tool: string; caller: string; ok: boolean; input: string; at: string }>;
+}
+
 export interface ProjectReport {
   processId: string;
   processName: string;
@@ -103,6 +111,7 @@ export interface ProjectReport {
   };
   checks: ReportCheck[];
   messaging: ReportMessaging;
+  tools: ReportTools;
   markdown: string;
 }
 
@@ -543,6 +552,7 @@ export async function generateProjectReport(processId: string, organizationId: s
     git: { local, github, targetRepo },
     checks,
     messaging: await buildMessaging(proc.id, proc.messagingMode, proc.runs),
+    tools: await buildTools(proc.id),
   };
   return { ...report, markdown: renderReportMarkdown(report) };
 }
@@ -570,6 +580,31 @@ async function buildMessaging(
         entriesPosted: m.entriesPosted ?? 0, issuesRaised: m.issuesRaised ?? 0, issuesResolved: m.issuesResolved ?? 0, reworkSteps: m.reworkSteps ?? 0,
       };
     }),
+  };
+}
+
+async function buildTools(processId: string): Promise<ReportTools> {
+  const calls = await prisma.toolCall.findMany({ where: { processId }, orderBy: { createdAt: 'desc' }, take: 500 });
+  const groups = new Map<string, ReportTools['byTool'][number] & { totalMs: number }>();
+  for (const c of calls) {
+    const key = `${c.server}.${c.tool}`;
+    const g = groups.get(key) ?? { server: c.server, tool: c.tool, calls: 0, failed: 0, avgMs: 0, callers: [], totalMs: 0 };
+    g.calls++;
+    if (!c.ok) g.failed++;
+    g.totalMs += c.durationMs;
+    if (!g.callers.includes(c.caller)) g.callers.push(c.caller);
+    groups.set(key, g);
+  }
+  return {
+    total: calls.length,
+    failed: calls.filter((c) => !c.ok).length,
+    byTool: [...groups.values()]
+      .map(({ totalMs, ...g }) => ({ ...g, avgMs: Math.round(totalMs / g.calls) }))
+      .sort((a, b) => b.calls - a.calls),
+    recent: calls.slice(0, 10).map((c) => ({
+      server: c.server, tool: c.tool, caller: c.caller, ok: c.ok,
+      input: JSON.stringify(c.input).slice(0, 160), at: c.createdAt.toISOString(),
+    })),
   };
 }
 
@@ -667,6 +702,20 @@ export function renderReportMarkdown(r: Omit<ProjectReport, 'markdown'>): string
     out.push('**Blackboard vs peer-to-peer, by run**', '', '| Run | Mode | Result | Time | Tokens | Avg. context per agent | Entries | Issues raised / resolved | Follow-up steps |', '|---|---|---|---|--:|--:|--:|---|--:|');
     for (const x of mm.runs) {
       out.push(`| \`${x.runId.slice(0, 8)}\` | ${x.mode === 'PEER_TO_PEER' ? 'Peer-to-peer' : 'Blackboard'} | ${STATE_LABEL[x.state] ?? x.state} | ${x.durationMs ? formatDuration(x.durationMs) : '—'} | ${x.tokens.toLocaleString('en-US')} | ${x.avgContextChars.toLocaleString('en-US')} chars | ${x.entriesPosted} | ${x.issuesRaised} / ${x.issuesResolved} | ${x.reworkSteps} |`);
+    }
+    out.push('');
+  }
+
+  // Tool use
+  const tu = r.tools;
+  out.push('## Tool use (MCP)', '');
+  if (!tu.total) {
+    out.push('No MCP tools were called yet. Agents running on OpenCode get the built-in `research` (web search, page reading, npm facts) and `analytics` (calculator, forecasting, file parsing, database lookup) servers.', '');
+  } else {
+    out.push(`Agents, Mother Chat and operators made **${tu.total}** calls to the built-in MCP tool servers${tu.failed ? ` (${tu.failed} failed)` : ''}.`, '');
+    out.push('| Tool | Server | Calls | Failed | Avg. time | Called by |', '|---|---|--:|--:|--:|---|');
+    for (const t of tu.byTool) {
+      out.push(`| \`${t.tool}\` | ${t.server} | ${t.calls} | ${t.failed} | ${t.avgMs.toLocaleString('en-US')} ms | ${cell(t.callers.slice(0, 4).join(', '))}${t.callers.length > 4 ? ` +${t.callers.length - 4}` : ''} |`);
     }
     out.push('');
   }

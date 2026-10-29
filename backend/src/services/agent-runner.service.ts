@@ -16,8 +16,13 @@ import { getOrganizationIntegrationToken } from './org.service.js';
 import { getGroqApiKey, groqModel, getGrokApiKey, grokModel } from './llm-provider.service.js';
 import * as repoService from './repo.service.js';
 import * as blackboard from './blackboard.service.js';
+import * as mcpTools from '../mcp/builtin-servers.js';
 
 import { config } from '../config.js';
+/** OpenCode runs agents for any "provider/model" choice except local models. */
+const usesOpenCode = (preferredModel?: string) =>
+  Boolean(preferredModel && preferredModel.includes('/') && !preferredModel.startsWith('local/'));
+
 /**
  * Intelligent Multi-LLM Execution Engine.
  * Supports Claude CLI, Google Gemini API, Local PC Ollama (qwen2.5-coder, etc.), and code synthesis.
@@ -32,8 +37,10 @@ async function executeAgentWork(params: {
   timeoutMs: number;
   onSpawn?: (abort: () => void) => void;
   preferredModel?: string;
+  /** Environment that connects the session to the built-in MCP tool servers. */
+  toolEnv?: Record<string, string>;
 }): Promise<{ text: string; model: string; costUsd: number; inputTokens: number; outputTokens: number } | null> {
-  const useOpenCode = Boolean(params.preferredModel && params.preferredModel.includes('/') && !params.preferredModel.startsWith('local/'));
+  const useOpenCode = usesOpenCode(params.preferredModel);
 
   // Ensure workspace directory exists and foundational production files are synthesized.
   // OpenCode agents write real files themselves, and the template writer
@@ -62,7 +69,7 @@ async function executeAgentWork(params: {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const before = await workspaceSignature(params.workspace);
-        const opencodeRes = await runOpenCode(promptText, model, params.workspace, undefined, { env: providerEnv });
+        const opencodeRes = await runOpenCode(promptText, model, params.workspace, undefined, { env: { ...params.toolEnv, ...providerEnv } });
         const changed = before !== (await workspaceSignature(params.workspace));
         const cleanExit = opencodeRes.exitCode === 0;
         if (opencodeRes.result && cleanExit && (changed || (attempt === 2 && isReviewer))) {
@@ -2836,6 +2843,7 @@ function taskPrompt(
 
   if (shared?.rework) parts.push(`\n# Follow-up on the blackboard\n${shared.rework}`);
   if (shared?.board) parts.push(`\n${shared.board}`);
+  if (shared?.tools) parts.push(`\n${shared.tools}`);
   if (handoffs.length > 0) {
     parts.push(
       '\n# Messages from the previous stage\n' +
@@ -2869,6 +2877,8 @@ export interface RunStepResult {
 interface StepContext {
   board?: string;
   rework?: string;
+  /** The MCP tools section, when the session has the tool servers. */
+  tools?: string;
 }
 
 const formatUsd = (n: number) => `$${n.toFixed(4)}`;
@@ -3007,6 +3017,11 @@ async function runStep(
 
   const filesBefore = await listWorkspaceFiles(processId);
   const started = Date.now();
+  // OpenCode sessions get the built-in MCP tool servers, with a token that
+  // ties each call to this production, run and agent.
+  const withTools = usesOpenCode(preferredModel) && mcpTools.toolsEnabled();
+  const toolEnv = withTools ? mcpTools.openCodeToolEnv({ organizationId, processId, runId, caller: agent.displayName }) : undefined;
+  const stepContext: StepContext | undefined = withTools ? { ...shared, tools: mcpTools.toolsPromptSection() } : shared;
 
   // Each parallel agent registers its own kill handle and removes only its
   // own — a shared slot would let one finishing agent un-register a sibling
@@ -3020,10 +3035,11 @@ async function runStep(
       agent,
       goal,
       systemPrompt: systemPromptFor(agent),
-      userPrompt: taskPrompt(goal, agent.processRole ?? agent.description, handoffs, filesBefore, shared),
+      userPrompt: taskPrompt(goal, agent.processRole ?? agent.description, handoffs, filesBefore, stepContext),
       workspace,
       timeoutMs: Number(process.env.AGENT_RUN_TIMEOUT_MS ?? 900_000),
       preferredModel,
+      toolEnv,
       onSpawn: (abort) => {
         untrack = trackChild(processId, abort);
       },

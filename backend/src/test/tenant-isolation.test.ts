@@ -31,6 +31,9 @@ const GATED_BY_MIDDLEWARE: Record<string, string> = {
   'mcp.ts': 'verifyAgentOwnership',
   // Authenticates by agent token, not an org session.
   'agent-api.ts': 'agent token auth',
+  // Authenticates by a tool token bound to one org and production; :server
+  // names a built-in toolset, not a record.
+  'mcp-tools.ts': 'tool token auth',
   // Deliberately public; access is decided by canViewPreview.
   'preview.ts': 'canViewPreview',
   // Unauthenticated by design — verified by signature, not session.

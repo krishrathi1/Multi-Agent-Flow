@@ -23,6 +23,7 @@ import {
   Cloud,
   Cpu,
   Network,
+  Wrench,
 } from 'lucide-react';
 import { cn, timeAgo } from '../lib/utils';
 import { tones } from '../lib/design';
@@ -37,6 +38,7 @@ import { DeploymentLogsModal } from '../components/process/DeploymentLogsModal';
 import { WatchPreviewModal } from '../components/process/WatchPreviewModal';
 import { ProcessMcpGatewaysModal } from '../components/process/ProcessMcpGatewaysModal';
 import { BlackboardModal } from '../components/process/BlackboardModal';
+import { ToolsModal } from '../components/process/ToolsModal';
 import { IconReportAnalytics } from '../components/ui/NaturalIcons';
 import { api } from '../lib/api';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -71,6 +73,7 @@ function ProcessCard({
   onSettings,
   onMcpGateways,
   onBlackboard,
+  onTools,
   busy,
   hasSite,
 }: {
@@ -86,6 +89,7 @@ function ProcessCard({
   onSettings: (p: Process) => void;
   onMcpGateways: (p: Process) => void;
   onBlackboard: (p: Process) => void;
+  onTools: (p: Process) => void;
   busy: boolean;
   hasSite: boolean;
 }) {
@@ -278,6 +282,17 @@ function ProcessCard({
           <Button
             variant="secondary"
             size="xs"
+            icon={Wrench}
+            onClick={() => onTools(process)}
+            className="text-teal-600 dark:text-teal-400 border-teal-500/30 hover:bg-teal-500/10 shadow-2xs font-semibold"
+            aria-label={`Open MCP tools for ${process.name}`}
+          >
+            Tools (MCP)
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="xs"
             icon={IconReportAnalytics as any}
             onClick={() => onReport(process)}
             aria-label={`View audit report for ${process.name}`}
@@ -381,6 +396,7 @@ export function Processes() {
   const [settingsTarget, setSettingsTarget] = useState<Process | null>(null);
   const [mcpGwTarget, setMcpGwTarget] = useState<Process | null>(null);
   const [blackboardTarget, setBlackboardTarget] = useState<Process | null>(null);
+  const [toolsTarget, setToolsTarget] = useState<Process | null>(null);
   const [sites, setSites] = useState<Record<string, boolean>>({});
 
   const runControl = async (p: Process, action: 'start' | 'pause') => {
@@ -530,6 +546,7 @@ export function Processes() {
                 onSettings={setSettingsTarget}
                 onMcpGateways={setMcpGwTarget}
                 onBlackboard={setBlackboardTarget}
+                onTools={setToolsTarget}
                 hasSite={!!sites[p.id]}
               />
             ))}
@@ -555,6 +572,8 @@ export function Processes() {
           onModeChanged={fetchProcesses}
         />
       )}
+
+      {toolsTarget && <ToolsModal process={toolsTarget} open onClose={() => setToolsTarget(null)} />}
 
       {mcpGwTarget && (
         <ProcessMcpGatewaysModal

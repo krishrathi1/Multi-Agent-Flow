@@ -43,6 +43,8 @@ import boardMemoryRoutes from './routes/board-memory.js';
 import soulTemplateRoutes from './routes/soul-templates.js';
 import processRoutes from './routes/processes.js';
 import previewRoutes from './routes/preview.js';
+import mcpToolRoutes from './routes/mcp-tools.js';
+import { setToolCallListener } from './mcp/builtin-servers.js';
 import processExtrasRoutes from './routes/process-extras.js';
 import codeIntelligenceRoutes from './routes/code-intelligence.js';
 import promptRoutes from './routes/prompts.js';
@@ -274,6 +276,10 @@ app.use('/api/orchestration', requireAuth, processExtrasRoutes);
 // generated site can be opened directly; scoped to one workspace per chain.
 app.use('/preview', previewRoutes);
 
+// Built-in MCP tool servers (research, analytics) for agent sessions.
+// Authenticated by a per-run tool token rather than a login.
+app.use('/api/mcp-tools', mcpToolRoutes);
+
 // Code Intelligence (semantic search, symbol explorer, dependency graph)
 app.use('/api/code-intelligence', requireAuth, codeIntelligenceRoutes);
 
@@ -301,6 +307,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 // WebSocket
 const io = setupWebSocket(httpServer);
 app.set('io', io);
+setToolCallListener((processId, organizationId, call) => io.to(`org:${organizationId}`).emit('tools:called', { processId, call }));
 
 // Share Socket.io with gateway service for event forwarding
 setSocketIO(io);

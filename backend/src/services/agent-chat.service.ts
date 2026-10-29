@@ -16,6 +16,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { getOrganizationIntegrationToken } from './org.service.js';
 import { getGroqApiKey, groqChat, getGrokApiKey, grokChat } from './llm-provider.service.js';
+import { chatWithTools, TOOL_INTENT, type ToolChatResult } from '../mcp/tool-chat.js';
+import { toolsEnabled } from '../mcp/builtin-servers.js';
 
 const HISTORY_LIMIT = 30;
 
@@ -1065,7 +1067,25 @@ Rules:
 
   const prompt = transcript ? `History:\n${transcript}\n\nOperator: ${effectiveMessage}` : effectiveMessage;
 
-  const res = await callChatLLM({
+  // Questions that need a fact, a number or a forecast go through the
+  // built-in MCP tools (web search, calculator, forecasting, file parsing,
+  // database lookup); everything else takes the plain chat path.
+  let toolsUsed: ToolChatResult['toolsUsed'] = [];
+  let res: Awaited<ReturnType<typeof callChatLLM>> | null = null;
+  const groqKey = activeProcessId && toolsEnabled() && TOOL_INTENT.test(message) ? await getGroqApiKey(organizationId) : null;
+  if (activeProcessId && groqKey && !groqKey.startsWith('xai-')) {
+    const withTools = await chatWithTools({
+      apiKey: groqKey,
+      system: motherSystemPrompt,
+      prompt,
+      ctx: { organizationId, processId: activeProcessId, caller: 'Mother Chat', workspace: workspaceFor(activeProcessId) },
+    });
+    if (withTools) {
+      toolsUsed = withTools.toolsUsed;
+      res = { text: withTools.text, model: withTools.model, inputTokens: withTools.inputTokens, outputTokens: withTools.outputTokens, costUsd: 0 };
+    }
+  }
+  res ??= await callChatLLM({
     organizationId,
     systemPrompt: motherSystemPrompt,
     prompt,
@@ -1081,6 +1101,10 @@ Rules:
 
   if (autoActionReport) {
     cleanText = `**Actions taken:**\n${autoActionReport.trim()}\n\n` + cleanText;
+  }
+  if (toolsUsed.length) {
+    const names = [...new Set(toolsUsed.map((t) => `\`${t.server}.${t.tool}\`${t.ok ? '' : ' (failed)'}`))];
+    cleanText += `\n\n_🔧 MCP tools used: ${names.join(', ')}_`;
   }
   if (isAgentStatusIntent && agentWorkOverview && (!cleanText.toLowerCase().includes('stage') || cleanText.includes("couldn't reach an AI model"))) {
     cleanText = `${cleanText}\n\n**Live Agent Fleet Activity:**\n${agentWorkOverview}`;

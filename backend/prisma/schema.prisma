@@ -1103,6 +1103,7 @@ model Process {
   tasks      Task[]
   runs           ProcessRun[]
   blackboard     BlackboardEntry[]
+  toolCalls      ToolCall[]
   schedules      ProcessSchedule[]
   webhooks       ProcessWebhook[]
   chainApprovals ChainApproval[]
@@ -1190,6 +1191,7 @@ model ProcessRun {
   messaging      Json?
   steps          ProcessRunStep[]
   blackboard     BlackboardEntry[]
+  toolCalls      ToolCall[]
 
   @@index([organizationId])
   @@index([processId])
@@ -1244,6 +1246,33 @@ model BlackboardEntry {
   resolvedBy     String?
   resolution     String?     @db.Text
   resolvedAt     DateTime?
+  createdAt      DateTime    @default(now())
+
+  @@index([processId, createdAt])
+  @@index([runId])
+  @@index([organizationId])
+}
+
+/// One call an agent (or Mother Chat, or the operator) made to a built-in MCP
+/// tool server during a production — the evidence of which external tools
+/// fed the work, and what they returned.
+model ToolCall {
+  id             String      @id @default(uuid())
+  organizationId String
+  processId      String
+  process        Process     @relation(fields: [processId], references: [id], onDelete: Cascade)
+  runId          String?
+  run            ProcessRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+  /// research | analytics
+  server         String
+  tool           String
+  /// Agent display name, "Mother Chat" or "Operator".
+  caller         String
+  input          Json
+  /// The tool's text result (or error), cut to a few KB.
+  output         String      @db.Text
+  ok             Boolean
+  durationMs     Int
   createdAt      DateTime    @default(now())
 
   @@index([processId, createdAt])

@@ -1,4 +1,4 @@
-import type { Agent, AgentStats, Activity, Task, Thread, Message, Session, TokenUsage, MetricSnapshot, AlertRule, AlertEvent, Command, Gateway, GatewayHealth, ModelInfo, ChatHistory, ChatResponse, WorkspaceFile, LlmProvider, UsageCredit, Board, BoardGroup, Approval, Tag, TagAssignment, TaskCustomFieldDefinition, BoardTaskCustomField, TaskCustomFieldValue, MarketplaceSkill, SkillPack, AgentSkill, AgentIntegration, BoardWebhook, BoardWebhookPayload, BoardOnboardingSession, BoardGroupMemory, OrgInvite, SoulTemplate, Process, ProcessPlan, ProcessStats, ProcessStatus, ChainRunResult, WorkspaceArtifact, RunStatus, ProcessRun, RunStats, ProcessTemplate, ProcessSchedule, ProcessWebhookConfig, ChainGate, ApprovalMode, AppNotification, CostEstimate, AgentInsight, PreviewVisibility, RunComparison, ChainBundle, WebhookDelivery, MessagingMode, BlackboardView, BlackboardEntry, BlackboardKind } from '../types';
+import type { Agent, AgentStats, Activity, Task, Thread, Message, Session, TokenUsage, MetricSnapshot, AlertRule, AlertEvent, Command, Gateway, GatewayHealth, ModelInfo, ChatHistory, ChatResponse, WorkspaceFile, LlmProvider, UsageCredit, Board, BoardGroup, Approval, Tag, TagAssignment, TaskCustomFieldDefinition, BoardTaskCustomField, TaskCustomFieldValue, MarketplaceSkill, SkillPack, AgentSkill, AgentIntegration, BoardWebhook, BoardWebhookPayload, BoardOnboardingSession, BoardGroupMemory, OrgInvite, SoulTemplate, Process, ProcessPlan, ProcessStats, ProcessStatus, ChainRunResult, WorkspaceArtifact, RunStatus, ProcessRun, RunStats, ProcessTemplate, ProcessSchedule, ProcessWebhookConfig, ChainGate, ApprovalMode, AppNotification, CostEstimate, AgentInsight, PreviewVisibility, RunComparison, ChainBundle, WebhookDelivery, MessagingMode, BlackboardView, BlackboardEntry, BlackboardKind, ToolsView } from '../types';
 import { useAuthStore } from '../stores/auth-store';
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
@@ -303,6 +303,10 @@ export const api = {
       request<BlackboardView>(`/processes/${id}/blackboard${runId ? `?runId=${encodeURIComponent(runId)}` : ''}`),
     postToBlackboard: (id: string, data: { kind: BlackboardKind; topic: string; content: string; to?: string }) =>
       request<BlackboardEntry>(`/processes/${id}/blackboard`, { method: 'POST', body: JSON.stringify(data) }),
+    /** The built-in MCP tool servers (listed over MCP) and the calls made to them. */
+    tools: (id: string) => request<ToolsView>(`/processes/${id}/tools`),
+    callTool: (id: string, server: string, tool: string, args: Record<string, unknown>) =>
+      request<{ ok: boolean; text: string; durationMs: number }>(`/processes/${id}/tools/${server}/${tool}`, { method: 'POST', body: JSON.stringify({ arguments: args }) }),
     update: (
       id: string,
       data: {

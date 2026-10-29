@@ -910,6 +910,34 @@ export interface BlackboardView {
   }>;
 }
 
+/** One call to a built-in MCP tool server, by an agent, Mother Chat or an operator. */
+export interface ToolCall {
+  id: string;
+  processId: string;
+  runId: string | null;
+  server: string;
+  tool: string;
+  caller: string;
+  input: Record<string, unknown>;
+  output: string;
+  ok: boolean;
+  durationMs: number;
+  createdAt: string;
+}
+
+export interface McpToolInfo {
+  name: string;
+  title?: string;
+  description?: string;
+  inputSchema: { type: 'object'; properties?: Record<string, { type?: string; description?: string; enum?: string[]; items?: { type?: string } }>; required?: string[] };
+}
+
+export interface ToolsView {
+  enabled: boolean;
+  servers: Array<{ server: string; tools: McpToolInfo[] }>;
+  calls: ToolCall[];
+}
+
 /** A human gate blocking a chain between stages. */
 export interface ChainGate {
   id: string;
