@@ -98,11 +98,20 @@ export function BlackboardModal({
     try {
       setView(await api.processes.blackboard(process.id));
     } catch (err) {
-      toast.error('Could not load the blackboard', (err as Error).message);
+      const msg = (err as Error).message || '';
+      if (/404|not found/i.test(msg)) {
+        setView((prev) => prev ?? {
+          mode: process.messagingMode ?? 'BLACKBOARD',
+          entries: [],
+          runs: [],
+        });
+      } else {
+        toast.error('Could not load the blackboard', msg);
+      }
     } finally {
       setLoading(false);
     }
-  }, [process.id, toast]);
+  }, [process.id, process.messagingMode, toast]);
 
   useEffect(() => {
     if (!open) return;
