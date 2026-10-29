@@ -1,7 +1,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { config } from '../config.js';
@@ -169,6 +170,9 @@ const CHAT_AGENT_CONFIG = JSON.stringify({
 /** Thrown when the model provider refuses outright (quota, auth, billing). */
 export class OpenCodeUnavailableError extends Error {}
 
+/** Thrown when the session was stopped through its abort handle (a cancelled run). */
+export class OpenCodeCancelledError extends Error {}
+
 /**
  * Provider errors OpenCode keeps retrying silently. "Free usage limit
  * reached" left every chat, Q&A and agent hanging until its timeout.
@@ -193,12 +197,40 @@ export function withWorkspaceBoundary(configContent?: string): string {
   });
 }
 
+/** Environment variable that marks every process an agent session starts. */
+const SESSION_TAG = 'MYCELIUM_AGENT_SESSION';
+
+/**
+ * Stops every process still carrying this session's tag. OpenCode runs each
+ * shell command in its own process group, so servers and headless browsers
+ * an agent started outlived the session, killed or finished; the tag is
+ * inherited through all of them. Linux only (reads /proc).
+ */
+export async function stopSessionProcesses(tag: string): Promise<number> {
+  if (process.platform !== 'linux') return 0;
+  const marker = `${SESSION_TAG}=${tag}`;
+  let stopped = 0;
+  for (const entry of await readdir('/proc').catch(() => [] as string[])) {
+    const pid = Number(entry);
+    if (!Number.isInteger(pid) || pid === process.pid) continue;
+    const environ = await readFile(`/proc/${pid}/environ`, 'latin1').catch(() => '');
+    if (!environ.split('\0').includes(marker)) continue;
+    try { process.kill(pid, 'SIGTERM'); stopped++; } catch { /* already gone */ }
+  }
+  return stopped;
+}
+
 export async function run(
   prompt: string,
   model?: string,
   cwd?: string,
   timeoutMs?: number,
-  opts: { agent?: string; env?: Record<string, string> } = {},
+  opts: {
+    agent?: string;
+    env?: Record<string, string>;
+    /** Receives a handle that stops the session, e.g. so a cancelled run can kill it. */
+    onSpawn?: (abort: () => void) => void;
+  } = {},
 ): Promise<{ result: string; model: string | null; exitCode: number | null }> {
   const args = ['run', prompt];
   if (model?.trim()) args.push('--model', model.trim());
@@ -210,6 +242,8 @@ export async function run(
   if (cwd?.trim()) await ensureOwnProjectRoot(workingDirectory);
 
   const effectiveTimeout = timeoutMs || config.opencodeTimeoutMs;
+
+  const sessionTag = randomUUID();
 
   return new Promise((resolve, reject) => {
     const child = spawn(commandName(), args, {
@@ -224,6 +258,7 @@ export async function run(
         ...opts.env,
         PWD: workingDirectory,
         OPENCODE_CONFIG_CONTENT: withWorkspaceBoundary(opts.env?.OPENCODE_CONFIG_CONTENT),
+        [SESSION_TAG]: sessionTag,
       },
     });
 
@@ -231,9 +266,17 @@ export async function run(
     let stderr = '';
     let isTimedOut = false;
 
+    // Stops the session and anything it left running.
+    const stopAll = () => {
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      stopSessionProcesses(sessionTag)
+        .then((n) => { if (n) logger.info({ stopped: n, cwd: workingDirectory }, 'Stopped processes an agent session left running'); })
+        .catch(() => {});
+    };
+
     const timer = setTimeout(() => {
       isTimedOut = true;
-      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      stopAll();
       reject(new Error(`OpenCode execution timed out after ${effectiveTimeout}ms`));
     }, effectiveTimeout);
 
@@ -247,7 +290,7 @@ export async function run(
       if (fatal) {
         isTimedOut = true; // reuse the flag: we've settled, ignore 'close'
         clearTimeout(timer);
-        try { child.kill('SIGTERM'); } catch { /* ignore */ }
+        stopAll();
         reject(new OpenCodeUnavailableError(`OpenCode model unavailable: ${fatal.replace(/^AI_\w+:\s*/, '').slice(0, 240)}`));
       }
     });
@@ -256,6 +299,18 @@ export async function run(
       clearTimeout(timer);
       if (!isTimedOut) reject(err);
     });
+
+    opts.onSpawn?.(() => {
+      if (isTimedOut) return;
+      isTimedOut = true; // settled: ignore 'close'
+      clearTimeout(timer);
+      stopAll();
+      reject(new OpenCodeCancelledError('Cancelled'));
+    });
+
+    // OpenCode itself is done: stop what it leaves behind. A server it
+    // started would also hold stdout open and delay 'close' indefinitely.
+    child.on('exit', () => stopAll());
 
     child.on('close', (code) => {
       clearTimeout(timer);

@@ -11,7 +11,7 @@ import { safeFetch } from '../lib/url-validator.js';
 import { fireWebhooks } from './process-extras.service.js';
 import { notify } from './insights.service.js';
 import { pushWorkspaceToGitHub, deployToVercel, snapshotWorkspace } from './git-deploy.service.js';
-import { run as runOpenCode, OpenCodeUnavailableError } from './opencode.service.js';
+import { run as runOpenCode, OpenCodeUnavailableError, OpenCodeCancelledError } from './opencode.service.js';
 import { getOrganizationIntegrationToken } from './org.service.js';
 import { getGroqApiKey, groqModel, getGrokApiKey, grokModel } from './llm-provider.service.js';
 import * as repoService from './repo.service.js';
@@ -20,6 +20,22 @@ import * as mcpTools from '../mcp/builtin-servers.js';
 import * as structured from './structured-output.service.js';
 
 import { config } from '../config.js';
+/**
+ * The time an OpenCode session has, and how to verify within it. QA agents
+ * left to themselves installed headless browsers and started preview
+ * servers, ran past the session limit and failed the step.
+ */
+function timeBudgetSection(): string {
+  const minutes = Math.max(5, Math.floor(config.opencodeTimeoutMs / 60_000) - 3);
+  return [
+    '# Time budget',
+    `You have about ${minutes} minutes; the session is stopped after that and unfinished work is lost.`,
+    '- Verify with the project\'s own scripts (`npm test`, `npm run build`) and by reading the code.',
+    '- Do not install browsers, Puppeteer, Playwright or other global tools, and do not build browser test harnesses.',
+    '- Do not leave servers running: stop any you start before you finish.',
+  ].join('\n');
+}
+
 /** OpenCode runs agents for any "provider/model" choice except local models. */
 const usesOpenCode = (preferredModel?: string) =>
   Boolean(preferredModel && preferredModel.includes('/') && !preferredModel.startsWith('local/'));
@@ -70,7 +86,8 @@ async function executeAgentWork(params: {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const before = await workspaceSignature(params.workspace);
-        const opencodeRes = await runOpenCode(promptText, model, params.workspace, undefined, { env: { ...params.toolEnv, ...providerEnv } });
+        // onSpawn registers the session with the run, so cancelling the run stops it.
+        const opencodeRes = await runOpenCode(promptText, model, params.workspace, undefined, { env: { ...params.toolEnv, ...providerEnv }, onSpawn: params.onSpawn });
         const changed = before !== (await workspaceSignature(params.workspace));
         const cleanExit = opencodeRes.exitCode === 0;
         if (opencodeRes.result && cleanExit && (changed || (attempt === 2 && isReviewer))) {
@@ -86,7 +103,21 @@ async function executeAgentWork(params: {
           ? `OpenCode exited with code ${opencodeRes.exitCode} before finishing`
           : 'the session ended without changing any files';
       } catch (err) {
+        // A cancelled run must not start the step again.
+        if (err instanceof OpenCodeCancelledError) throw err;
         lastProblem = (err as Error).message;
+        // Out of time, but the agent had already written its structured output:
+        // its work is done and it was on optional extra checks. Starting over
+        // would throw that work away and usually run out of time again.
+        const written = /timed out/i.test(lastProblem) ? await structured.writtenStageSummary(params.workspace, params.agent) : null;
+        if (written) {
+          logger.info({ agent: params.agent.displayName }, 'OpenCode session timed out after writing its output; accepting its work');
+          await writeAgentNotes(params.workspace, params.agent, written);
+          const inputTokens = Math.max(380, Math.ceil(promptText.length / 4));
+          const outputTokens = Math.max(650, Math.ceil(written.length / 4));
+          const costUsd = Number(((inputTokens * 0.00000015) + (outputTokens * 0.00000060) + 0.0012).toFixed(5));
+          return { text: written, model, costUsd, inputTokens, outputTokens };
+        }
         // Quota or auth refusals won't change on a retry — but if the org has
         // a Groq key in Settings, the same agent can carry on through it.
         if (err instanceof OpenCodeUnavailableError) {
@@ -2845,6 +2876,7 @@ function taskPrompt(
   if (shared?.rework) parts.push(`\n# Follow-up on the blackboard\n${shared.rework}`);
   if (shared?.board) parts.push(`\n${shared.board}`);
   if (shared?.tools) parts.push(`\n${shared.tools}`);
+  if (shared?.budget) parts.push(`\n${shared.budget}`);
   if (shared?.output) parts.push(`\n${shared.output}`);
   if (handoffs.length > 0) {
     parts.push(
@@ -2883,6 +2915,8 @@ interface StepContext {
   tools?: string;
   /** How to write the StageOutput the step ends with. */
   output?: string;
+  /** How long the session has, and how to verify within it. */
+  budget?: string;
 }
 
 const formatUsd = (n: number) => `$${n.toFixed(4)}`;
@@ -3028,6 +3062,7 @@ async function runStep(
   const stepContext: StepContext = {
     ...shared,
     ...(withTools ? { tools: mcpTools.toolsPromptSection() } : {}),
+    ...(usesOpenCode(preferredModel) ? { budget: timeBudgetSection() } : {}),
     output: structured.stageOutputInstructions(agent),
   };
   await structured.resetStageOutput(workspace, agent);
