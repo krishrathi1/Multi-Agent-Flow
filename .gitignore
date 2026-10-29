@@ -72,3 +72,8 @@ scripts/create-admin.ts
 *.sqlite
 .vercel
 .env*
+ 
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
