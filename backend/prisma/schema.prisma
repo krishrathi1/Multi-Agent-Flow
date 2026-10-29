@@ -1093,6 +1093,8 @@ model Process {
   guidance       String?           @db.Text
   /// How agents share context: a shared blackboard, or direct stage-to-stage messages.
   messagingMode  MessagingMode     @default(BLACKBOARD)
+  /// How the agents are organised: hybrid, sequential, parallel or hierarchical.
+  orchestrationPattern OrchestrationPattern @default(HYBRID)
   startedAt      DateTime?
   completedAt    DateTime?
   createdAt      DateTime      @default(now())
@@ -1131,6 +1133,18 @@ enum ApprovalMode {
 }
 
 /// How a chain's agents share intermediate work.
+/// How a production's agents are organised when it runs.
+enum OrchestrationPattern {
+  /// Stages run in order; the agents inside a stage run in parallel.
+  HYBRID
+  /// One agent at a time, in order: a pipeline with no worker nodes.
+  SEQUENTIAL
+  /// All builders at once (worker nodes), then the final stage joins their work.
+  PARALLEL
+  /// A supervisor plans, assigns tasks to worker agents and reviews their results.
+  HIERARCHICAL
+}
+
 enum MessagingMode {
   /// Every agent reads and posts to one shared board for the production.
   BLACKBOARD
@@ -1191,6 +1205,10 @@ model ProcessRun {
   messaging      Json?
   /// The run's FinalOutput: { data, markdown, errors }, validated by Pydantic.
   output         Json?
+  /// The agentic pattern the run used, and what it did: waves, peak
+  /// parallelism, the supervisor's plan and review. Compared across runs.
+  orchestrationPattern OrchestrationPattern?
+  orchestration        Json?
   steps          ProcessRunStep[]
   blackboard     BlackboardEntry[]
   toolCalls      ToolCall[]

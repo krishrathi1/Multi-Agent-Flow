@@ -3,6 +3,8 @@ import path from 'node:path';
 import { prisma } from '../lib/prisma.js';
 import { workspaceFor, listWorkspaceFiles } from './agent-runner.service.js';
 import { readWorkspaceGit, type WorkspaceGitInfo } from './git-deploy.service.js';
+import type { OrchestrationPattern } from '@prisma/client';
+import { PATTERN_INFO, recommendPattern, type OrchestrationStats, type PatternAgent } from './orchestration.service.js';
 
 /**
  * Production report: what a chain actually built, read from its workspace,
@@ -62,6 +64,19 @@ export interface ReportMessaging {
   }>;
 }
 
+/** The agentic design pattern in use, how each run under each pattern went, and a recommendation. */
+export interface ReportPatterns {
+  pattern: string;
+  label: string;
+  workers: string;
+  summary: string;
+  runs: Array<{
+    runId: string; pattern: string; state: string; durationMs: number | null; tokens: number; steps: number;
+    waves: number; maxParallel: number; supervisorCalls: number; followUps: number; qaVerdict: string | null;
+  }>;
+  recommendation: { pattern: string; label: string; basis: string; reasons: string[] };
+}
+
 /** Which external tools (built-in MCP servers) fed the work, and who called them. */
 export interface ReportTools {
   total: number;
@@ -112,6 +127,7 @@ export interface ProjectReport {
   checks: ReportCheck[];
   messaging: ReportMessaging;
   tools: ReportTools;
+  patterns: ReportPatterns;
   markdown: string;
 }
 
@@ -553,6 +569,7 @@ export async function generateProjectReport(processId: string, organizationId: s
     checks,
     messaging: await buildMessaging(proc.id, proc.messagingMode, proc.runs),
     tools: await buildTools(proc.id),
+    patterns: buildPatterns(proc.orchestrationPattern, proc.agents, proc.runs),
   };
   return { ...report, markdown: renderReportMarkdown(report) };
 }
@@ -580,6 +597,27 @@ async function buildMessaging(
         entriesPosted: m.entriesPosted ?? 0, issuesRaised: m.issuesRaised ?? 0, issuesResolved: m.issuesResolved ?? 0, reworkSteps: m.reworkSteps ?? 0,
       };
     }),
+  };
+}
+
+function buildPatterns(
+  pattern: OrchestrationPattern,
+  agents: PatternAgent[],
+  runs: Array<{ id: string; state: string; durationMs: number | null; totalTokens: number; orchestrationPattern: OrchestrationPattern | null; orchestration: unknown; output: unknown; steps: unknown[] }>,
+): ReportPatterns {
+  const rows = runs.filter((r) => r.orchestrationPattern).slice(0, 10).map((r) => {
+    const o = (r.orchestration ?? {}) as Partial<OrchestrationStats>;
+    return {
+      runId: r.id, pattern: r.orchestrationPattern!, state: r.state, durationMs: r.durationMs, tokens: r.totalTokens, steps: r.steps.length,
+      waves: o.waves?.length ?? 0, maxParallel: o.maxParallel ?? 0, supervisorCalls: o.supervisorCalls ?? 0,
+      followUps: o.review?.follow_ups?.length ?? 0, qaVerdict: (r.output as any)?.data?.qa_verdict ?? null,
+    };
+  });
+  const rec = recommendPattern(agents, rows.map((r) => ({ pattern: r.pattern as OrchestrationPattern, state: r.state, durationMs: r.durationMs, totalTokens: r.tokens, qaVerdict: r.qaVerdict })));
+  const info = PATTERN_INFO[pattern];
+  return {
+    pattern, label: info.label, workers: info.workers, summary: info.summary, runs: rows,
+    recommendation: { pattern: rec.pattern, label: PATTERN_INFO[rec.pattern].label, basis: rec.basis, reasons: rec.reasons },
   };
 }
 
@@ -705,6 +743,21 @@ export function renderReportMarkdown(r: Omit<ProjectReport, 'markdown'>): string
     }
     out.push('');
   }
+
+  // Agentic design pattern
+  const pt = r.patterns;
+  out.push('## Agentic design pattern', '');
+  out.push(`This production runs as **${pt.label}**: ${pt.summary} Worker nodes: ${pt.workers.charAt(0).toLowerCase()}${pt.workers.slice(1)}.`, '');
+  if (pt.runs.length) {
+    out.push('**Patterns compared, by run**', '', '| Run | Pattern | Result | Time | Tokens | Agent steps | Waves | Peak parallel | Supervisor calls | Follow-ups | QA verdict |', '|---|---|---|---|--:|--:|--:|--:|--:|--:|---|');
+    for (const x of pt.runs) {
+      out.push(`| \`${x.runId.slice(0, 8)}\` | ${PATTERN_INFO[x.pattern as OrchestrationPattern]?.label ?? x.pattern} | ${STATE_LABEL[x.state] ?? x.state} | ${x.durationMs ? formatDuration(x.durationMs) : '—'} | ${x.tokens.toLocaleString('en-US')} | ${x.steps} | ${x.waves} | ${x.maxParallel} | ${x.supervisorCalls} | ${x.followUps} | ${x.qaVerdict ? x.qaVerdict.replace('_', ' ') : '—'} |`);
+    }
+    out.push('');
+  }
+  out.push(`**Recommended:** ${pt.recommendation.label} (${pt.recommendation.basis === 'measured' ? 'from measured runs' : "from the team's structure"}).`, '');
+  for (const reason of pt.recommendation.reasons) out.push(`- ${reason}`);
+  out.push('');
 
   // Tool use
   const tu = r.tools;

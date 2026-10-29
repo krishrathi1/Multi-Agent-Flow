@@ -676,6 +676,7 @@ export interface Process {
   approvalMode?: ApprovalMode;
   /** How agents share context: a shared blackboard, or direct stage-to-stage messages. */
   messagingMode?: MessagingMode;
+  orchestrationPattern?: OrchestrationPattern;
   /** Who may open the chain's generated artifacts. */
   previewVisibility?: PreviewVisibility;
   /** Operator guidance injected into the next run. */
@@ -982,6 +983,44 @@ export interface FinalOutputView {
   errors: Array<{ loc: string; msg: string; type: string }> | null;
   validatedBy: string;
   generatedAt: string;
+}
+
+/** Agentic design pattern: how a production's agents are organised when it runs. */
+export type OrchestrationPattern = 'HYBRID' | 'SEQUENTIAL' | 'PARALLEL' | 'HIERARCHICAL';
+
+export interface PatternWave { stage: number; kind: string; agents: string[] }
+
+export interface OrchestrationStats {
+  pattern: OrchestrationPattern;
+  waves: PatternWave[];
+  maxParallel: number;
+  agentSteps: number;
+  supervisorCalls: number;
+  supervisorModel: string | null;
+  supervisorFallback: string | null;
+  plan: { rationale: string; assignments: Array<{ id: string; agent: string; task: string; depends_on: string[] }> } | null;
+  review: { done: boolean; assessment: string; follow_ups: Array<{ id: string; agent: string; task: string; depends_on: string[] }> } | null;
+}
+
+export interface PatternsView {
+  pattern: OrchestrationPattern;
+  info: Record<OrchestrationPattern, { label: string; workers: string; summary: string; strengths: string; weaknesses: string }>;
+  preview: Record<OrchestrationPattern, PatternWave[]>;
+  recommendation: { pattern: OrchestrationPattern; basis: 'measured' | 'structure'; reasons: string[] };
+  runs: Array<{
+    id: string;
+    state: string;
+    startedAt: string;
+    durationMs: number | null;
+    totalTokens: number;
+    totalCostUsd: number;
+    orchestrationPattern: OrchestrationPattern | null;
+    orchestration: OrchestrationStats | null;
+    messagingMode: MessagingMode | null;
+    qaVerdict: string | null;
+    outputStatus: string | null;
+    _count: { steps: number };
+  }>;
 }
 
 /** A human gate blocking a chain between stages. */

@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { ProcessStatus, ApprovalMode, ActivityType, MessagingMode } from '@prisma/client';
+import { ProcessStatus, ApprovalMode, ActivityType, MessagingMode, OrchestrationPattern } from '@prisma/client';
 import * as blackboard from '../services/blackboard.service.js';
 import * as mcpTools from '../mcp/builtin-servers.js';
 import * as structured from '../services/structured-output.service.js';
+import * as patterns from '../services/orchestration.service.js';
 import * as processService from '../services/process.service.js';
 import * as runner from '../services/agent-runner.service.js';
 import { prisma } from '../lib/prisma.js';
@@ -47,6 +48,8 @@ const updateSchema = z.object({
   approvalMode: z.nativeEnum(ApprovalMode).optional(),
   // How agents share context: the shared blackboard or direct stage-to-stage messages.
   messagingMode: z.nativeEnum(MessagingMode).optional(),
+  // How the agents are organised: hybrid, sequential, parallel or hierarchical.
+  orchestrationPattern: z.nativeEnum(OrchestrationPattern).optional(),
 });
 
 const blackboardPostSchema = z.object({
@@ -367,6 +370,48 @@ router.get('/:id/output', async (req, res) => {
     return res.type('application/json').attachment(`${name}.json`).send(JSON.stringify(output.data, null, 2));
   }
   res.json({ runId: run.id, state: run.state, startedAt: run.startedAt, ...output });
+});
+
+/**
+ * Agentic design patterns for this production: the one in use, what each
+ * would look like for its agents, every recent run's pattern and metrics
+ * for comparison, and a recommendation.
+ */
+router.get('/:id/patterns', async (req, res) => {
+  const id = paramId(req.params.id);
+  const proc = await prisma.process.findFirst({
+    where: { id, organizationId: req.organizationId! },
+    select: { id: true, orchestrationPattern: true, agents: { select: { id: true, displayName: true, processRole: true, processStage: true, description: true } } },
+  });
+  if (!proc) return res.status(404).json({ error: 'Process not found' });
+  const runs = await prisma.processRun.findMany({
+    where: { processId: id, organizationId: req.organizationId! },
+    orderBy: { startedAt: 'desc' },
+    take: 20,
+    select: {
+      id: true, state: true, startedAt: true, durationMs: true, totalTokens: true, totalCostUsd: true,
+      orchestrationPattern: true, orchestration: true, messagingMode: true, output: true,
+      _count: { select: { steps: true } },
+    },
+  });
+  const rows = runs.map(({ output, ...r }) => ({
+    ...r,
+    qaVerdict: (output as any)?.data?.qa_verdict ?? null,
+    outputStatus: (output as any)?.data?.status ?? null,
+  }));
+  // What each pattern would run for this team (hierarchical waves come from the supervisor at run time).
+  const preview = Object.fromEntries((Object.keys(patterns.PATTERN_INFO) as OrchestrationPattern[]).map((p) => [p,
+    p === OrchestrationPattern.HIERARCHICAL
+      ? [{ stage: 0, kind: 'supervisor', agents: ['Supervisor'] }, { stage: 1, kind: 'assigned', agents: proc.agents.map((a) => a.displayName) }]
+      : patterns.staticWaves(p, proc.agents).map((w) => ({ stage: w.stage, kind: w.kind, agents: w.agents.map((a) => a.displayName) })),
+  ]));
+  res.json({
+    pattern: proc.orchestrationPattern,
+    info: patterns.PATTERN_INFO,
+    preview,
+    recommendation: patterns.recommendPattern(proc.agents, rows.map((r) => ({ pattern: r.orchestrationPattern, state: r.state, durationMs: r.durationMs, totalTokens: r.totalTokens, qaVerdict: r.qaVerdict }))),
+    runs: rows,
+  });
 });
 
 /** Live progress for a run in flight, or the last finished run. */

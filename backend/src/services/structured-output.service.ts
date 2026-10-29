@@ -258,6 +258,7 @@ export async function buildFinalOutput(runId: string): Promise<StoredFinalOutput
     run_id: run.id,
     status,
     messaging_mode: run.messagingMode ?? run.process.messagingMode,
+    orchestration_pattern: run.orchestrationPattern ?? null,
     generated_at: new Date().toISOString(),
     stages,
     deliverables: [...deliverables.values()].slice(0, 200),

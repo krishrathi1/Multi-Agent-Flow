@@ -29,6 +29,10 @@ function fixture(over: Partial<ProjectReport> = {}): Omit<ProjectReport, 'markdo
     checks: [{ name: 'Latest run', status: 'pass', detail: 'All 2 agent steps completed.' }],
     messaging: { mode: 'BLACKBOARD', board: { total: 0, byKind: {}, open: 0, resolved: 0 }, keyEntries: [], openItems: [], runs: [] },
     tools: { total: 0, failed: 0, byTool: [], recent: [] },
+    patterns: {
+      pattern: 'HYBRID', label: 'Hybrid (staged)', workers: 'Parallel workers inside each stage', summary: 'Stages run in order; the agents of one stage run at the same time.',
+      runs: [], recommendation: { pattern: 'SEQUENTIAL', label: 'Sequential', basis: 'structure', reasons: ['Only 2 agents: a pipeline is simplest.'] },
+    },
     ...over,
   };
 }
@@ -97,6 +101,25 @@ describe('project report tool use', () => {
 
   it('says so when no tool was called', () => {
     expect(renderReportMarkdown(fixture())).toContain('No MCP tools were called yet.');
+  });
+});
+
+describe('project report agentic patterns', () => {
+  it('names the pattern, compares runs by pattern and recommends one', () => {
+    const md = renderReportMarkdown(fixture({
+      patterns: {
+        pattern: 'HIERARCHICAL', label: 'Hierarchical (supervisor / workers)', workers: 'A supervisor node plus worker agents', summary: 'A supervisor splits the goal into tasks.',
+        runs: [
+          { runId: 'aaaaaaaa1111', pattern: 'HIERARCHICAL', state: 'COMPLETED', durationMs: 600000, tokens: 9000, steps: 3, waves: 3, maxParallel: 1, supervisorCalls: 2, followUps: 1, qaVerdict: 'approved' },
+          { runId: 'bbbbbbbb2222', pattern: 'PARALLEL', state: 'COMPLETED', durationMs: 300000, tokens: 7000, steps: 2, waves: 2, maxParallel: 1, supervisorCalls: 0, followUps: 0, qaVerdict: 'changes_requested' },
+        ],
+        recommendation: { pattern: 'HIERARCHICAL', label: 'Hierarchical (supervisor / workers)', basis: 'measured', reasons: ['Hierarchical: 100% completed'] },
+      },
+    }));
+    expect(md).toContain('## Agentic design pattern');
+    expect(md).toContain('runs as **Hierarchical (supervisor / workers)**');
+    expect(md).toContain('| `aaaaaaaa` | Hierarchical (supervisor / workers) | ✅ Completed | 10 min 0 s | 9,000 | 3 | 3 | 1 | 2 | 1 | approved |');
+    expect(md).toContain('**Recommended:** Hierarchical (supervisor / workers) (from measured runs).');
   });
 });
 
