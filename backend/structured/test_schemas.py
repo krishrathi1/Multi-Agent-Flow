@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from pydantic import ValidationError
 
-from schemas import FinalOutput, StageOutput
+from schemas import FinalOutput, StageOutput, SupervisorPlan, SupervisorReview
 
 
 def stage(**over):
@@ -59,6 +59,33 @@ class FinalOutputTests(unittest.TestCase):
         self.assertIn("| 1 | Frontend Developer | ✅ completed |", md)
         self.assertIn("| `src/App.jsx` | UI \\| root |", md)
         self.assertIn("Validated against the FinalOutput schema v1.0 (Pydantic)", md)
+
+
+class SupervisorTests(unittest.TestCase):
+    def plan(self, *assignments):
+        return {"rationale": "Build first, then review.", "assignments": list(assignments)}
+
+    def test_accepts_a_dependency_graph(self):
+        p = SupervisorPlan.model_validate(self.plan(
+            {"id": "t1", "agent": "Frontend Developer", "task": "Build the budget UI and storage."},
+            {"id": "t2", "agent": "QA Reviewer", "task": "Review the UI against the brief.", "depends_on": ["t1"]},
+        ))
+        self.assertEqual([a.id for a in p.assignments], ["t1", "t2"])
+
+    def test_rejects_cycles_and_unknown_dependencies(self):
+        with self.assertRaisesRegex(ValidationError, "cycle"):
+            SupervisorPlan.model_validate(self.plan(
+                {"id": "a", "agent": "X", "task": "Do the first thing.", "depends_on": ["b"]},
+                {"id": "b", "agent": "Y", "task": "Do the second thing.", "depends_on": ["a"]},
+            ))
+        with self.assertRaisesRegex(ValidationError, "unknown ids"):
+            SupervisorPlan.model_validate(self.plan({"id": "a", "agent": "X", "task": "Do the first thing.", "depends_on": ["zzz"]}))
+
+    def test_review_must_be_consistent(self):
+        with self.assertRaises(ValidationError):
+            SupervisorReview.model_validate({"done": False, "assessment": "Totals are wrong.", "follow_ups": []})
+        r = SupervisorReview.model_validate({"done": False, "assessment": "Totals are wrong.", "follow_ups": [{"id": "f1", "agent": "Frontend Developer", "task": "Fix the per-person totals."}]})
+        self.assertEqual(r.follow_ups[0].agent, "Frontend Developer")
 
 
 if __name__ == "__main__":

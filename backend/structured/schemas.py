@@ -149,6 +149,7 @@ class FinalOutput(_Model):
     run_id: str = Field(min_length=1)
     status: Status
     messaging_mode: Literal["BLACKBOARD", "PEER_TO_PEER"]
+    orchestration_pattern: Optional[Literal["HYBRID", "SEQUENTIAL", "PARALLEL", "HIERARCHICAL"]] = None
     generated_at: datetime
     stages: list[StageOutput] = Field(default_factory=list)
     deliverables: list[Deliverable] = Field(default_factory=list)
@@ -184,6 +185,7 @@ class FinalOutput(_Model):
             f"| Status | {icon[self.status.value]} {self.status.value} |",
             f"| Run | `{self.run_id[:8]}` |",
             f"| Context sharing | {'Blackboard (shared state)' if self.messaging_mode == 'BLACKBOARD' else 'Peer-to-peer'} |",
+            f"| Agentic pattern | {cell(self.orchestration_pattern.title() if self.orchestration_pattern else None)} |",
             f"| QA verdict | {cell(self.qa_verdict.replace('_', ' ') if self.qa_verdict else None)} |",
             f"| Duration | {cell(f'{m.duration_seconds:.0f} s' if m.duration_seconds is not None else None)} |",
             f"| Tokens / cost | {m.tokens:,} / ${m.cost_usd:.4f} |",
@@ -223,4 +225,68 @@ class FinalOutput(_Model):
         return "\n".join(out)
 
 
-MODELS: dict[str, type[BaseModel]] = {"StageOutput": StageOutput, "FinalOutput": FinalOutput}
+# ── Hierarchical pattern: the supervisor's plan and review ─────────────────
+
+
+class Assignment(_Model):
+    """One task the supervisor gives one worker agent."""
+
+    id: str = Field(min_length=1, max_length=20)
+    agent: str = Field(min_length=1, max_length=120, description="Exact name of a worker agent")
+    task: str = Field(min_length=10, max_length=1500)
+    depends_on: list[str] = Field(default_factory=list, max_length=10, description="ids of assignments that must finish first")
+
+
+def _check_dependencies(assignments: list[Assignment], known: set[str] | None = None) -> None:
+    ids = [a.id for a in assignments]
+    if len(ids) != len(set(ids)):
+        raise ValueError("assignment ids must be unique")
+    valid = set(ids) | (known or set())
+    for a in assignments:
+        missing = [d for d in a.depends_on if d not in valid]
+        if missing:
+            raise ValueError(f"assignment {a.id} depends on unknown ids {missing}")
+    # No cycles: repeatedly remove assignments whose dependencies are all done.
+    pending = {a.id: set(d for d in a.depends_on if d in ids) for a in assignments}
+    while pending:
+        ready = [i for i, deps in pending.items() if not deps]
+        if not ready:
+            raise ValueError(f"assignments have a dependency cycle: {sorted(pending)}")
+        for i in ready:
+            pending.pop(i)
+        for deps in pending.values():
+            deps.difference_update(ready)
+
+
+class SupervisorPlan(_Model):
+    rationale: str = Field(min_length=10, max_length=1500)
+    assignments: list[Assignment] = Field(min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def _dependencies(self):
+        _check_dependencies(self.assignments)
+        return self
+
+
+class SupervisorReview(_Model):
+    done: bool
+    assessment: str = Field(min_length=10, max_length=1500)
+    follow_ups: list[Assignment] = Field(default_factory=list, max_length=4)
+
+    @model_validator(mode="after")
+    def _consistent(self):
+        if self.done and self.follow_ups:
+            raise ValueError("done is true but follow_ups were given")
+        if not self.done and not self.follow_ups:
+            raise ValueError("done is false but no follow_ups were given")
+        # Follow-ups run after the plan, so they can only depend on each other.
+        _check_dependencies(self.follow_ups)
+        return self
+
+
+MODELS: dict[str, type[BaseModel]] = {
+    "StageOutput": StageOutput,
+    "FinalOutput": FinalOutput,
+    "SupervisorPlan": SupervisorPlan,
+    "SupervisorReview": SupervisorReview,
+}

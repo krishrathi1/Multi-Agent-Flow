@@ -1,6 +1,6 @@
 import { config } from '../config.js';
 import { randomBytes } from 'node:crypto';
-import { Prisma, ProcessStatus, ActivityType, ApprovalMode, MessagingMode } from '@prisma/client';
+import { Prisma, ProcessStatus, ActivityType, ApprovalMode, MessagingMode, OrchestrationPattern } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { planProcess, type ProcessPlan } from './process-planner.js';
@@ -331,6 +331,7 @@ export async function updateProcess(
     maxTokens?: number | null;
     approvalMode?: ApprovalMode;
     messagingMode?: MessagingMode;
+    orchestrationPattern?: OrchestrationPattern;
   },
 ) {
   const existing = await prisma.process.findFirst({ where: { id, organizationId } });
@@ -348,6 +349,7 @@ export async function updateProcess(
       ...(data.maxTokens !== undefined ? { maxTokens: data.maxTokens } : {}),
       ...(data.approvalMode ? { approvalMode: data.approvalMode } : {}),
       ...(data.messagingMode ? { messagingMode: data.messagingMode } : {}),
+      ...(data.orchestrationPattern ? { orchestrationPattern: data.orchestrationPattern } : {}),
       ...(data.status === ProcessStatus.COMPLETED ? { completedAt: new Date() } : {}),
     },
   });

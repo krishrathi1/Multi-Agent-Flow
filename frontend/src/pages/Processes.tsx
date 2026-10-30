@@ -25,6 +25,7 @@ import {
   Network,
   Wrench,
   FileJson,
+  GitBranch,
 } from 'lucide-react';
 import { cn, timeAgo } from '../lib/utils';
 import { tones } from '../lib/design';
@@ -41,6 +42,7 @@ import { ProcessMcpGatewaysModal } from '../components/process/ProcessMcpGateway
 import { BlackboardModal } from '../components/process/BlackboardModal';
 import { ToolsModal } from '../components/process/ToolsModal';
 import { FinalOutputModal } from '../components/process/FinalOutputModal';
+import { PatternsModal } from '../components/process/PatternsModal';
 import { IconReportAnalytics } from '../components/ui/NaturalIcons';
 import { api } from '../lib/api';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -77,6 +79,7 @@ function ProcessCard({
   onBlackboard,
   onTools,
   onOutput,
+  onPatterns,
   busy,
   hasSite,
 }: {
@@ -94,6 +97,7 @@ function ProcessCard({
   onBlackboard: (p: Process) => void;
   onTools: (p: Process) => void;
   onOutput: (p: Process) => void;
+  onPatterns: (p: Process) => void;
   busy: boolean;
   hasSite: boolean;
 }) {
@@ -308,6 +312,17 @@ function ProcessCard({
           <Button
             variant="secondary"
             size="xs"
+            icon={GitBranch}
+            onClick={() => onPatterns(process)}
+            className="text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 shadow-2xs font-semibold"
+            aria-label={`Open agentic pattern for ${process.name}`}
+          >
+            {{ SEQUENTIAL: 'Sequential', PARALLEL: 'Parallel', HIERARCHICAL: 'Hierarchical', HYBRID: 'Hybrid' }[process.orchestrationPattern ?? 'HYBRID']} pattern
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="xs"
             icon={IconReportAnalytics as any}
             onClick={() => onReport(process)}
             aria-label={`View audit report for ${process.name}`}
@@ -413,6 +428,7 @@ export function Processes() {
   const [blackboardTarget, setBlackboardTarget] = useState<Process | null>(null);
   const [toolsTarget, setToolsTarget] = useState<Process | null>(null);
   const [outputTarget, setOutputTarget] = useState<Process | null>(null);
+  const [patternsTarget, setPatternsTarget] = useState<Process | null>(null);
   const [sites, setSites] = useState<Record<string, boolean>>({});
 
   const runControl = async (p: Process, action: 'start' | 'pause') => {
@@ -564,6 +580,7 @@ export function Processes() {
                 onBlackboard={setBlackboardTarget}
                 onTools={setToolsTarget}
                 onOutput={setOutputTarget}
+                onPatterns={setPatternsTarget}
                 hasSite={!!sites[p.id]}
               />
             ))}
@@ -592,6 +609,7 @@ export function Processes() {
 
       {toolsTarget && <ToolsModal process={toolsTarget} open onClose={() => setToolsTarget(null)} />}
       {outputTarget && <FinalOutputModal process={outputTarget} open onClose={() => setOutputTarget(null)} />}
+      {patternsTarget && <PatternsModal process={patternsTarget} open onClose={() => setPatternsTarget(null)} onChanged={fetchProcesses} />}
 
       {mcpGwTarget && (
         <ProcessMcpGatewaysModal

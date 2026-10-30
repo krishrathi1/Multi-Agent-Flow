@@ -2,7 +2,7 @@ import { promises as fs, existsSync } from 'node:fs';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import path from 'node:path';
-import { ActivityType, ProcessStatus, RunState, RunTrigger, ApprovalMode, ApprovalStatus, MessagingMode, Prisma } from '@prisma/client';
+import { ActivityType, ProcessStatus, RunState, RunTrigger, ApprovalMode, ApprovalStatus, MessagingMode, OrchestrationPattern, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { runClaudeCli, isClaudeCliEnabled } from '../lib/claude-cli.js';
@@ -18,6 +18,7 @@ import * as repoService from './repo.service.js';
 import * as blackboard from './blackboard.service.js';
 import * as mcpTools from '../mcp/builtin-servers.js';
 import * as structured from './structured-output.service.js';
+import * as patterns from './orchestration.service.js';
 
 import { config } from '../config.js';
 /**
@@ -2873,6 +2874,7 @@ function taskPrompt(
 ): string {
   const parts = [`# Production goal\n${goal}`, `\n# Your job\n${role}`];
 
+  if (shared?.assignment) parts.push(`\n# Your assignment\n${shared.assignment}`);
   if (shared?.rework) parts.push(`\n# Follow-up on the blackboard\n${shared.rework}`);
   if (shared?.board) parts.push(`\n${shared.board}`);
   if (shared?.tools) parts.push(`\n${shared.tools}`);
@@ -2917,6 +2919,8 @@ interface StepContext {
   output?: string;
   /** How long the session has, and how to verify within it. */
   budget?: string;
+  /** The task this agent was given by the orchestration pattern (supervisor, fan-out, join). */
+  assignment?: string;
 }
 
 const formatUsd = (n: number) => `$${n.toFixed(4)}`;
@@ -3941,10 +3945,34 @@ export async function runProcessChain(
   });
   emit('process:updated', { id: processId, status: 'ACTIVE' });
 
-  const stages = [...new Set(proc.agents.map((a) => a.processStage))].sort((a, b) => a - b);
+  // The agentic pattern decides how agents are grouped into waves (the
+  // groups that run together); everything below runs per wave.
+  const pattern = proc.orchestrationPattern ?? OrchestrationPattern.HYBRID;
+  const orch = patterns.emptyOrchestrationStats(pattern);
+  type ChainAgent = (typeof proc.agents)[number];
+  let waves: patterns.Wave<ChainAgent>[];
+  if (pattern === OrchestrationPattern.HIERARCHICAL) {
+    const planned = await patterns.supervisorPlan(organizationId, proc.prompt, proc.agents);
+    waves = planned.waves;
+    orch.supervisorCalls += 1;
+    orch.plan = planned.plan;
+    orch.supervisorModel = planned.model;
+    orch.supervisorFallback = planned.fallback;
+    logger.info({ processId, tasks: planned.plan?.assignments.length ?? 0, waves: waves.length, fallback: planned.fallback }, 'Supervisor planned the run');
+  } else {
+    waves = patterns.staticWaves(pattern, proc.agents);
+  }
+  const reviewRounds = { done: 0, max: 1 };
+  // Resuming mid-run matches waves to the agents' planned stages, which only
+  // the hybrid pattern's waves follow; other patterns start a retry over.
+  if (fromStage > 0 && pattern !== OrchestrationPattern.HYBRID) {
+    logger.info({ processId, pattern, fromStage }, 'Retry under a non-staged pattern runs from the start');
+    fromStage = 0;
+  }
   const steps: RunStepResult[] = [];
   const handoffs: Array<{ agent: string; summary: string }> = [];
-  if (live) live.totalStages = stages.length;
+  if (live) live.totalStages = waves.length;
+  await prisma.processRun.update({ where: { id: runRow.id }, data: { totalStages: waves.length, orchestrationPattern: pattern } }).catch(() => {});
 
   // Blackboard: every agent reads and posts to one shared state. Peer-to-peer:
   // each stage messages only the next one. Stats are kept for comparing them.
@@ -3991,7 +4019,9 @@ export async function runProcessChain(
   // stage can be refused before it spends rather than after.
   const avgStepUsd = await avgStepCostUsd(processId, organizationId);
 
-  for (const stage of stages) {
+  for (let wi = 0; wi < waves.length; wi++) {
+    const wave = waves[wi];
+    const stage = wave.stage;
     if (stage < fromStage) continue;
     if (isCancelled(processId)) {
       stoppedReason = 'Cancelled by user';
@@ -4010,7 +4040,7 @@ export async function runProcessChain(
 
     // Fleet Controls can pause an agent mid-run, so the switch is read per
     // stage rather than from the snapshot loaded when the run began.
-    const stageAgents = proc.agents.filter((a) => a.processStage === stage);
+    const stageAgents = wave.agents;
     const pausedIds = new Set(
       (await prisma.agent.findMany({
         where: { id: { in: stageAgents.map((a) => a.id) }, enabled: false },
@@ -4039,14 +4069,14 @@ export async function runProcessChain(
     }
 
     // ---- Human-in-the-loop gate ----
-    const isFinalStage = stage === stages[stages.length - 1];
+    const isFinalStage = wi === waves.length - 1;
     const needsApproval =
       steps.length > 0 &&
       (proc.approvalMode === ApprovalMode.EVERY_STAGE ||
         (proc.approvalMode === ApprovalMode.FINAL_STAGE && isFinalStage));
 
     if (needsApproval && stage > approvedThrough) {
-      const gateAgent = proc.agents.find((a) => a.processStage === stage) ?? proc.agents[0];
+      const gateAgent = wave.agents[0] ?? proc.agents[0];
       await requestStageApproval(
         organizationId,
         proc,
@@ -4083,7 +4113,12 @@ export async function runProcessChain(
       (proc.plannedBy?.startsWith('llm:') ? proc.plannedBy.slice(4) : proc.plannedBy) ||
       undefined;
     const results: RunStepResult[] = [];
-    const FAN_OUT = Number(process.env.MAX_STAGE_PARALLELISM ?? 3);
+    // The parallel pattern's fan-out wave is the point of the pattern: let it
+    // run wider than a normal stage, within a hard ceiling.
+    const baseFanOut = Number(process.env.MAX_STAGE_PARALLELISM ?? 3);
+    const FAN_OUT = wave.kind === 'workers' ? Math.min(Math.max(baseFanOut, inStage.length), 6) : baseFanOut;
+    orch.maxParallel = Math.max(orch.maxParallel, Math.min(FAN_OUT, inStage.length));
+    orch.waves.push({ stage, kind: wave.kind, agents: inStage.map((a) => a.displayName) });
 
     // What each agent of this stage is given to work from.
     const contextFor = new Map<string, { messages: typeof handoffs; shared?: StepContext }>();
@@ -4092,14 +4127,14 @@ export async function runProcessChain(
       await blackboard.publishBoard(workspace, board, inStage);
       for (const a of inStage) {
         const { text, forMe } = blackboard.boardForAgent(board, a);
-        const shared = { board: blackboard.boardInstructions(a, text, forMe) };
+        const shared: StepContext = { board: blackboard.boardInstructions(a, text, forMe), assignment: wave.tasks.get(a.id) };
         contextFor.set(a.id, { messages: [], shared });
         stats.contextChars.push(text.length); // the shared content, not the posting instructions
         stats.deliveries += 1;
       }
     } else {
       for (const a of inStage) {
-        contextFor.set(a.id, { messages: [...lastStageMessages] });
+        contextFor.set(a.id, { messages: [...lastStageMessages], shared: wave.tasks.has(a.id) ? { assignment: wave.tasks.get(a.id) } : undefined });
         stats.contextChars.push(lastStageMessages.reduce((n, m) => n + m.summary.length, 0));
         stats.deliveries += lastStageMessages.length;
       }
@@ -4137,9 +4172,9 @@ export async function runProcessChain(
     // the next stage's context.
     // Link this stage's producers to the next stage's consumers so the
     // communication graph shows the real flow of work.
-    const nextStage = stages[stages.indexOf(stage) + 1];
-    if (nextStage !== undefined) {
-      const receivers = proc.agents.filter((a) => a.processStage === nextStage);
+    const nextWave = waves[wi + 1];
+    if (nextWave !== undefined) {
+      const receivers = nextWave.agents;
       for (const r of results.filter((x) => x.ok)) {
         for (const receiver of receivers) {
           await recordHandoff(
@@ -4162,8 +4197,7 @@ export async function runProcessChain(
 
     if (useBoard) {
       // Issues a stage raises without naming anyone go to the stage whose work it reviewed.
-      const prevStage = stages[stages.indexOf(stage) - 1];
-      const defaultTo = proc.agents.find((a) => a.processStage === prevStage)?.displayName;
+      const defaultTo = waves[wi - 1]?.agents[0]?.displayName;
       for (const r of results.filter((x) => x.ok)) {
         const agent = inStage.find((a) => a.id === r.agentId)!;
         const { posted, resolved } = await blackboard.collectPosts({
@@ -4184,7 +4218,8 @@ export async function runProcessChain(
       // on. One follow-up round per stage keeps the spend bounded.
       if (!stoppedReason && !isCancelled(processId)) {
         const board = await blackboard.readBoard(processId, runRow.id);
-        const done = proc.agents.filter((a) => a.processStage <= stage && !pausedIds.has(a.id));
+        const ranSoFar = new Set(waves.slice(0, wi + 1).flatMap((w) => w.agents.map((a) => a.id)));
+        const done = proc.agents.filter((a) => ranSoFar.has(a.id) && !pausedIds.has(a.id));
         // An item gets one follow-up per run: one that stays open after it
         // would otherwise send the same agent back after every later stage.
         const owed = [...blackboard.openItemsByAgent(board.filter((e) => !followedUp.has(e.id)), done)].slice(0, 3);
@@ -4222,6 +4257,26 @@ export async function runProcessChain(
     // A mid-stage guardrail stop ends the run, not just the batch loop — the
     // work done so far is still recorded above before we leave.
     if (stoppedReason) break;
+
+    // Hierarchical: when the planned waves are done, the supervisor reviews
+    // the workers' structured outputs and may send follow-up tasks.
+    if (pattern === OrchestrationPattern.HIERARCHICAL && wi === waves.length - 1 && reviewRounds.done < reviewRounds.max && !isCancelled(processId)) {
+      reviewRounds.done += 1;
+      const outputs = (await prisma.processRunStep.findMany({ where: { runId: runRow.id, state: RunState.COMPLETED }, select: { output: true } }))
+        .map((r) => r.output as unknown as structured.StageOutput | null)
+        .filter((o): o is structured.StageOutput => !!o);
+      const reviewed = await patterns.supervisorReview(organizationId, proc.prompt, proc.agents, outputs, stage + 1);
+      orch.supervisorCalls += 1;
+      orch.review = reviewed.review;
+      if (reviewed.waves.length) {
+        waves.push(...reviewed.waves);
+        if (live) live.totalStages = waves.length;
+        await prisma.processRun.update({ where: { id: runRow.id }, data: { totalStages: waves.length } }).catch(() => {});
+        logger.info({ processId, followUps: reviewed.review?.follow_ups.length }, 'Supervisor sent follow-up tasks');
+      }
+    }
+    orch.agentSteps = steps.length;
+    await prisma.processRun.update({ where: { id: runRow.id }, data: { orchestration: orch as unknown as Prisma.InputJsonValue } }).catch(() => {});
   }
 
   const files = await listWorkspaceFiles(processId);
