@@ -26,6 +26,8 @@ import {
   Wrench,
   FileJson,
   GitBranch,
+  Flame,
+  BarChart3,
 } from 'lucide-react';
 import { cn, timeAgo } from '../lib/utils';
 import { tones } from '../lib/design';
@@ -43,6 +45,8 @@ import { BlackboardModal } from '../components/process/BlackboardModal';
 import { ToolsModal } from '../components/process/ToolsModal';
 import { FinalOutputModal } from '../components/process/FinalOutputModal';
 import { PatternsModal } from '../components/process/PatternsModal';
+import { AgentHeatmapModal } from '../components/process/AgentHeatmapModal';
+import { PerformanceEvaluationModal } from '../components/process/PerformanceEvaluationModal';
 import { IconReportAnalytics } from '../components/ui/NaturalIcons';
 import { api } from '../lib/api';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -429,6 +433,8 @@ export function Processes() {
   const [toolsTarget, setToolsTarget] = useState<Process | null>(null);
   const [outputTarget, setOutputTarget] = useState<Process | null>(null);
   const [patternsTarget, setPatternsTarget] = useState<Process | null>(null);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showEvaluation, setShowEvaluation] = useState(false);
   const [sites, setSites] = useState<Record<string, boolean>>({});
 
   const runControl = async (p: Process, action: 'start' | 'pause') => {
@@ -485,9 +491,27 @@ export function Processes() {
         title="Productions"
         description="Autonomous multi-stage agent workflows, production chains, and code review deliverables"
         actions={
-          <Button variant="primary" icon={Plus} onClick={() => setShowCreate(true)}>
-            New Production
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="secondary"
+              icon={Flame}
+              onClick={() => setShowHeatmap(true)}
+              className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 font-semibold"
+            >
+              Agent Heatmap
+            </Button>
+            <Button
+              variant="secondary"
+              icon={BarChart3}
+              onClick={() => setShowEvaluation(true)}
+              className="text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/10 font-semibold"
+            >
+              40-Run Benchmark
+            </Button>
+            <Button variant="primary" icon={Plus} onClick={() => setShowCreate(true)}>
+              New Production
+            </Button>
+          </div>
         }
       />
 
@@ -610,6 +634,8 @@ export function Processes() {
       {toolsTarget && <ToolsModal process={toolsTarget} open onClose={() => setToolsTarget(null)} />}
       {outputTarget && <FinalOutputModal process={outputTarget} open onClose={() => setOutputTarget(null)} />}
       {patternsTarget && <PatternsModal process={patternsTarget} open onClose={() => setPatternsTarget(null)} onChanged={fetchProcesses} />}
+      <AgentHeatmapModal isOpen={showHeatmap} onClose={() => setShowHeatmap(false)} />
+      <PerformanceEvaluationModal isOpen={showEvaluation} onClose={() => setShowEvaluation(false)} />
 
       {mcpGwTarget && (
         <ProcessMcpGatewaysModal

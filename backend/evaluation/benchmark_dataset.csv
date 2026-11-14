@@ -1,0 +1,41 @@
+run_id,architecture,persona,prompt_variance,duration_seconds,total_tokens,cost_usd,confidence_score
+RUN_001,ReAct (Tool-Centric),Analytical Auditor,"Structured, highly quantitative, requests tool verifications",10.15,6243,0.0188,0.89
+RUN_002,Sequential Pipeline,Fast Pragmatist,"Direct, minimal tokens, requests concise code output",5.06,2404,0.007,0.92
+RUN_003,Hierarchical Supervisor,Inquisitive Explorer,"Conversational, asks multi-turn questions, complex reasoning",13.3,11125,0.0336,0.94
+RUN_004,Hybrid Staged,Detail Specialist,"Extensive specifications, deep validation, adversarial edge cases",7.96,4967,0.0148,0.94
+RUN_005,ReAct (Tool-Centric),Analytical Auditor,"Structured, highly quantitative, requests tool verifications",12.34,6394,0.0191,0.91
+RUN_006,Sequential Pipeline,Fast Pragmatist,"Direct, minimal tokens, requests concise code output",5.96,2809,0.0086,0.92
+RUN_007,Hierarchical Supervisor,Inquisitive Explorer,"Conversational, asks multi-turn questions, complex reasoning",12.18,10797,0.0326,0.95
+RUN_008,Hybrid Staged,Detail Specialist,"Extensive specifications, deep validation, adversarial edge cases",9.54,5694,0.0169,0.91
+RUN_009,ReAct (Tool-Centric),Analytical Auditor,"Structured, highly quantitative, requests tool verifications",9.98,5469,0.0165,0.95
+RUN_010,Sequential Pipeline,Fast Pragmatist,"Direct, minimal tokens, requests concise code output",5.18,3273,0.01,0.97
+RUN_011,Hierarchical Supervisor,Inquisitive Explorer,"Conversational, asks multi-turn questions, complex reasoning",12.04,11879,0.0356,0.9
+RUN_012,Hybrid Staged,Detail Specialist,"Extensive specifications, deep validation, adversarial edge cases",6.99,4304,0.0131,0.94
+RUN_013,ReAct (Tool-Centric),Analytical Auditor,"Structured, highly quantitative, requests tool verifications",7.92,5150,0.0154,0.91
+RUN_014,Sequential Pipeline,Fast Pragmatist,"Direct, minimal tokens, requests concise code output",5.55,3002,0.009,0.96
+RUN_015,Hierarchical Supervisor,Inquisitive Explorer,"Conversational, asks multi-turn questions, complex reasoning",14.28,10766,0.0323,0.92
+RUN_016,Hybrid Staged,Detail Specialist,"Extensive specifications, deep validation, adversarial edge cases",9.11,4800,0.0144,0.9
+RUN_017,ReAct (Tool-Centric),Analytical Auditor,"Structured, highly quantitative, requests tool verifications",10.43,4989,0.0151,0.91
+RUN_018,Sequential Pipeline,Fast Pragmatist,"Direct, minimal tokens, requests concise code output",4.59,2935,0.0086,0.92
+RUN_019,Hierarchical Supervisor,Inquisitive Explorer,"Conversational, asks multi-turn questions, complex reasoning",7.61,14854,0.0447,0.93
+RUN_020,Hybrid Staged,Detail Specialist,"Extensive specifications, deep validation, adversarial edge cases",8.3,5613,0.0166,0.9
+RUN_021,ReAct (Tool-Centric),Analytical Auditor,"Structured, highly quantitative, requests tool verifications",7.24,5671,0.0168,0.98
+RUN_022,Sequential Pipeline,Fast Pragmatist,"Direct, minimal tokens, requests concise code output",7.34,2888,0.0089,0.95
+RUN_023,Hierarchical Supervisor,Inquisitive Explorer,"Conversational, asks multi-turn questions, complex reasoning",16.12,7440,0.0223,0.89
+RUN_024,Hybrid Staged,Detail Specialist,"Extensive specifications, deep validation, adversarial edge cases",4.84,6353,0.0191,0.98
+RUN_025,ReAct (Tool-Centric),Analytical Auditor,"Structured, highly quantitative, requests tool verifications",7.97,6313,0.0187,0.91
+RUN_026,Sequential Pipeline,Fast Pragmatist,"Direct, minimal tokens, requests concise code output",5.15,2994,0.0091,0.93
+RUN_027,Hierarchical Supervisor,Inquisitive Explorer,"Conversational, asks multi-turn questions, complex reasoning",14.1,10302,0.0309,0.93
+RUN_028,Hybrid Staged,Detail Specialist,"Extensive specifications, deep validation, adversarial edge cases",5.25,7431,0.0223,0.9
+RUN_029,ReAct (Tool-Centric),Analytical Auditor,"Structured, highly quantitative, requests tool verifications",7.51,5643,0.0168,0.96
+RUN_030,Sequential Pipeline,Fast Pragmatist,"Direct, minimal tokens, requests concise code output",5.34,3374,0.01,0.97
+RUN_031,Hierarchical Supervisor,Inquisitive Explorer,"Conversational, asks multi-turn questions, complex reasoning",9.46,8974,0.027,0.97
+RUN_032,Hybrid Staged,Detail Specialist,"Extensive specifications, deep validation, adversarial edge cases",7.62,4522,0.0135,0.98
+RUN_033,ReAct (Tool-Centric),Analytical Auditor,"Structured, highly quantitative, requests tool verifications",6.64,6550,0.0198,0.9
+RUN_034,Sequential Pipeline,Fast Pragmatist,"Direct, minimal tokens, requests concise code output",6.21,3103,0.0091,0.9
+RUN_035,Hierarchical Supervisor,Inquisitive Explorer,"Conversational, asks multi-turn questions, complex reasoning",11.53,8294,0.0251,0.97
+RUN_036,Hybrid Staged,Detail Specialist,"Extensive specifications, deep validation, adversarial edge cases",7.82,6707,0.0202,0.93
+RUN_037,ReAct (Tool-Centric),Analytical Auditor,"Structured, highly quantitative, requests tool verifications",10.61,5282,0.0159,0.96
+RUN_038,Sequential Pipeline,Fast Pragmatist,"Direct, minimal tokens, requests concise code output",5.88,3563,0.0106,0.92
+RUN_039,Hierarchical Supervisor,Inquisitive Explorer,"Conversational, asks multi-turn questions, complex reasoning",14.06,9245,0.0279,0.89
+RUN_040,Hybrid Staged,Detail Specialist,"Extensive specifications, deep validation, adversarial edge cases",8.64,5435,0.0164,0.9

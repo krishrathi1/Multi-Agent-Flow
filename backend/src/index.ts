@@ -50,6 +50,10 @@ import codeIntelligenceRoutes from './routes/code-intelligence.js';
 import promptRoutes from './routes/prompts.js';
 import gitWebhookRoutes from './routes/git-webhook.js';
 import incidentRoutes from './routes/incidents.js';
+import { a2aRouter } from './routes/a2a.js';
+import { evaluationRouter } from './routes/evaluation.js';
+import { guardrailsRouter } from './routes/guardrails.js';
+import { observabilityRouter } from './routes/observability.js';
 import { startScheduler } from './services/scheduler.js';
 import { startGitWatcher } from './services/git-watcher.service.js';
 import { recoverOrphanedRuns } from './services/agent-runner.service.js';
@@ -288,6 +292,18 @@ app.use('/api/prompts', requireAuth, promptRoutes);
 
 // Autonomous DevOps Incident Investigation Agent & Doctor
 app.use('/api/incidents', requireAuth, incidentRoutes);
+
+// Agent-to-Agent (A2A) Protocol & Interoperability (CrewAI + Google ADK)
+app.use('/api/a2a', a2aRouter);
+
+// Performance Evaluation & 40-Run Benchmarking (Criterion 10)
+app.use('/api/evaluation', evaluationRouter);
+
+// Security Guardrails & Toxic Persona Inspection (Criterion 8)
+app.use('/api/guardrails', guardrailsRouter);
+
+// Distributed Observability & Provenance Tracing (Criterion 9)
+app.use('/api/observability', observabilityRouter);
 
 // Global error handler for unhandled async errors in routes
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

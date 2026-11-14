@@ -77,3 +77,7 @@ scripts/create-admin.ts
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Documents
+*.docx
+*.pdf
