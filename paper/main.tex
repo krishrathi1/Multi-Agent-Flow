@@ -1,6 +1,6 @@
 \documentclass[12pt,onecolumn,draftclsnofoot]{IEEEtran}
 \usepackage[a4paper,margin=1in]{geometry}
-\usepackage{times,graphicx,amsmath,booktabs,cite,url}
+\usepackage{times,graphicx,amsmath,amssymb,booktabs,cite,url}
 \usepackage[ruled,linesnumbered]{algorithm2e}
 
 \begin{document}
@@ -73,6 +73,7 @@ Furthermore, debugging distributed agentic workflows requires comprehensive obse
 \caption{Comparative Analysis of Multi-Agent Architectures and Engineering Capabilities}
 \label{tab:comparison}
 \footnotesize
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{@{}llllllll@{}}
 \toprule
 \textbf{Framework} & \textbf{Memory Model} & \textbf{Concurrency} & \textbf{Tool Standard} & \textbf{Interoperability} & \textbf{Guardrails} & \textbf{Observability} & \textbf{Pydantic Validation} \\
@@ -84,7 +85,8 @@ CrewAI \cite{crewai2024framework} & Episodic / RAG & Lock-free & LangChain Tools
 LangGraph & StateGraph & Graph State & ToolNode & Single Engine & Custom Check & OpenTelemetry & Custom Schemas \\
 \textbf{Multi-Agent-Flow} & \textbf{Blackboard (Dual)} & \textbf{Row Locks (0\%)} & \textbf{MCP Protocol} & \textbf{A2A (CrewAI+ADK)} & \textbf{SSRF + Guard} & \textbf{W3C Tracing} & \textbf{Pydantic v2 + Loop} \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table*}
 
 \subsection{Research Gap and Synthesis}
@@ -236,13 +238,12 @@ $\mathcal{W} \leftarrow \text{CrewAI\_Supervisor.PlanTaskWaves}(x_{\text{clean}}
 $y_{\text{raw}} \leftarrow \text{CrewAI\_Supervisor.SynthesizeDeliverable}(\mathcal{B})$\;
 $\text{retries} \leftarrow 0$\;
 \While{$\text{retries} < 2$}{
-    \Try{
+    \eIf{$\text{IsValidPydantic}(y_{\text{raw}}, \Sigma_{\text{Pydantic}})$}{
         $\mathcal{Y} \leftarrow \text{PydanticValidate}(y_{\text{raw}}, \Sigma_{\text{Pydantic}})$\;
         $\text{Blackboard.FinalizeRun}(\mathcal{B}, \tau, \mathcal{Y})$\;
         \Return $\mathcal{Y}$\;
-    }
-    \Catch{$\text{ValidationError } e$}{
-        $y_{\text{raw}} \leftarrow \text{CrewAI\_Supervisor.ReflectAndFix}(y_{\text{raw}}, e)$\;
+    }{
+        $y_{\text{raw}} \leftarrow \text{CrewAI\_Supervisor.ReflectAndFix}(y_{\text{raw}})$\;
         $\text{retries} \leftarrow \text{retries} + 1$\;
     }
 }
@@ -321,6 +322,7 @@ To address RQ1, we analyze execution throughput, token consumption, financial co
 \caption{Performance Evaluation across Architectures and Personas (Mean $\pm$ Std. Dev.)}
 \label{tab:results}
 \footnotesize
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{@{}lccccc@{}}
 \toprule
 \textbf{Orchestration Pattern} & \textbf{Duration (s)} & \textbf{Total Tokens} & \textbf{Cost (USD)} & \textbf{Confidence Score} & \textbf{Schema Adherence (\%)} \\
@@ -330,7 +332,8 @@ Sequential Pipeline & 5.61 $\pm$ 0.92 & 2,745 $\pm$ 380 & \$0.0054 $\pm$ 0.001 &
 Hierarchical Supervisor & 12.87 $\pm$ 2.15 & 10,940 $\pm$ 1,220 & \$0.0128 $\pm$ 0.003 & 0.86 $\pm$ 0.05 & 97.5\% \\
 \textbf{Hybrid Staged (Proposed)} & \textbf{8.70} $\pm$ \textbf{1.42} & \textbf{5,320} $\pm$ \textbf{710} & \textbf{\$0.0087} $\pm$ \textbf{0.002} & \textbf{0.88} $\pm$ \textbf{0.03} & \textbf{100.0\%} \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table*}
 
 As detailed in Table \ref{tab:results}, the Sequential pipeline achieves the lowest absolute execution duration ($5.61 \pm 0.92$ seconds) and monetary cost (\$0.0054 $\pm$ 0.001) due to its minimal coordination overhead. However, the Sequential approach suffers from lower qualitative confidence (0.82) and is structurally incapable of exploiting parallel worker concurrency. When sub-tasks are interdependent, linear handoffs force upstream mistakes to cascade unchecked into downstream nodes. For instance, when an upstream Architect agent omitted a required database column, downstream Developer and Auditor agents were forced to proceed with corrupted inputs, resulting in lower qualitative confidence ($0.82 \pm 0.04$).
