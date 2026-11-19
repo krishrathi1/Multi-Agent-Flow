@@ -1,0 +1,170 @@
+
+--- PAGE 1 ---
+Research Paper Project Report — Template & Guidance  
+These instructions apply to all sections.  
+Write your project report as a research paper in LaTeX on Overleaf. Name the Overleaf project 
+by your section and group number (e.g., CS E1, ECOM), add your course faculty's BMU email 
+ID as an editor, add the Overleaf project link after the Index Terms section, and upload the 
+compiled PDF by 26 December 2026, 11:59 pm.  
+ 
+1. Format  
+Item  Requirement  
+Layout  Single column, A4, 1 -inch margins, Times 12 pt. Two -
+column papers will not be accepted  
+Tool  LaTeX on Overleaf only; Word files will not be accepted.  
+Text  Fully justified. Sections run on continuously; do not start 
+any section on a new page  
+Length  4,500 –5,500 words, excluding references  
+Figures and tables  Figures must be clear and readable. No screenshots  
+References  15–25, IEEE style, kept in a .bib file in the Overleaf project  
+Similarity and AI content  Similarity at most 10% and AI -generated content at most 
+10% (excluding references)  
+Code  Git repository link in the paper  
+Last date  18 November 2026, 11:59 pm  
+ 
+Start from this preamble. LaTeX justifies text by default; do not add \raggedright , and never 
+put \newpage  or \clearpage  before a \section . 
+\documentclass[12pt,onecolumn,draftclsnofoot]{IEEEtran}  
+\usepackage[a4paper,margin=1in]{geometry}  
+\usepackage{times,graphicx,amsmath,booktabs,cite,url}  
+\usepackage[ruled,linesnumbered]{algorithm2e}  
+\begin{document}  
+\title{Your Paper Title}  
+\author{Group XX: Name1 (Roll No.), Name2 (Roll No.), Name3 (Roll No.), Naveen 
+Singh/Kiran Khatter \\ 
+School of Engineering \& Technology, BML Munjal University}  
+\maketitle  
+\begin{abstract} ... \end{abstract}  
+\begin{IEEEkeywords} ... \end{IEEEkeywords}  
+\noindent \textbf{Overleaf Project Link:} \url{https://www.overleaf.com/project/...}  
+\section{Introduction} ...  
+\bibliographystyle{IEEEtran}  
+--- PAGE 2 ---
+\bibliography{references}  
+\end{document}  
+2. Paper structure  
+Use these headings and stay within ±10% of each word count.  
+Section  Words  What to write  
+Title  ≤ 15  Method + problem + context, not just the topic 
+area  
+Abstract  200–250 Problem, gap, method, evaluation, main result 
+with a number, significance  
+Index Terms  4–6 terms  Specific keywords, alphabetical  
+I. Introduction  600–800 Lead the reader from the broad area to your 
+specific work in four to five paragraphs.  
+1. Context:  introduce the domain and why it 
+matters now, with 2 –3 citations.  
+2. Problem:  describe the specific difficulty that 
+users, developers or researchers face.  
+3. Gap:  explain what existing approaches fail to 
+solve, with citations.  
+4. Research questions:  state 1 –2 clearly, for 
+example “RQ1: Does [your method] improve 
+[metric] compared with [existing 
+approach]?”  
+5. Contributions:  list 3 –4 concrete 
+contributions as bullet points, each one 
+something the paper actually shows.  
+6. Organisation:  end with one sentence on 
+how the rest of the paper is organised.  
+The Introduction only motivates the work. 
+Detailed literature goes in Related Work, and 
+technical details go in Methodology.  
+II. Related Work  700–900 10–15 papers grouped by theme, critically 
+compared; a comparison table of 6 –10 key 
+papers on problem, method, dataset, metrics, 
+key results, limitations and relevance to your 
+work; your research gap  
+III. Background / Problem 
+Formulation  300–500 Give the reader the foundation needed to 
+understand your method. Explain the key 
+concepts, techniques or models your work builds 
+on, briefly and only what is needed. Define the 
+terms and notation used in the rest of the paper 
+--- PAGE 3 ---
+Section  Words  What to write  
+(add a notation table if you use many symbols). 
+Then state your problem formally: what the 
+input is, what the output should be, the 
+assumptions you make, the constraints, and 
+what is out of scope.  
+IV. Proposed Methodology  900–1,200  Explain your approach so that someone else 
+could rebuild it. Include: an architecture figure 
+showing the main components of your system or 
+model and how they connect; a workflow figure 
+showing the step -by-step flow from input to 
+output; an algorithm in pse udocode with input, 
+output and numbered steps; numbered 
+equations with every symbol defined; and the 
+reason for each design choice (why this method, 
+model or parameter over alternatives).  
+V. Experimental Setup  400–600 Describe how you tested your work so the 
+results can be reproduced. State the dataset or 
+test environment (source, size, how it was 
+prepared or split), tools and versions used 
+(language, libraries, frameworks, hardware or 
+platform), the baselines you compa re against 
+(existing methods or tools), and the evaluation 
+metrics with a one -line reason for each. Give a 
+parameter table listing every setting used, such 
+as hyperparameters, configurations, number of 
+runs and random seeds  
+VI. Results and Analysis  800–1,000  Present results in the order of your research 
+questions. Include a results table comparing 
+your method with the baselines on every metric 
+(best values in bold), and result figures such as 
+comparison graphs, trends with a varying 
+parameter, or error analysi s. Repeat 
+experiments at least 3 times and report mean ± 
+standard deviation. Include at least one ablation 
+study (remove or change one component and 
+show its effect). For every table and figure, say 
+what it shows, compare with the baseline, and 
+explain why  the result occurs.  
+VII. Discussion  300–500 Interpret your results; do not repeat them. 
+Explain what the results mean in practice and 
+why your method performed better or worse in 
+specific cases. State the limitations of your work 
+honestly, such as small dataset, simulation 
+instead of real conditions , limited scale, or cost. 
+--- PAGE 4 ---
+Section  Words  What to write  
+Discuss threats to validity: anything that could 
+make your results misleading, such as bias in test 
+data, possible implementation errors, or 
+whether results would hold on  other data or 
+settings. Mention ethical considerations, if any.  
+VIII. Conclusion and Future 
+Work  200–300 Answer each research question in one sentence, 
+restate the main result with its number, and give 
+2–3 specific future directions.  
+References  15–25 entries  IEEE style, every entry cited in the text and 
+verified  
+3. Figures and tables  
+• Figure caption goes below  the figure; table caption goes above  the table.  
+• Number figures as Fig. 1, Fig. 2 … and tables as Table I, Table II …, in order of first 
+mention.  
+• Every figure and table must be referred to by number and explained in 2 –3 sentences, 
+for example: "Fig. 3 illustrates …", "It can be observed from Table II that …", "As shown 
+in Fig. 4, …". Never write "the figure below".  
+• No screenshots of code, terminals, tools or web pages. Redraw diagrams (draw.io, 
+TikZ) and plot graphs from your data.  
+• Plots in vector format or at least 300 dpi, with labelled axes, units and legends.  
+4. Integrity  
+• Similarity at most 10% and AI -generated content at most 10%; attach both reports 
+with the final submission.  
+• Every reference must be real and read by you; a fabricated reference is academic 
+misconduct.  
+• Add an AI -use declaration and a one -line contribution statement per team member 
+before the references.  
+5. Final checklist  
+• Written in LaTeX on Overleaf; Name the Overleaf project by your section and group 
+number (e.g., CSE1, ECOM) . Kiran Khatter/Naveen Singh added as editors; project link 
+and compiled PDF submitted by 26 November 2026, 11:59 pm  
+• Single column, justified text, no section starting on a new page  
+• All sections present, within word counts  
+• All figures are readable, captions correctly placed, each explained in the text  
+• No screenshots  
+• 15–25 verified IEEE references, all cited  
+• Similarity and AI content each at most 10%, reports attached  
+• Git repository link, AI -use declaration and contribution statement included  
