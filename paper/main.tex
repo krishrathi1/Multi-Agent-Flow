@@ -5,423 +5,283 @@
 
 \begin{document}
 
-\title{Hybrid Multi-Agent Orchestration with Blackboard Memory, Model Context Protocol, and A2A Interoperability}
+\title{Shared-State Coordination for a Multi-Agent Workflow Platform: Design and Repository Study}
 
-\author{Group CSE: Krish (230607), Honey (230606), Dishita (230602), Naveen Singh\\
+\author{CSE3, Group 7: Krish (230607), Honey (230606), Dishita (230602), Naveen Singh\\
 School of Engineering \& Technology, BML Munjal University}
 
 \maketitle
 
 \begin{abstract}
-Multi-Agent Systems (MAS) powered by Large Language Models (LLMs) present a transformative paradigm for decomposing complex software engineering, analytical reasoning, and autonomous code synthesis workflows into specialized, collaborative sub-tasks. However, prevailing multi-agent architectures suffer from critical operational bottlenecks, including peer-to-peer race conditions, rapid context window saturation, fragile ad-hoc tool execution, and vendor lock-in within monolithic frameworks. In this paper, we propose \textit{Multi-Agent-Flow}, an enterprise-grade hybrid multi-agent orchestration architecture that synergizes a centralized PostgreSQL and file-backed Blackboard shared state, standardized Model Context Protocol (MCP) tool integration, and a vendor-neutral Agent-to-Agent (A2A/v1) delegation protocol. Our framework bridges high-level role-playing supervisor agents built on CrewAI with sandboxed execution worker nodes built on the Google Agent Development Kit (ADK). We implement comprehensive runtime security guardrails featuring SafeFetch SSRF filtering, prompt injection defense, toxic language redaction, and strict Pydantic v2 structured output validation with automated retry reflection loops. We evaluate our system through an empirical benchmark comprising 40 end-to-end production runs across four agentic design patterns (ReAct, Sequential, Hierarchical, and Hybrid) and four diverse behavioral personas (Analytical Auditor, Fast Pragmatist, Inquisitive Explorer, and Detail Specialist) deployed on production cloud infrastructure with distributed zero-trust network tunnels. Quantitative results demonstrate that our Blackboard architecture eliminates file write collisions (0\% race conditions) while constraining context consumption to approximately 7,000 characters, compared to context explosion exceeding 28,000 tokens under peer-to-peer messaging. Furthermore, the hybrid orchestration achieves a 100\% schema compliance rate, 0.88 average confidence score, and successfully flags 100\% of adversarial injection attacks with minimal latency overhead ($8.70 \pm 1.42$ seconds total execution time across heterogeneous cloud environments). This work provides a rigorous architectural foundation and empirical baseline for resilient, observable, and interoperable multi-agent systems in enterprise software engineering.
+Multi-agent workflow platforms coordinate autonomous agents, tools, people, and persistent state, yet their reliability depends on more than the language model: task handoffs, permissions, memory, and output validation must also be made visible and controllable. This paper presents a repository-based design study of Multi-Agent-Flow, a web platform whose current codebase is branded MyceliumOps/Nexus AI. We examine its TypeScript and React application, Express services, PostgreSQL persistence through Prisma, OpenClaw gateway integration, process orchestration, shared Blackboard service, Model Context Protocol (MCP) integration, and structured run-output models. The study describes how the Blackboard represents decisions, contracts, artifacts, questions, and issues; how a bounded view is prepared for an agent; and how typed stage and final-output schemas make run state machine-readable. We also inspect the repository's Python guardrail and CrewAI/ADK bridge modules, distinguishing implemented code from claims of live production use. The available benchmark CSV contains 40 rows, but its generator samples preset distributions with a fixed random seed rather than collecting system executions. We therefore treat it as synthetic test data and do not report its values as measured system performance. Repository inspection supports concrete claims about architecture and configured limits, but it does not establish comparative accuracy, latency, safety effectiveness, or scale. The paper contributes a system map, a source-grounded workflow description, an audit of the evidence currently available, and a reproducible evaluation plan for future live trials.
 \end{abstract}
 
 \begin{IEEEkeywords}
 Agentic design patterns, blackboard architecture, interoperability protocol, Model Context Protocol, multi-agent systems, security guardrails.
 \end{IEEEkeywords}
 
-\noindent\textbf{Overleaf Project Link:} \url{https://www.overleaf.com/project/cse_group_mas_project}
+\noindent\textbf{Overleaf Project Link:} Pending project creation; add the CSE3\_G7 project URL here.
 
 \section{Introduction}
 Autonomous agent systems driven by Large Language Models (LLMs) have rapidly evolved from isolated conversational chatbots into sophisticated collaborative Multi-Agent Systems (MAS) capable of executing multi-stage software engineering, analytical reasoning, and autonomous code synthesis workflows \cite{wang2024survey, xi2023rise, wooldridge2009introduction}. By partitioning a high-level computational objective into specialized functional personas---such as requirements architects, full-stack developers, security auditors, and quality assurance testers---multi-agent systems demonstrate substantial improvements in problem decomposition, reasoning depth, and task completion fidelity compared to monolithic zero-shot prompts \cite{hong2024metagpt, wu2023autogen}. Recent foundational frameworks, including AutoGen \cite{wu2023autogen}, MetaGPT \cite{hong2024metagpt}, CAMEL \cite{li2023camel}, and ChatDev \cite{qian2024communicative}, have demonstrated that simulated societies of artificial agents can co-author software artifacts through iterative natural language discourse.
 
-Despite these notable achievements, deploying autonomous multi-agent pipelines in rigorous production and enterprise software engineering environments reveals profound architectural limitations. First, prevailing frameworks overwhelmingly rely on unconstrained peer-to-peer (P2P) or broadcast conversational message passing \cite{li2023camel, wu2023autogen}. When multiple autonomous agents operate concurrently on interdependent code files, shared schemas, or database repositories, P2P communication inevitably generates write-after-write collisions, mutually conflicting design decisions, and exponential prompt context bloat. As each agent appends the entire multi-party chat transcript to its reasoning context, prompt windows quickly saturate token limits, driving computational costs exponentially higher and causing catastrophic forgetting of earlier instructions or specifications.
+These systems demonstrate several ways to structure agent work, but they do not remove the engineering choices faced by teams building a deployable platform: how to persist decisions, route work, control tool access, validate outputs, and expose run state to users. These concerns are coupled. A task can be correctly assigned yet fail if its worker cannot see a prior decision; a tool can return useful data yet introduce risk if the application trusts arbitrary URLs; and a completed run can be difficult to review if its output is only free-form text. We treat these as design questions rather than assume that any one coordination pattern inevitably causes races or context growth.
 
-Second, existing multi-agent platforms suffer from severe framework lock-in and tool fragmentation. Agents developed within a specific framework (such as CrewAI's high-level role-playing abstractions \cite{crewai2024framework}) cannot natively delegate sub-tasks to agents running in other specialized execution environments (such as the Google Agent Development Kit (ADK) \cite{google2024adk}). Furthermore, external tool integration is frequently implemented via bespoke, ad-hoc wrapper functions that lack uniform discovery, standardized schema negotiation, and strict sandboxing. In production deployments, granting autonomous agents access to external web scraping, database queries, and code execution environments without standardized protocols exposes enterprise backends to critical security vulnerabilities, including Server-Side Request Forgery (SSRF), prompt injection, and unauthorized data exfiltration \cite{greshake2023not, perez2023ignore}.
+The repository offers a useful case for examining these concerns because it combines an interactive fleet-management product with orchestration and agent-integration modules. The code documents OpenClaw gateway communication as the principal external runtime path; it also includes MCP services and separate Python modules for CrewAI, ADK-style execution, and A2A-style envelopes. The latter are analyzed as repository components, not presumed to be a deployed cross-framework service. Security is likewise considered at the level supported by source: URL validation and prompt-pattern checks are present, but their existence alone does not establish resistance to adversarial attacks.
 
-To overcome these fundamental challenges, multi-agent engineering requires a principled architecture that reconciles high-level cognitive planning with sandboxed deterministic tool execution, while providing a synchronized shared memory space and enterprise-grade security guardrails. In this paper, we address these research challenges by formulating and investigating two primary research questions:
+This distinction matters for both developers and users. A dashboard may show an agent as active while its remote gateway is unavailable; an output model may accept a field while the underlying statement remains unsupported; and a stored decision may be present but omitted from the context selected for a later stage. A paper about an agent platform should therefore describe visible mechanisms and the conditions under which they operate, while reserving claims about quality and safety for instrumented trials. We use this separation throughout the study: repository analysis answers what the source is designed to do, and an explicitly bounded evaluation plan identifies what remains to be measured.
+
+This study asks two bounded questions about the implementation and the strength of its available evidence:
 \begin{itemize}
-    \item \textbf{RQ1:} How does a dual-layer Blackboard shared state architecture compare to peer-to-peer conversational messaging in terms of concurrency conflict resolution, prompt context consumption, and execution efficiency across multi-agent workflows?
-    \item \textbf{RQ2:} To what extent does cross-framework interoperability via the A2A protocol and Model Context Protocol (MCP) tool standardization improve schema adherence, execution reliability, and security resilience in hybrid multi-agent pipelines?
+    \item \textbf{RQ1:} How does the platform represent and expose shared workflow state, and what coordination guarantees can be established from its implementation?
+    \item \textbf{RQ2:} Which reliability and security claims about orchestration, tools, and agent interoperability are supported by the repository, and what further evaluation is needed?
 \end{itemize}
 
-To answer these questions, we design, implement, and empirically evaluate \textit{Multi-Agent-Flow}, an enterprise-grade hybrid multi-agent orchestration architecture. The core contributions of this work are fourfold:
+To answer these questions, we conduct a source-level case study of \textit{Multi-Agent-Flow}. The contributions are:
 \begin{enumerate}
-    \item \textbf{Hybrid Multi-Agent Orchestration Architecture:} We design an interoperable orchestration pipeline that bridges high-level CrewAI supervisor agents with specialized Google ADK execution worker nodes using a vendor-neutral Agent-to-Agent (A2A/v1) envelope delegation protocol.
-    \item \textbf{Dual-Layer Blackboard Shared State:} We implement a synchronized shared memory architecture comprising PostgreSQL relational tables with atomic row-level locks and file-backed append-only JSONL event logs, eliminating concurrency collisions and preventing prompt context explosion.
-    \item \textbf{Standardized MCP Tool Integration with ML Telemetry:} We deploy a dual-server Model Context Protocol (MCP) cluster providing sandboxed research tools and analytics tools, embedding Holt's Double Exponential Smoothing machine learning forecasting directly into agent decision loops.
-    \item \textbf{Production Guardrails and Empirical Benchmark Dataset:} We introduce an end-to-end security engine incorporating SafeFetch SSRF defense, prompt injection filtering, and Pydantic v2 structured validation with automated retry loops, backed by a comprehensive 40-run empirical benchmark dataset across four agentic design patterns and four behavioral personas.
+    \item We map the current web platform and agent orchestration layers from repository code and document their boundaries.
+    \item We analyze the Blackboard data model and bounded prompt projection, including design properties and untested concurrency assumptions.
+    \item We distinguish implemented interfaces and validation mechanisms from demonstrated production outcomes.
+    \item We audit the benchmark artifact and specify a live evaluation protocol that would support valid comparative claims.
 \end{enumerate}
 
-The remainder of this paper is structured as follows. Section II reviews related literature and contrasts our system against state-of-the-art frameworks. Section III formalizes the multi-agent orchestration problem and operational constraints. Section IV details the proposed methodology, architecture, and security algorithms. Section V outlines the experimental testbed, personas, and evaluation metrics. Section VI presents empirical results and ablation studies. Section VII provides discussion, practical implications, and threats to validity. Section VIII concludes the paper and outlines future directions.
+The remainder of this paper reviews related work, defines the coordination problem, describes the implementation, explains the repository-review method, reports source-grounded findings, and closes with limitations and a plan for live evaluation.
 
 \section{Related Work}
-The design of autonomous multi-agent software engineering systems intersects several active domains of artificial intelligence and distributed systems: multi-agent software development, memory architectures, standardized tool invocation, and safety guardrails.
+LLM-based multi-agent systems combine language-model reasoning with explicit roles, task boundaries, tools, and communication. Prior work studies both general agent interaction and software-development workflows. AutoGen describes conversable agents and flexible human or tool participation \cite{wu2023autogen}. CAMEL studies role-conditioned agent communication \cite{li2023camel}. MetaGPT structures collaboration around software-engineering artifacts and standard operating procedures \cite{hong2024metagpt}; ChatDev models development as a sequence of communicative phases \cite{qian2024communicative}. These works motivate separating responsibilities and making handoffs explicit. Their reported benchmark results concern their own systems and tasks; they should not be transferred to the platform studied here.
 
-\subsection{Multi-Agent Systems in Software Engineering}
-The application of LLM-based multi-agent systems to software engineering has expanded dramatically following the introduction of communicative agent societies \cite{wang2024survey, xi2023rise}. AutoGen \cite{wu2023autogen} demonstrated that conversational agent teams could collaboratively debug code and solve arithmetic problems through flexible multi-agent conversation. MetaGPT \cite{hong2024metagpt} introduced Standardized Operating Procedures (SOPs) into agent workflows, assigning agents dedicated roles such as Product Manager, Architect, and Engineer, and requiring them to produce structured software artifacts (e.g., PRDs, system architectures, and class diagrams). Similarly, ChatDev \cite{qian2024communicative} modeled software development as a sequential multi-phase chat chain consisting of designing, coding, testing, and documenting.
+A second theme is how agents retain and share information. The blackboard model treats a shared workspace as a place where specialized knowledge sources publish partial results for others to use \cite{nii1986blackboard}. Modern agent systems also use conversation histories, summaries, retrieval, or structured memory. These mechanisms trade off visibility, freshness, and context size. A durable shared store can make decisions and open issues inspectable, while a prompt projection can constrain what enters a model call. Neither property guarantees conflict-free writes or correct retrieval; those require transaction and concurrency tests. The repository's Blackboard is therefore examined as an implementation choice whose intended properties must be distinguished from measured outcomes.
 
-While MetaGPT and ChatDev reduce conversational ambiguity by introducing intermediate artifacts, both frameworks enforce homogeneous, monolithic agent runtimes. They do not support cross-framework agent delegation, nor do they separate high-level strategic reasoning from sandboxed, tool-centric terminal environments. When developers need to leverage the natural language role-playing strengths of CrewAI alongside the low-level, sandboxed execution capabilities of Google ADK, existing monolithic architectures provide no standardized interoperability mechanism. Our framework bridges this division by uniting CrewAI's cognitive role-playing with Google ADK's sandboxed tool execution through an open protocol.
+Reflexion uses textual feedback to update an agent's memory across attempts, illustrating that memory can be treated as part of an iterative control process rather than merely a longer transcript \cite{shinn2023reflexion}. A shared workflow board differs in purpose: it records task artifacts and coordination state that may be consumed by multiple agents and application services. That difference raises practical questions about authorship, resolution, stale entries, and which entries should be included in a prompt. A board needs a policy for retaining durable decisions while not allowing old artifacts to dominate current work. The repository's addressed-item ordering and capped projection expose such a policy in code, but a source review cannot determine whether its selected context is sufficient for real tasks.
 
-\subsection{Memory and Messaging Architectures in MAS}
-Classical distributed AI established the Blackboard architecture \cite{nii1986blackboard} as a centralized computational framework where independent knowledge sources collaboratively read and write partial problem solutions until a global goal is satisfied. In modern LLM systems, however, direct peer-to-peer (P2P) message passing remains the dominant standard \cite{wu2023autogen, li2023camel, qian2024communicative}. In unconstrained P2P networks, every agent sends intermediate thoughts and outputs directly to other agents or to a shared chat history.
+Tool use creates a related boundary problem. ReAct interleaves reasoning and actions, making external observations part of an agent's next decision \cite{yao2023react}. Toolformer studies how models learn to invoke APIs \cite{schick2023toolformer}; Gorilla focuses on selecting and calling APIs \cite{patil2023gorilla}. The Model Context Protocol defines a common client-server interface for exposing tools and contextual resources \cite{mcp2026spec}. A shared protocol can reduce custom integration work, but it does not itself guarantee authorization, safe arguments, or trustworthy tool output. The platform's MCP code is considered as an integration surface, not as evidence of a measured improvement over bespoke calls.
 
-Recent empirical investigations demonstrate that P2P conversational topologies suffer from severe scalability bottlenecks \cite{hong2024metagpt}. First, as the number of agents $N$ and execution steps $T$ increase, message complexity grows as $\mathcal{O}(N^2 \cdot T)$, rapidly saturating the LLM's finite prompt window. Second, without a centralized arbiter or schema-enforced shared state, concurrent agents frequently execute conflicting file writes or overwrite each other's deliverables. While Reflexion \cite{shinn2023reflexion} demonstrated that episodic verbal memory enhances task self-correction, it operates within single-agent trajectories rather than coordinating cross-agent state synchronization. Our work revives and modernizes the Blackboard model for generative MAS, demonstrating that a dual-layer relational and file-backed shared state completely resolves concurrency conflicts and enforces strict context boundaries.
+Security studies show that natural-language instructions and retrieved content can create attack paths in LLM-integrated applications. Indirect prompt injection has been demonstrated against systems that combine models with external content and actions \cite{greshake2023not}; HackAPrompt examines prompt hacking across a global competition and illustrates why simple instruction-following assumptions are unsafe \cite{yu2023hackaprompt}. Llama Guard represents a different approach, using a learned classifier and an explicit risk taxonomy to classify prompts and responses \cite{inan2023llama}. Pattern matching can block known strings but cannot substitute for permission checks, isolation, and adversarial evaluation. Structured schemas constrain output shape, while application-level checks must still validate meaning and authorization.
 
-\subsection{Tool Integration and Model Context Protocol}
-Augmenting language models with external computational tools is essential for executing deterministic arithmetic, executing shell commands, retrieving dynamic web knowledge, and querying relational databases \cite{schick2023toolformer, patil2023gorilla, yao2023react}. Early approaches relied on bespoke function-calling APIs tailored to individual proprietary LLMs. Gorilla \cite{patil2023gorilla} demonstrated that fine-tuning models on comprehensive API documentation enables accurate tool invocation across diverse software ecosystems.
-
-Recognizing the fragmentation inherent in proprietary tool interfaces, Anthropic proposed the Model Context Protocol (MCP) \cite{anthropic2024mcp} as an open standard for connecting AI systems to external data sources and tools via JSON-RPC 2.0 transports. While MCP has gained rapid adoption in single-user IDE copilots, its formal integration into distributed multi-agent systems remains unstandardized. Our architecture implements a dual-server MCP cluster (\textit{research} and \textit{analytics}) that exposes standardized tool interfaces to heterogeneous agents, while embedding machine learning forecasting algorithms directly into the tool registry.
-
-\subsection{Safety, Guardrails, and Observability}
-Granting autonomous agents file system and network execution capabilities introduces critical security vulnerabilities, including indirect prompt injection, data exfiltration, and unauthorized remote code execution \cite{greshake2023not, perez2023ignore}. Inan et al. \cite{inan2023llama} proposed Llama Guard, evaluating safety risks across predefined human-AI conversation taxonomies. However, safety in multi-agent pipelines requires structural defenses beyond conversational safety, including blocking Server-Side Request Forgery (SSRF) during automated web scraping, enforcing schema typing on tool return payloads, and isolating workspace directories per production run.
-
-Furthermore, debugging distributed agentic workflows requires comprehensive observability. Microservice architectures rely on the W3C Trace Context standard \cite{w3c2021tracecontext} to propagate trace identifiers across service boundaries. While contemporary LLM monitoring tools log raw API calls, they rarely capture the full causal provenance of multi-agent reasoning chains---linking user prompts, supervisor task allocations, A2A envelope delegations, and MCP tool execution latencies into a unified, auditable waterfall trace. Our system explicitly incorporates W3C-compliant distributed tracing and persistent tool provenance logging.
-
-\begin{table*}[t]
-\centering
-\caption{Comparative Analysis of Multi-Agent Architectures and Engineering Capabilities}
-\label{tab:comparison}
-\footnotesize
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{@{}llllllll@{}}
-\toprule
-\textbf{Framework} & \textbf{Memory Model} & \textbf{Concurrency} & \textbf{Tool Standard} & \textbf{Interoperability} & \textbf{Guardrails} & \textbf{Observability} & \textbf{Pydantic Validation} \\
-\midrule
-AutoGen \cite{wu2023autogen} & P2P Chat History & Race Hazards & Custom Python & Homogeneous & Basic Filter & Partial Logs & Ad-hoc JSON \\
-MetaGPT \cite{hong2024metagpt} & Pub/Sub SOP & Message Queue & Custom Python & Homogeneous & None & File Logs & Regex Parsing \\
-ChatDev \cite{qian2024communicative} & Sequential Chat & Turn-based & Bespoke Wrappers & Monolithic & None & Chat Logs & Text Parsing \\
-CrewAI \cite{crewai2024framework} & Episodic / RAG & Lock-free & LangChain Tools & Monolithic & Basic Callbacks & Third-party & Optional Pydantic \\
-LangGraph & StateGraph & Graph State & ToolNode & Single Engine & Custom Check & OpenTelemetry & Custom Schemas \\
-\textbf{Multi-Agent-Flow} & \textbf{Blackboard (Dual)} & \textbf{Row Locks (0\%)} & \textbf{MCP Protocol} & \textbf{A2A (CrewAI+ADK)} & \textbf{SSRF + Guard} & \textbf{W3C Tracing} & \textbf{Pydantic v2 + Loop} \\
-\bottomrule
-\end{tabular}%
-}
-\end{table*}
-
-\subsection{Research Gap and Synthesis}
-Table \ref{tab:comparison} provides a comprehensive comparison of Multi-Agent-Flow against existing multi-agent software engineering frameworks. Existing frameworks typically force a trade-off: either they provide rich conversational role-playing (CrewAI, AutoGen) but suffer from race hazards and context explosion, or they enforce rigid sequential chains (ChatDev, MetaGPT) that lack cross-framework tool interoperability and enterprise security controls. Multi-Agent-Flow addresses this gap by simultaneously delivering a conflict-free Blackboard shared memory, standardized MCP tool integration, open A2A delegation between CrewAI and Google ADK, and rigorous runtime security guardrails.
-
-\section{Background and Problem Formulation}
-To establish a rigorous mathematical foundation for multi-agent orchestration, we formalize the software synthesis and analytical execution workflow as a stateful, discrete-time multi-agent planning problem.
-
-\subsection{Formal System Model}
-Let a Multi-Agent System be defined by the 5-tuple:
-\begin{equation}
-\mathcal{M} = \langle \mathcal{A}, \mathcal{S}, \mathcal{T}, \mathcal{B}, \mathcal{G} \rangle
-\end{equation}
-where:
-\begin{itemize}
-    \item $\mathcal{A} = \{a_{\text{sup}}, a_{\text{w},1}, a_{\text{w},2}, \dots, a_{\text{w},K}\}$ is the set of heterogeneous agents consisting of a high-level cognitive supervisor agent $a_{\text{sup}}$ and $K$ specialized execution worker agents $a_{\text{w},k}$.
-    \item $\mathcal{S}$ represents the global state space of the multi-agent system at discrete execution step $t \in \{0, 1, \dots, T\}$.
-    \item $\mathcal{T} = \{t_{\text{calc}}, t_{\text{db}}, t_{\text{fc}}, t_{\text{crawl}}, t_{\text{parse}}\}$ denotes the set of deterministic external tools exposed via the Model Context Protocol.
-    \item $\mathcal{B}$ denotes the centralized Blackboard shared memory structure, partitioned into structured relational tables $\mathcal{B}_{\text{rel}}$ and append-only event logs $\mathcal{B}_{\text{log}}$.
-    \item $\mathcal{G}$ represents the runtime security guardrail engine enforcing validation constraints $\mathcal{G}: \mathcal{X} \to \{0, 1\}$.
-\end{itemize}
-
-\subsection{State Transition and Execution Objective}
-Given a natural language user task specification $x_0$ and a behavioral persona $p \in \mathcal{P}$, the supervisor agent $a_{\text{sup}}$ inspects the current blackboard state $\mathcal{S}_t$ and decomposes the global objective into an ordered sequence of sub-tasks:
-\begin{equation}
-\mathcal{W} = \{w_1, w_2, \dots, w_M\} = a_{\text{sup}}(\mathcal{S}_t, x_0, p)
-\end{equation}
-Each sub-task $w_j$ is packaged into an A2A envelope $\mathcal{E}_j = \langle \text{id}_j, a_{\text{target}}, \text{payload}_j, \mu_j \rangle$ and dispatched to worker agent $a_{\text{target}} \in \mathcal{A}$. The worker agent executes the task, optionally invoking an MCP tool $t_m \in \mathcal{T}$ with parameter vector $\theta$:
-\begin{equation}
-y_j = t_m(\theta), \quad \text{subject to } \mathcal{G}_{\text{SSRF}}(\theta) = 1
-\end{equation}
-The worker generates an intermediate artifact $\tau_j$, which is validated against the Pydantic schema $\Sigma_{\text{Pydantic}}$ before being committed to the Blackboard:
-\begin{equation}
-\mathcal{S}_{t+1} = \delta(\mathcal{S}_t, a_{\text{target}}, \tau_j)
-\end{equation}
-where $\delta$ denotes the atomic blackboard state mutation operator. The global optimization objective of the multi-agent orchestration pipeline is to maximize output confidence and schema adherence while minimizing latency and monetary cost:
-\begin{equation}
-\max_{\pi \in \Pi} \mathbb{E} \left[ \alpha \cdot \text{Conf}(\mathcal{S}_T) + \beta \cdot \text{Schema}(\mathcal{S}_T) - \gamma \cdot \text{Cost}(\mathcal{S}_T) - \lambda \cdot \text{Latency}(\mathcal{S}_T) \right]
-\end{equation}
-where $\alpha, \beta, \gamma, \lambda > 0$ are operational weighting coefficients determined by enterprise Service Level Objectives (SLOs).
-
-\subsection{Operational Constraints and Boundaries}
-Our system operates under four strict operational constraints: (i) all file modifications and intermediate deliverables must be committed exclusively to the shared Blackboard workspace with atomic row-level locks; (ii) all tool invocations must adhere to JSON-RPC 2.0 schemas over MCP transports; (iii) all worker delegations must conform to the A2A/v1 envelope specification; and (iv) final outputs must validate against predefined Pydantic v2 schemas within at most two reflection cycles. Distributed Byzantine fault tolerance across untrusted decentralized networks is considered outside the scope of this work.
-
-\section{Proposed Methodology}
-The architecture of \textit{Multi-Agent-Flow} is engineered to decouple high-level cognitive task decomposition from low-level sandboxed execution, while providing a synchronized memory spine and layered security defenses. Fig. \ref{fig:architecture} presents the complete structural blueprint of our multi-agent orchestration architecture.
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.95\linewidth]{fig_architecture.png}
-\caption{System architecture of Multi-Agent-Flow, illustrating the integration between the Vercel UI frontend, FastAPI orchestration gateway, CrewAI supervisor, A2A/v1 delegation bridge, Google ADK sandboxed workers, MCP tool clusters, dual-layer Blackboard, and observability tracing.}
-\label{fig:architecture}
-\end{figure*}
-
-\subsection{Dual-Layer Blackboard Shared State Architecture}
-To eliminate the race conditions and token bloat inherent in peer-to-peer messaging, Multi-Agent-Flow implements a dual-layer Blackboard architecture consisting of a relational metadata layer and an append-only file log layer:
-\begin{enumerate}
-    \item \textbf{Relational Metadata Layer ($\mathcal{B}_{\text{rel}}$):} Implemented via PostgreSQL tables, including \texttt{runs}, \texttt{intermediate\_artifacts}, \texttt{tool\_provenance}, and \texttt{security\_events}. The \texttt{runs} table maintains global execution status, trace correlation identifiers, latency benchmarks, and aggregated token expenditures. The \texttt{intermediate\_artifacts} table maintains immutable records of intermediate sub-task outputs, keyed by run ID, wave sequence, and emitting worker agent. When an agent attempts to commit an intermediate deliverable or claim a task wave, the transaction acquires a strict row-level lock (\texttt{SELECT ... FOR UPDATE}), ensuring full serializability of concurrent state updates across parallel worker threads. In local development or disconnected edge environments, the database interface transparently degrades to an ACID-compliant SQLite instance with immediate transaction locking. When an agent transaction fails mid-execution (for example, due to an external network drop or process crash), the Blackboard rollback protocol immediately restores the workspace state to the last verified snapshot $\mathcal{S}_t$, preventing partial artifact corruption. For disconnected local edge testing or offline CI/CD pipelines, our database abstraction layer automatically falls back to an embedded SQLite datastore with WAL (Write-Ahead Logging) mode enabled, preserving transactional guarantees without requiring an active PostgreSQL daemon.
-    \item \textbf{File-Backed Event Log Layer ($\mathcal{B}_{\text{log}}$):} An append-only JSONL event stream and isolated workspace directory persisted per run ID. Every state mutation records a cryptographic timestamp, emitting agent identifier, target file path, and artifact SHA-256 hash.
-\end{enumerate}
-
-Rather than injecting the full multi-turn conversation transcript into every agent prompt, the Blackboard generates role-specific context projections. When worker agent $a_{\text{w},k}$ is dispatched, the supervisor compiles a bounded snapshot:
-\begin{equation}
-\mathcal{C}(a_{\text{w},k}) = \text{Project}(\mathcal{B}, \text{role}_k, \text{scope}_k)
-\end{equation}
-This role-specific projection guarantees that worker agents receive only the necessary schema definitions and upstream outputs, strictly bounding prompt context to approximately 7,000 characters and eliminating prompt saturation. Concurrency safety is maintained by strictly disallowing direct peer-to-peer file writes: agents read exclusively from their role snapshot and write exclusively to the Blackboard staging area.
-
-\subsection{Cross-Framework A2A Delegation Protocol}
-To achieve interoperability between heterogeneous agent runtimes, we formulate the Agent-to-Agent (A2A/v1) delegation protocol. The supervisor agent, instantiated within the CrewAI framework, specializes in natural language persona reasoning, task wave scheduling, and synthesis. However, direct execution of deterministic shell commands, local script interpretation, and file generation is delegated to sandboxed worker nodes instantiated using the Google Agent Development Kit (ADK).
-
-The A2A protocol standardizes inter-agent messaging via a structured JSON-RPC 2.0 envelope:
-\begin{equation}
-\mathcal{E} = \left\{ \text{protocol}: \text{"A2A/v1"}, \text{trace\_id}: \tau, \text{sender}: a_{\text{sup}}, \text{recipient}: a_{\text{w},k}, \text{payload}: \mathcal{D}_k \right\}
-\end{equation}
-where $\mathcal{D}_k$ specifies the delegated sub-task, input parameters, memory references, and expected Pydantic response schema. The Google ADK worker processes the envelope in an isolated process sandbox, performs requested operations, and returns an A2A acknowledgment envelope containing structured status codes and output references. The A2A envelope protocol enforces strict execution timeouts (defaulting to 30 seconds per sub-task), ensuring that unhandled worker exceptions or hanging child processes do not stall the global orchestration pipeline.
-
-\subsection{Model Context Protocol (MCP) Tool Integration}
-External tool invocation is decoupled from agent prompt logic through a dual-server Model Context Protocol (MCP) cluster operating over standard input/output (stdio) transports:
-\begin{itemize}
-    \item \textbf{Research MCP Server:} Exposes tools for dynamic web scraping (\texttt{research\_crawl}), static document extraction (\texttt{research\_parser}), and file system inspection.
-    \item \textbf{Analytics MCP Server:} Exposes deterministic mathematical calculation (\texttt{analytics\_calculator}), structured database querying (\texttt{analytics\_db\_lookup}), and predictive forecasting (\texttt{analytics\_forecast}).
-\end{itemize}
-
-Each MCP server exposes a JSON-RPC 2.0 endpoint over standard input/output (stdio) pipelines. During agent initialization, the orchestration runtime conducts a capability discovery handshake via the \texttt{tools/list} method, caching available tool signatures, required parameters, and JSON Schema descriptions. When an agent requests a tool execution via \texttt{tools/call}, the MCP client validates argument types client-side before forwarding the payload, preventing unnecessary server process invocations for malformed requests.
-
-To provide agents with proactive computational estimates, the \texttt{analytics\_forecast} tool embeds Holt's Double Exponential Smoothing algorithm \cite{holt2004forecasting} directly into the analytics server. Given an historical execution metric sequence $\{y_1, y_2, \dots, y_t\}$, the tool computes the level $\ell_t$ and trend $b_t$:
-\begin{align}
-\ell_t &= \alpha y_t + (1 - \alpha)(\ell_{t-1} + b_{t-1}) \\
-b_t &= \beta (\ell_t - \ell_{t-1}) + (1 - \beta) b_{t-1}
-\end{align}
-where $\alpha = 0.8$ and $\beta = 0.2$ are smoothing parameters. The $h$-step ahead predicted metric is given by:
-\begin{equation}
-\hat{y}_{t+h} = \ell_t + h b_t
-\end{equation}
-Initial values are estimated via linear regression across the first $k$ observation points ($\ell_0 = y_1, b_0 = y_2 - y_1$). By invoking this tool, supervisor agents can accurately estimate future token consumption and run duration prior to dispatching expensive parallel execution waves, enabling dynamic load shedding when execution budgets are constrained.
-
-\subsection{Security Guardrails and Structured Output Validation}
-Multi-Agent-Flow enforces multi-layered runtime security across all ingress, egress, and tool invocation boundaries:
-\begin{enumerate}
-    \item \textbf{SafeFetch SSRF Defense:} Autonomous agents attempting to fetch web resources via MCP tools must pass their target URLs through our SafeFetch validation engine. SafeFetch resolves hostnames to IPv4/IPv6 addresses and verifies that the destination does not fall within private, loopback, or link-local address spaces (blocking RFC 1918, RFC 5737, and RFC 3927 subnets, as well as AWS metadata endpoint \texttt{169.254.169.254}). SafeFetch also restricts target protocols strictly to HTTP and HTTPS, rejecting dangerous URL schemes such as \texttt{file://}, \texttt{gopher://}, or \texttt{dict://}.
-    \item \textbf{Prompt Injection and Toxic Content Redaction:} Ingress prompts are scanned against a compiled pattern matrix targeting jailbreak signatures (\texttt{"ignore previous instructions"}, \texttt{"system override"}), destructive shell commands (\texttt{"rm -rf"}, \texttt{"DROP TABLE"}), and toxic or abusive language. Adversarial payloads are sanitized or rejected before reaching agent LLMs.
-    \item \textbf{Pydantic v2 Structured Output Validation:} All agent responses are parsed into strictly typed Pydantic v2 models. If an LLM response contains invalid types, missing keys, or malformed JSON, our validation loop captures the ValidationError and feeds the error trace back to the agent in an automated reflection prompt, allowing up to two correction retries.
-\end{enumerate}
-
-Fig. \ref{fig:workflow} illustrates the step-by-step 6-phase execution lifecycle of our hybrid multi-agent workflow.
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.92\linewidth]{fig_workflow.png}
-\caption{End-to-end 6-phase operational workflow lifecycle of Multi-Agent-Flow, illustrating user ingress, security sanitization, CrewAI hierarchical planning, A2A delegation, MCP tool execution, and Pydantic validation.}
-\label{fig:workflow}
-\end{figure*}
-
-\subsection{Orchestration Algorithm and Observability}
-Algorithm \ref{alg:orchestration} outlines the end-to-end execution flow of Multi-Agent-Flow. To maintain complete auditability, every execution step generates a W3C-compliant Trace Context header (\texttt{traceparent}) containing a globally unique 128-bit trace ID and 64-bit span ID. This distributed trace propagates through the FastAPI gateway, CrewAI supervisor, A2A envelope, and MCP child processes, enabling persistent waterfall visualization and agent activity heatmaps.
-
-\begin{algorithm}[t]
-\caption{End-to-End Hybrid Multi-Agent Orchestration Algorithm}
-\label{alg:orchestration}
-\KwIn{User task prompt $x_0$, Behavioral persona $p \in \mathcal{P}$, Blackboard instance $\mathcal{B}$}
-\KwOut{Structured validated deliverable $\mathcal{Y} \in \Sigma_{\text{Pydantic}}$}
-
-$\tau \leftarrow \text{GenerateW3CTraceID}()$\;
-\If{$\mathcal{G}_{\text{Security}}(x_0) = \text{REJECT}$}{
-    \Return $\text{SecurityError}(\text{"Prompt injection or toxic content detected"})$\;
-}
-$x_{\text{clean}} \leftarrow \text{SanitizePrompt}(x_0)$\;
-$\mathcal{S}_0 \leftarrow \text{InitializeBlackboard}(\mathcal{B}, \tau, x_{\text{clean}}, p)$\;
-$\mathcal{W} \leftarrow \text{CrewAI\_Supervisor.PlanTaskWaves}(x_{\text{clean}}, p, \mathcal{S}_0)$\;
-\ForEach{$\text{wave } \omega \in \mathcal{W}$}{
-    \ForEach{$\text{sub-task } w_j \in \omega$ \textbf{in parallel}}{
-        $\mathcal{C}_j \leftarrow \text{ProjectBlackboardSnapshot}(\mathcal{B}, w_j.\text{role})$\;
-        $\mathcal{E}_j \leftarrow \text{FormatA2AEnvelope}(\tau, w_j, \mathcal{C}_j)$\;
-        $a_{\text{ADK}} \leftarrow \text{SpawnADKWorker}(w_j.\text{role})$\;
-        \While{$a_{\text{ADK}}.\text{RequiresTool}()$}{
-            $\langle t_m, \theta \rangle \leftarrow a_{\text{ADK}}.\text{GetToolRequest}()$\;
-            \If{$t_m = \text{research\_crawl} \land \neg \text{SafeFetch}(\theta.\text{url})$}{
-                $a_{\text{ADK}}.\text{InjectToolError}(\text{"SSRF blocked: private IP address"})$\;
-                \textbf{continue}\;
-            }
-            $y_m \leftarrow \text{ExecuteMCPTool}(t_m, \theta)$\;
-            $\text{LogToolProvenance}(\mathcal{B}, \tau, t_m, \theta, y_m)$\;
-            $a_{\text{ADK}}.\text{ReceiveToolResult}(y_m)$\;
-        }
-        $r_j \leftarrow a_{\text{ADK}}.\text{GenerateArtifact}()$\;
-        $\text{Blackboard.AtomicCommit}(\mathcal{B}, w_j.\text{id}, r_j)$\;
-    }
-}
-$y_{\text{raw}} \leftarrow \text{CrewAI\_Supervisor.SynthesizeDeliverable}(\mathcal{B})$\;
-$\text{retries} \leftarrow 0$\;
-\While{$\text{retries} < 2$}{
-    \eIf{$\text{IsValidPydantic}(y_{\text{raw}}, \Sigma_{\text{Pydantic}})$}{
-        $\mathcal{Y} \leftarrow \text{PydanticValidate}(y_{\text{raw}}, \Sigma_{\text{Pydantic}})$\;
-        $\text{Blackboard.FinalizeRun}(\mathcal{B}, \tau, \mathcal{Y})$\;
-        \Return $\mathcal{Y}$\;
-    }{
-        $y_{\text{raw}} \leftarrow \text{CrewAI\_Supervisor.ReflectAndFix}(y_{\text{raw}})$\;
-        $\text{retries} \leftarrow \text{retries} + 1$\;
-    }
-}
-\Return $\text{FallbackSanitizedOutput}(y_{\text{raw}})$\;
-\end{algorithm}
-
-\section{Experimental Setup}
-To empirically validate Multi-Agent-Flow and answer our research questions, we designed a comprehensive experimental evaluation framework deployed on production cloud infrastructure.
-
-\subsection{Cloud Testbed Infrastructure}
-The experimental testbed was deployed across three distributed production environments:
-\begin{itemize}
-    \item \textbf{Frontend Application:} Next.js 14 reactive dashboard hosted on Vercel Edge Network, providing real-time Server-Sent Events (SSE) telemetry visualization.
-    \item \textbf{Backend Orchestration Gateway:} Python 3.11 FastAPI service deployed on an AWS Ubuntu 24.04 LTS instance (2 vCPUs, 4 GB RAM), communicating via Cloudflare zero-trust tunnels.
-    \item \textbf{Persistence Layer:} Managed PostgreSQL 16 database instance on Supabase with connection pooling, supplemented by local SSD-backed JSONL workspaces.
-\end{itemize}
-
-\subsection{Architectural Baselines and Design Patterns}
-To establish comparative benchmarks for RQ1 and RQ2, we implemented four distinct agentic orchestration design patterns:
-\begin{enumerate}
-    \item \textbf{ReAct (Tool-Centric):} A single autonomous agent executing iterative Thought-Action-Observation loops \cite{yao2023react}, invoking MCP tools sequentially until achieving task completion.
-    \item \textbf{Sequential Pipeline:} A linear chain of three specialized agents (Architect $\to$ Developer $\to$ Auditor) passing intermediate text outputs directly down the pipeline.
-    \item \textbf{Hierarchical Supervisor:} A centralized CrewAI manager that dynamically plans sub-tasks, delegates to worker agents, reviews submissions, and manages all inter-agent routing.
-    \item \textbf{Hybrid Staged (Proposed Multi-Agent-Flow):} Our hybrid architecture combining CrewAI hierarchical planning, A2A envelope delegation to parallel Google ADK workers, dual MCP tool clusters, and Blackboard shared memory.
-\end{enumerate}
-
-\subsection{Behavioral Personas and Prompt Variances}
-To evaluate architectural resilience against diverse prompt complexities and structures, we evaluated each architecture against four standardized behavioral personas:
-\begin{itemize}
-    \item \textbf{Analytical Auditor:} Highly structured, demanding formal validation, schema compliance, and quantitative performance proofs. Ingress prompts feature explicit constraint matrices and validation formulas.
-    \item \textbf{Fast Pragmatist:} Low-latency preference, providing concise instructions and emphasizing minimal execution duration. Ingress prompts are truncated, direct, and time-bounded.
-    \item \textbf{Inquisitive Explorer:} Verbose, exploratory prompts introducing ambiguous requirements, hypothetical design forks, and demanding deep contextual investigation across multiple documentation domains.
-    \item \textbf{Detail Specialist:} Highly granular specifications with complex nested schemas, precise data typing rules, and rigorous multi-point constraint checklists.
-\end{itemize}
+Table \ref{tab:related-work} groups representative approaches by the design problem they address. The comparison is conceptual: the studies use different tasks, datasets, and metrics, so their scores are not directly comparable. This paper's focus is narrower. It documents how a single platform combines a persistent workflow application, a Blackboard projection, typed outputs, and gateway/tool integrations, then audits whether the repository contains evidence for stronger performance claims.
 
 \begin{table}[t]
 \centering
-\caption{Experimental Hyperparameters and System Configuration}
-\label{tab:parameters}
-\footnotesize
-\begin{tabular}{@{}ll@{}}
+\caption{Representative Work and Its Relevance to This Study}
+\label{tab:related-work}
+\small
+\begin{tabular}{@{}p{0.19\linewidth}p{0.28\linewidth}p{0.23\linewidth}p{0.22\linewidth}@{}}
 \toprule
-\textbf{Parameter / Component} & \textbf{Configuration Value} \\
+\textbf{Work} & \textbf{Problem and method} & \textbf{Evaluation context} & \textbf{Relevance and limitation} \\
 \midrule
-Primary Planning LLM & Anthropic Claude 3.5 Sonnet (Temperature: 0.2) \\
-Worker Execution LLM & Google Gemini 1.5 Flash (Temperature: 0.1) \\
-MCP Transport Protocol & Standard I/O (JSON-RPC 2.0) \\
-SSRF Blocked Ranges & 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, 169.254.0.0/16 \\
-Pydantic Validation Retries & Max 2 Reflection Cycles \\
-Database Engine & PostgreSQL 16 (Row-Level Locking Enabled) \\
-Total Production Runs & 40 Independent Runs (10 per Architecture) \\
+AutoGen \cite{wu2023autogen} & Flexible conversation among agents, humans, and tools & Multi-task agent demonstrations & Shows interaction patterns; not a platform-level baseline here \\
+CAMEL \cite{li2023camel} & Role-conditioned dialogue between agents & Simulated task conversations & Motivates role separation; shared-state guarantees are outside its focus \\
+MetaGPT \cite{hong2024metagpt} & Software tasks organized with roles and intermediate artifacts & Software-engineering benchmarks & Motivates structured handoffs; results cannot be compared without a shared task set \\
+ChatDev \cite{qian2024communicative} & Software development through communicative phases & Software-generation tasks & Motivates staged workflows; does not evaluate this repository \\
+Blackboard model \cite{nii1986blackboard} & Shared workspace for specialized knowledge sources & Historical AI problem-solving systems & Provides the coordination analogy; modern database behavior needs separate testing \\
+ReAct \cite{yao2023react} & Alternating reasoning and tool action & Knowledge and decision tasks & Frames tool-mediated execution; not a multi-user fleet platform \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Evaluation Metrics and Scoring Rubric}
-We record six primary quantitative metrics across all production runs:
-\begin{enumerate}
-    \item \textbf{Execution Duration (s):} Total elapsed wall-clock time from prompt ingress to final response delivery.
-    \item \textbf{Token Consumption:} Cumulative prompt, completion, and tool invocation tokens across all participating agents.
-    \item \textbf{Financial Cost (USD):} Aggregate API expenditure computed using official token pricing schedules for Claude 3.5 Sonnet and Gemini 1.5 Flash.
-    \item \textbf{Confidence Score:} Normalized output fidelity score ($0.0 \le \mathcal{C} \le 1.0$) evaluated via an automated rubric: schema completeness (30\%), factual grounding in tool returns (30\%), safety compliance (20\%), and constraint adherence (20\%).
-    \item \textbf{Schema Adherence Rate (\%):} Percentage of final outputs strictly conforming to Pydantic models on first or retry pass.
-    \item \textbf{State Collision Rate (\%):} Frequency of unhandled file write overwrites or concurrency race conditions.
-\end{enumerate}
-All benchmark executions were conducted in isolated container instances to eliminate thermal throttling and resource contention. Each test scenario was repeated across three independent random seeds (temperatures 0.1, 0.2, and 0.3) to ensure statistical validity. Wall-clock execution durations and network I/O were captured using high-precision monotonic timers ($\pm 1$ ms resolution) to ensure rigorous performance benchmarking. Table \ref{tab:parameters} details the experimental hyperparameters and system configurations.
+\section{Background and Problem Formulation}
+A workflow run is a sequence of agent or human activities that transforms a user goal into artifacts and a final status. Let $x$ be the user request, $A$ the available agents, $T$ the available tools, and $B_t$ the shared state at step $t$. An orchestration system chooses a worker and the context supplied to it, then records the result as a state update. A useful system should preserve enough history for coordination while limiting irrelevant context and controlling access to external actions.
+
+We model one step as
+\begin{equation}
+(a_t, c_t, \tau_t) = \pi(x, B_t, P_t), \label{eq:dispatch}
+\end{equation}
+where $\pi$ is the dispatch policy, $a_t \in A$ is the selected agent, $c_t$ is the context projection, $\tau_t \in T \cup \{\emptyset\}$ is an optional tool, and $P_t$ represents permissions and process configuration. After execution, the result $r_t$ is validated and appended or persisted:
+\begin{equation}
+B_{t+1} = U(B_t, V(r_t)), \label{eq:update}
+\end{equation}
+where $V$ is output validation and $U$ is the state-update operation. These equations describe a design abstraction, not a claim that the implementation guarantees atomicity.
+
+The repository contains persistent process and task models, a Blackboard entry model, a service that creates a bounded agent-facing view, structured stage and final outputs, API routes, and gateway/tool adapters. The input is a user request and process configuration; the expected output is a run record containing status, stage summaries, deliverables, issues, and metrics. Assumptions include a configured database, authorized user, available gateway or model provider, and agents that can read and post in the workspace. The source review does not verify these assumptions in a live deployment.
+
+The study is out of scope for proving model quality, production availability, security against all attacks, or superiority over another orchestration system. It does not treat code comments, planned capabilities, seeded synthetic data, or fallback strings as successful production executions. These boundaries determine the claims made in Sections V and VI.
+
+\section{Proposed Methodology}
+This section describes the design visible in the repository. Fig. \ref{fig:workflow} shows a typical path from user request to stored run output. The actual path depends on configuration: an external gateway or provider may be unavailable, and not every optional module participates in every run.
+
+\begin{figure}[t]
+\centering
+\fbox{\begin{minipage}{0.94\linewidth}
+\centering
+\fbox{User request and process configuration}
+$\rightarrow$
+\fbox{Authenticated API and validation}
+$\rightarrow$
+\fbox{Orchestration plan and agent execution}\\[6pt]
+$\downarrow$\\[2pt]
+\fbox{Blackboard context and tool/gateway calls}
+$\rightarrow$
+\fbox{Stage output validation}
+$\rightarrow$
+\fbox{Persist run state and notify client}
+\end{minipage}}
+\caption{Source-derived workflow from request intake through persistence and client updates.}
+\label{fig:workflow}
+\end{figure}
+
+Fig. \ref{fig:workflow} highlights the system boundaries that matter for reproducibility: request validation, execution dependencies, shared context, output validation, and persistence. A live trace should record each transition and failure so that a future experiment can distinguish model errors from infrastructure errors.
+
+\subsection{Application and Orchestration Layers}
+The frontend is a React and TypeScript application with pages for agents, boards, processes, approvals, metrics, and settings. It communicates with an Express backend. The backend separates routes, middleware, and services; request validation and authentication are implemented as middleware, while Prisma models and services provide persistence. Socket.IO is used for real-time event delivery. The OpenClaw client provides a WebSocket RPC boundary to remote gateways. These boundaries help isolate UI, domain logic, storage, and external runtime behavior, but the source layout alone does not establish deployment reliability.
+
+A process can be represented as ordered or dependent assignments, with orchestration services responsible for planning and executing work. The repository includes scheduling, task, process, approval, incident, and run-related services. Human approval is relevant where an agent action has consequences beyond generating text. A robust deployment should keep approval state, actor identity, and the exact proposed action in the audit trail.
+
+The platform also has to manage boundaries between tenants and between people and agents. The backend includes organization membership and role checks, API-key authentication, agent tokens, request validation, and resource-access middleware. These mechanisms shape which user can initiate a run and which records can be accessed. Their effectiveness depends on consistent enforcement at every route and service boundary, as well as correct database scoping. This study notes the mechanisms as architectural elements but does not claim that every authorization path is free of defects, because that would require a dedicated threat model and tests covering cross-tenant access.
+
+\subsection{Blackboard Shared State}
+The Blackboard service uses entries with kinds such as decision, contract, artifact, issue, question, answer, and note. Entries can be addressed to a role and can resolve earlier actionable entries. The service reads persisted entries, renders Markdown and JSON views, and initializes per-agent JSONL post files. The code comments describe the runner as the database writer that validates agent posts and stores them. This staged flow separates an agent's workspace write from durable database state.
+
+The service constructs an agent-facing projection by prioritizing open items addressed to that agent, then other open items, decisions and contracts, artifacts, and remaining entries. The prompt projection has a configured maximum of 7,000 characters; a database query is limited to 500 entries. These bounds expose an explicit context policy. They do not prove that every important item fits, that no two workers overwrite the same post file, or that the database and filesystem cannot diverge. Those are testable implementation properties.
+
+\subsection{Typed Outputs, Tools, and Guardrails}
+The Pydantic models define stage and final output shapes. A stage includes status, summary, deliverables, decisions, issues, optional test metadata, tools used, and next steps. A final output combines stages, open issues, metrics, a run identifier, and messaging or orchestration metadata. Validators normalize common status synonyms, remove duplicate deliverable paths, and reject inconsistent combinations such as a completed run containing a failed stage. These checks constrain representation; they do not independently establish that a claimed test actually ran or that a deliverable is correct.
+
+MCP routes and services provide integration points for registering servers and tools. The Python repository also contains calculator, file, web, project-data, and forecast tool modules. Tool permissioning, network policy, argument validation, and result verification must be applied at the point where the tool is called. The URL validator and prompt-pattern guardrail code are useful defense components, but static presence is not a security evaluation. In particular, keyword rules can miss paraphrases and may flag harmless text.
+
+The separate Python framework modules include a CrewAI wrapper, an ADK-style worker wrapper, and an A2A-like JSON envelope. Their code contains fallback paths and illustrative results. This study treats them as prototypes included in the repository rather than the principal live orchestration path. The production application README instead describes OpenClaw gateway integration. A future implementation report should state which runtime was actually used for each experiment.
+
+\subsection{Execution Procedure}
+Algorithm \ref{alg:orchestration} expresses a conservative run lifecycle abstracted from the services. It emphasizes validation and recording without assuming a particular model response or successful external call.
+
+\begin{algorithm}[t]
+\caption{Auditable multi-agent workflow run}
+\label{alg:orchestration}
+\KwIn{Request $x$, process configuration $P$, initial state $B_0$}
+\KwOut{Persisted final run record $F$}
+Authenticate the requester and validate $x$ and $P$\;
+Create a run identifier and persist the initial status\;
+Load the permitted process context and construct an agent view $c_t$\;
+\ForEach{planned stage $t$}{
+  Select the configured agent and permitted tools\;
+  Execute the stage through the configured runtime\;
+  Validate the returned stage against the output schema\;
+  Record deliverables, issues, tool calls, and status\;
+  Update shared state and refresh the next context projection\;
+  \If{the stage is blocked or failed}{stop or request human intervention\;}
+}
+Assemble and validate the final output record\;
+Persist final status and emit a client update\;
+\end{algorithm}
+
+The central design choice is explicit state and schema validation. A conversation-only design is simpler for short tasks, but makes task status and unresolved issues harder for other services to query. A relational state model improves queryability and supports authorization, at the cost of migrations and consistency work across files and database records. A bounded context projection limits prompt size, but creates a relevance-selection problem: omitted context can matter. Structured outputs support predictable interfaces, but require recovery behavior for malformed model output. These tradeoffs motivate the evaluation plan rather than prove a performance advantage.
+
+Reproducibility also depends on capturing configuration at run time. A final run record should identify the process version, agent and model configuration, tool registry, prompt or skill versions, and any human intervention. The schema contains fields for the run identifier, timestamps, orchestration pattern, status, stages, metrics, and optional preview URL; those fields provide a starting point for such a record. For a comparative study, this metadata should be immutable for each run, and the event trace should include retries and failure reasons. Without this information, a later rerun may differ because a provider model or tool changed rather than because the coordination method changed.
+\section{Experimental Setup}
+This paper uses a descriptive repository study rather than a live performance experiment. The study covers the checkout available on 15 November 2026. We inspected the README and setup guide, backend architecture notes, package manifests, Prisma schema and migrations, orchestration and Blackboard services, MCP routes, structured-output models, guardrail modules, and the benchmark generator and CSV. The unit and end-to-end test files were inventoried but not executed for this report. Accordingly, findings describe code structure and configured behavior; they do not claim runtime success.
+
+The product code has a React 19 and TypeScript 5.7 frontend built with Vite, and an Express 5 and TypeScript backend. Prisma 6.19 connects the backend to PostgreSQL. Socket.IO supports real-time updates, while the OpenClaw client supplies a WebSocket RPC integration. The backend package also declares the MCP TypeScript SDK and OpenTelemetry packages. These dependencies establish available integration surfaces, not that every optional integration was exercised in a deployment.
+
+We used source presence, explicit constants, schema constraints, and control flow as the units of analysis. A behavior was classified as implemented when a corresponding function or model exists; claims of measured quality required execution logs or a reproducible experiment. There is no captured baseline run set in the repository. The benchmark script and generated CSV were inspected to determine their provenance. Table \ref{tab:study-settings} summarizes the study boundary.
+
+\begin{table}[t]
+\centering
+\caption{Repository Study Scope and Evidence Rules}
+\label{tab:study-settings}
+\small
+\begin{tabular}{@{}p{0.28\linewidth}p{0.62\linewidth}@{}}
+\toprule
+\textbf{Item} & \textbf{Value or rule} \\
+\midrule
+Study type & Descriptive source review; no tests or live model calls run for this paper \\
+Snapshot & Local checkout inspected 15 November 2026 \\
+Primary platform & React 19, TypeScript 5.7, Express 5, Prisma 6.19, PostgreSQL \\
+Runtime integration & OpenClaw gateway client; MCP SDK dependency; optional LLM provider services \\
+Benchmarks & 40-row CSV inspected alongside its generator; treated as synthetic \\
+Comparison baseline & None supported by captured, repeatable system runs \\
+Evidence rule & Constants and code paths are implementation facts, not performance measurements \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The main metrics for a future experiment should be completion rate, schema-valid output rate, tool-call success, unresolved issues, wall-clock latency, token use, cost, and concurrent-write integrity. Each metric should be recorded from run events and measured under identical tasks, model versions, provider settings, and resource limits. A baseline should use the same application and task set with Blackboard context disabled or replaced by a documented alternative. At least three independent runs per condition are needed, with the seed and model sampling settings published. Since those data are absent, this paper does not fill in a results table with invented values.
+
+The comparison should use a paired design: each condition receives the same prompt, process graph, tools, model endpoint, timeout, and resource envelope. Run order should be randomized or interleaved to reduce the effect of provider load and time-of-day changes. Output quality should be scored by reviewers who do not know the condition, using a rubric that defines correctness, completeness, requirement coverage, and safety separately. Report individual run records alongside mean and standard deviation, and explain missing or failed runs rather than silently excluding them. An ablation can disable one mechanism at a time, such as context projection or schema validation, while preserving the rest of the runtime. This setup would test the research questions directly; the current repository does not contain the data needed to execute that analysis.
 
 \section{Results and Analysis}
-This section presents our empirical findings aggregated across 40 full-scale production runs, structured directly around our core research questions.
+The repository study identifies an application platform with persistent organizational data and agent-run coordination features. Fig. \ref{fig:repository-architecture} summarizes the observed boundaries. The web client communicates with the Express API; backend services combine relational state, gateway and provider integrations, and run orchestration. The diagram represents code organization, not a measured deployment topology.
 
-\subsection{Evaluation of RQ1: Blackboard Memory vs. Peer-to-Peer Messaging}
-To address RQ1, we analyze execution throughput, token consumption, financial cost, output confidence, and state collision rates across the four architectural patterns. Table \ref{tab:results} summarizes the performance metrics across all 40 experimental evaluations (10 runs per architectural pattern).
-
-\begin{table*}[t]
+\begin{figure}[t]
 \centering
-\caption{Performance Evaluation across Architectures and Personas (Mean $\pm$ Std. Dev.)}
-\label{tab:results}
-\footnotesize
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{@{}lccccc@{}}
+\fbox{\begin{minipage}{0.94\linewidth}
+\centering
+\textbf{React 19 / TypeScript client}\\[2pt]
+Dashboard, boards, agents, processes, metrics\\[5pt]
+$\updownarrow$ HTTP API and Socket.IO events\\[5pt]
+\textbf{Express 5 API}\\
+Authentication and organization middleware $\rightarrow$ routes $\rightarrow$ services\\[5pt]
+\begin{tabular}{ccc}
+\textbf{Process orchestration / Blackboard} & \textbf{OpenClaw gateway / LLM providers} & \textbf{MCP tools / observability}\\
+\multicolumn{3}{c}{$\updownarrow$ Prisma data access}\\
+\multicolumn{3}{c}{\textbf{PostgreSQL}}
+\end{tabular}
+\end{minipage}}
+\caption{Source-derived view of the platform's major application and integration layers.}
+\label{fig:repository-architecture}
+\end{figure}
+
+Fig. \ref{fig:repository-architecture} shows that the repository separates user-facing pages from API routes and service logic. It also shows external agent and tool integrations as distinct boundaries; the presence of an adapter does not mean the corresponding remote service was active during this study.
+
+Table \ref{tab:implementation-evidence} summarizes the most relevant implementation evidence. The Blackboard service reads relational entries, prepares a Markdown projection, and orders items so that addressed open items and decisions can be surfaced within a prompt budget. The code sets that budget to 7,000 characters and limits a database read to 500 entries. These are configured bounds, not measurements of actual context reduction or a guarantee that concurrent writes cannot conflict. The service documentation says the runner writes database rows after agents post JSON lines; the implementation should therefore be described as a staged file-to-database path rather than as a database lock eliminating all file races.
+
+\begin{table}[t]
+\centering
+\caption{Implementation Evidence and What It Supports}
+\label{tab:implementation-evidence}
+\small
+\begin{tabular}{@{}p{0.25\linewidth}p{0.38\linewidth}p{0.28\linewidth}@{}}
 \toprule
-\textbf{Orchestration Pattern} & \textbf{Duration (s)} & \textbf{Total Tokens} & \textbf{Cost (USD)} & \textbf{Confidence Score} & \textbf{Schema Adherence (\%)} \\
+\textbf{Component} & \textbf{Repository evidence} & \textbf{Supported conclusion} \\
 \midrule
-ReAct (Tool-Centric) & 10.42 $\pm$ 1.84 & 5,892 $\pm$ 640 & \$0.0104 $\pm$ 0.002 & 0.78 $\pm$ 0.06 & 87.5\% \\
-Sequential Pipeline & 5.61 $\pm$ 0.92 & 2,745 $\pm$ 380 & \$0.0054 $\pm$ 0.001 & 0.82 $\pm$ 0.04 & 92.0\% \\
-Hierarchical Supervisor & 12.87 $\pm$ 2.15 & 10,940 $\pm$ 1,220 & \$0.0128 $\pm$ 0.003 & 0.86 $\pm$ 0.05 & 97.5\% \\
-\textbf{Hybrid Staged (Proposed)} & \textbf{8.70} $\pm$ \textbf{1.42} & \textbf{5,320} $\pm$ \textbf{710} & \textbf{\$0.0087} $\pm$ \textbf{0.002} & \textbf{0.88} $\pm$ \textbf{0.03} & \textbf{100.0\%} \\
+Blackboard & PostgreSQL entries; JSONL agent posts; 7,000-character prompt projection & Shared-state and bounded-context mechanisms exist \\
+Structured outputs & StageOutput and FinalOutput Pydantic models; schema version 1.0 & Run outputs have typed fields and consistency checks \\
+Tool boundary & MCP SDK and MCP routes/services in backend & MCP integration surfaces are part of the codebase \\
+Gateway boundary & OpenClaw WebSocket RPC client and gateway services & The application has an adapter for remote agent gateways \\
+Guardrails & Python pattern checks and URL validation code & Some input checks exist; effectiveness is unmeasured \\
+Benchmark artifact & Seeded generator creates 40 rows from preset distributions & CSV is synthetic and cannot establish system performance \\
 \bottomrule
-\end{tabular}%
-}
-\end{table*}
+\end{tabular}
+\end{table}
 
-As detailed in Table \ref{tab:results}, the Sequential pipeline achieves the lowest absolute execution duration ($5.61 \pm 0.92$ seconds) and monetary cost (\$0.0054 $\pm$ 0.001) due to its minimal coordination overhead. However, the Sequential approach suffers from lower qualitative confidence (0.82) and is structurally incapable of exploiting parallel worker concurrency. When sub-tasks are interdependent, linear handoffs force upstream mistakes to cascade unchecked into downstream nodes. For instance, when an upstream Architect agent omitted a required database column, downstream Developer and Auditor agents were forced to proceed with corrupted inputs, resulting in lower qualitative confidence ($0.82 \pm 0.04$).
+The structured-output models define run and stage status, deliverables, issues, test metadata, and operational metrics. A model-level consistency rule rejects a completed final run when one of its stages is marked failed; another rule prevents resolved items from appearing in the open-issues collection. This establishes validation logic in the model layer, but the rate at which an LLM response conforms to those models requires live observations.
 
-Conversely, the Hierarchical Supervisor demonstrates high task completion confidence (0.86 $\pm$ 0.05) by enforcing multi-wave reviews, but incurs severe latency ($12.87 \pm 2.15$ seconds) and heavy token consumption (10,940 $\pm$ 1,220 tokens) because the central supervisor must ingest and synthesize every intermediate worker output. The ReAct pattern exhibits high execution variance (latency standard deviation of 1.84 seconds) and the lowest schema adherence (87.5\%), because single-agent reasoning chains are prone to repetitive tool calling loops when faced with complex multi-step objectives.
+The schema also separates a reported test from the outcome of a workflow: a stage may contain a test-run field with a boolean indicating whether a command ran and an optional pass value. This distinction is valuable because an agent-generated summary should not be confused with an independently executed test. The run model includes counts for tokens, cost, agent steps, tool calls, and Blackboard entries, but a field's existence is not evidence that production runs populated it correctly. A future measurement should validate instrumentation against provider records and server logs before computing aggregate cost or success rates.
 
-Our proposed \textbf{Hybrid Staged} architecture achieves the optimal operational equilibrium across all dimensions. By utilizing hierarchical CrewAI planning for wave definition and parallel Google ADK worker nodes for execution, the Hybrid model delivers a balanced duration of $8.70 \pm 1.42$ seconds and a cost of \$0.0087 per pipeline, while attaining the highest task confidence score of \textbf{0.88 $\pm$ 0.03} and an unblemished \textbf{100.0\% Pydantic schema adherence rate}.
+The Blackboard's fixed prompt projection is a design parameter with two competing effects. A smaller view can reduce repeated context and make prompts easier to audit, while a strict cap can omit older decisions or long artifacts. The ordering logic prioritizes entries addressed to an agent and then other open items, but it does not provide semantic ranking. An evaluation should measure both inclusion of task-critical facts and the amount of context passed to each stage. It should also test boards with more than 500 entries and posts near the 4,000-character per-entry limit to reveal truncation and omission behavior.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.88\linewidth]{boxplot.png}
-\caption{Empirical distributions of execution duration (seconds) and financial cost (USD) across 40 production runs, grouped by orchestration design pattern and behavioral persona.}
-\label{fig:boxplot}
-\end{figure}
+The repository also includes Python modules for a CrewAI engine, an ADK-style worker, an A2A envelope bridge, and prompt-pattern guardrails. Inspection shows that these modules contain deterministic fallback behavior and illustrative outputs. Their existence is useful as prototype material, but the current code evidence does not support claims that a production CrewAI-to-ADK service passed 40 runs or that a standards-compliant A2A exchange was evaluated. Similarly, the benchmark generator sets a fixed random seed, samples values around hard-coded means and standard deviations, derives token counts from synthetic cost, and assigns confidence values from a random interval. Thus the 40 CSV records are generated data; they are not observations from the platform. The prior chart and heatmap derived from these values have been excluded from the findings.
 
-Fig. \ref{fig:boxplot} illustrates the empirical boxplot distributions for execution latency and financial expenditure across the 40 runs. The dispersion in the Hierarchical architecture reflects the sensitivity of centralized planning to conversational variance; when interacting with the verbose \textit{Inquisitive Explorer} persona, supervisory replanning loops trigger considerable execution tails (reaching up to 16.2 seconds). In contrast, our Hybrid architecture exhibits tightly bounded interquartile ranges (IQR $\le 2.1$ seconds), demonstrating exceptional architectural resilience across divergent prompt structures. The boxplot confirms that the median financial cost for the Hybrid pattern remains centered at \$0.0087, with no anomalous cost spikes across all tested personas.
+For RQ1, the source supports the conclusion that the platform provides a shared Blackboard representation and a bounded prompt projection. It does not establish that the design outperforms peer-to-peer messaging, prevents every race, or reduces token use by a measured amount. For RQ2, the source supports the existence of MCP, gateway, schema, and guardrail components. It does not establish comparative reliability, successful cross-framework interoperability under live conditions, or a quantified reduction in security risk. The gap between implemented mechanisms and measured outcomes is the primary result of this repository study.
 
-A granular cross-persona evaluation reveals notable disparities in prompt elasticity across agent architectures. Under the \textit{Fast Pragmatist} persona, all four architectures achieved their lowest respective latency values (ranging from 4.82 seconds for Sequential to 7.21 seconds for Hybrid), as concise input directives minimized supervisory decomposition overhead. However, when subjected to the \textit{Detail Specialist} persona, the ReAct pattern suffered substantial degradation, requiring an average of 4.2 iterative tool queries to satisfy nested schema constraints, inflating its duration to 13.15 seconds. In contrast, the Hybrid Staged architecture decomposed the Detail Specialist's complex requirements into parallel worker waves, maintaining execution times under 9.85 seconds. For the adversarial prompt injection variants tested within the persona suite, the supervisor agent dynamically isolated suspicious code blocks into sandboxed inspection nodes, preventing malicious sub-tasks from propagating to the shared Blackboard.
-
-Crucially, regarding state synchronization and concurrency hazards, baseline peer-to-peer configurations evaluated during initial calibration exhibited 3 severe write collisions across 10 concurrent trials, caused by competing agents attempting simultaneous modifications of the same codebase files. In contrast, our dual-layer Blackboard shared state space completely eliminated write collisions, recording \textbf{exactly 0 collisions across all 40 production runs}. By serializing atomic state mutations through PostgreSQL row-level locks and maintaining append-only JSONL logs, the Blackboard guarantees deterministic state consistency.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.82\linewidth]{fig_heatmap.png}
-\caption{Agent activity and compute intensity heatmap across orchestration phases, depicting relative token consumption and tool call distribution.}
-\label{fig:heatmap}
-\end{figure}
-
-Fig. \ref{fig:heatmap} displays the agent activity heatmap across the five orchestration phases. The Supervisor agent absorbs 95\% of compute load during Ingress and Planning, while Google ADK worker nodes absorb peak load during Parallel Build (96\%) and Tool Execution (88\%) phases. During the final Validation phase, the Supervisor re-engages to enforce Pydantic schema compliance (82\% load). This empirical distribution validates that the A2A envelope delegation cleanly decouples high-level cognitive planning from compute-intensive deterministic execution.
-
-\subsection{Evaluation of RQ2: A2A Interoperability, MCP Tools, and Security}
-To address RQ2, we evaluated cross-framework delegation fidelity, tool execution reliability, and security guardrail interception efficacy. Regarding cross-framework interoperability, our A2A/v1 envelope protocol achieved a flawless 100\% message delivery and parsing rate across all 40 production runs. Zero schema conversion errors or serialization faults were observed between the Python-based CrewAI supervisor and Google ADK worker processes. This proves that standardizing inter-agent communication on JSON-RPC 2.0 envelopes effectively eliminates framework lock-in.
-
-\subsubsection{MCP Tool Cluster Utilization and Forecasting Accuracy}
-Across the 40 benchmark runs, agents executed a cumulative total of 184 tool calls across the dual MCP servers. The \texttt{analytics\_calculator} and \texttt{analytics\_db\_lookup} tools achieved a 100\% execution success rate with zero runtime exceptions. The \texttt{analytics\_forecast} machine learning tool utilizing Holt's Double Exponential Smoothing successfully estimated future execution durations within a Mean Absolute Percentage Error (MAPE) of 8.4\% relative to observed wall-clock runtimes. In our evaluation, the forecasting model converged within 5 historical execution observations, achieving a coefficient of determination ($R^2$) of 0.89. This accurate telemetry allowed the supervisor agent to dynamically allocate parallel workers and avoid execution timeouts.
-
-The W3C-compliant distributed tracing system recorded end-to-end timing profiles across all 184 tool calls. Analysis of trace waterfall spans indicates that local MCP tool executions (\texttt{analytics\_calculator} and Holt's forecasting) exhibited near-instantaneous execution times averaging $14.2 \pm 3.1$ ms. Conversely, network-bound operations (\texttt{research\_crawl} and external database lookups) required $412 \pm 68$ ms per invocation, primarily governed by outbound TLS handshakes and server response latencies. Crucially, by executing web crawls in parallel across Google ADK worker processes rather than sequentially, the Hybrid architecture achieved a 2.8$\times$ speedup during information retrieval phases compared to monolithic ReAct execution.
-
-\subsubsection{Ablation Studies}
-To rigorously quantify the individual contribution of each architectural subsystem, we performed three targeted ablation experiments:
-\begin{enumerate}
-    \item \textbf{Ablation 1: Blackboard Shared State vs. Unbounded P2P History:} Replacing the Blackboard role-specific snapshot with unconstrained P2P history injection caused an immediate 312\% surge in prompt token consumption (increasing from an average of 5,320 tokens to 21,940 tokens per run). This context explosion triggered context limit truncations in 30\% of complex runs, whereas the Blackboard consistently bounded prompt context to $\approx 7,000$ characters.
-    \item \textbf{Ablation 2: Guardrails Enabled vs. Disabled:} When evaluating the 4-persona test suite without guardrails, 100\% of prompt injection attacks (\texttt{"override system prompt"} and \texttt{"rm -rf /"}) successfully reached agent reasoning loops. When our guardrail engine was enabled, \textbf{100\% of prompt injections, destructive commands, and toxic phrases were intercepted and sanitized} prior to agent invocation, incurring an imperceptible latency overhead of under 45 ms.
-    \item \textbf{Ablation 3: Pydantic v2 Retry Loop vs. Raw LLM JSON Parsing:} Evaluating raw LLM JSON responses without programmatic validation resulted in a 32.5\% failure rate due to missing keys, unquoted values, or malformed arrays. Incorporating Pydantic v2 validation with a 2-attempt retry loop elevated schema adherence to \textbf{100.0\%}, proving that automated schema feedback is essential for enterprise reliability.
-\end{enumerate}
+The file-backed posting path deserves separate evaluation from the database projection. If two agents use distinct post files, their writes may be isolated at the filename level; if names normalize to the same slug or a process retries a write, duplication or collision behavior may differ. The service's documented runner validation step is a natural place to reject malformed records and enforce per-agent limits. Tests should verify ordering, resolution, access control, and recovery when a post is only partially written. We do not infer any such pass rate from test files or comments because these tests were not executed here.
 
 \section{Discussion}
-The empirical results provide compelling insights into the practical engineering and theoretical foundations of multi-agent orchestration architectures.
+The codebase reflects a practical systems concern: agents require durable task context, typed outputs, tool boundaries, and a user interface for reviewing work. The Blackboard makes coordination state explicit through typed entries rather than requiring every decision to be repeated as unstructured dialogue. The bounded projection provides a clear policy for selecting what an agent sees. Typed outputs give downstream services a predictable structure for status, deliverables, and issues. Together, these choices are plausible foundations for inspectable workflows, but their benefits remain hypotheses until tested against alternatives.
 
-\subsection{Interpretation of Findings and Practical Implications}
-Our findings demonstrate that full peer-to-peer conversational dialogue is fundamentally unsuited for deterministic software development workflows. By treating communication as structured state mutations on a centralized Blackboard, organizations can achieve high agent autonomy without sacrificing coordination integrity. Furthermore, decoupling agent planning (CrewAI) from execution (Google ADK) via the A2A envelope protocol proves that developers are no longer forced to standardize on a single, monolithic agent library. The Model Context Protocol provides a clean, standardized abstraction boundary that allows new specialized tools---such as machine learning forecasters or database analyzers---to be registered dynamically without modifying agent prompt logic. In enterprise engineering, adopting this hybrid pattern enables organizations to partition agent tasks by cost and compute tier: allocating higher-cost, high-reasoning models (such as Claude 3.5 Sonnet) exclusively to supervisory planning while offloading bulk parallel execution to cost-effective, high-throughput models (such as Gemini 1.5 Flash). Furthermore, our findings highlight the critical importance of defense-in-depth in agentic systems. Relying solely on prompt-based LLM self-policing is demonstrably inadequate for production systems; hard programmatic filters such as SafeFetch and Pydantic validators are mandatory to protect enterprise infrastructure.
+A meaningful next evaluation should compare Blackboard and non-Blackboard coordination on the same task set, then report both quality and cost. Concurrency testing should include workers posting to the same and different topics, interruption during posting, malformed JSON lines, duplicate resolutions, and database failure. Tool and gateway trials should log request identifiers, latency, status, and error categories. Security evaluation should use a documented attack corpus and report both missed attacks and benign inputs incorrectly blocked. These tests should be run against the deployed backend and named versions of remote models and tools.
 
-\subsection{Limitations}
-Despite its significant strengths, Multi-Agent-Flow exhibits several operational trade-offs and limitations:
-\begin{itemize}
-    \item \textit{Network Latency Overhead:} Synchronizing state across PostgreSQL and Cloudflare zero-trust tunnels introduces an average latency overhead of 120--180 ms per step. While negligible for analytical workflows, it may restrict ultra-low-latency real-time applications.
-    \item \textit{Cold-Start Delays:} Initializing multiple containerized MCP servers and spawning Python child processes for ADK execution consumes approximately 1.2 seconds during system bootstrap.
-    \item \textit{Token Economy in High-Capacity Models:} Complex planning phases on top-tier models represent 78\% of aggregate pipeline cost, indicating that further prompt optimization is desirable.
-\end{itemize}
+Several limitations constrain this study. It is based on one local repository snapshot and did not run the backend, connect to a database, invoke an LLM, or inspect production telemetry. The repository includes modules from different stages of development, and descriptive documentation may be stale. The Python guardrail patterns are heuristic; strings can evade simple matching and benign text can match broad terms. URL filtering requires adversarial testing across redirects, DNS changes, IPv4/IPv6, and proxy behavior before any security claim is warranted. The synthetic benchmark is not suitable for estimating latency, cost, confidence, or comparative performance.
 
-\subsection{Threats to Validity and Ethical Considerations}
-\textit{Internal Validity:} Potential threats stemming from LLM non-determinism were mitigated by fixing temperature parameters (0.2 for supervisor planning, 0.1 for worker execution) and executing multiple independent trials per condition. Implementation errors were constrained via 29 automated Vitest unit and integration test suites covering all gateway endpoints, guardrail filters, and protocol envelopes.
+For practitioners, the immediate value of the implementation is operational legibility: tasks, approvals, agent status, and outputs have places in the product model and user interface. This can make it easier to supervise a fleet than to inspect an unstructured conversation alone. The corresponding responsibility is to preserve a human path for cancellation, correction, and approval, especially when agents can invoke tools or change project files. A UI that exposes status should also make stale or partial status clear; future usability work should examine whether users can identify a blocked run, inspect its evidence, and understand what an approval will authorize.
 
-\textit{External Validity:} Experiments utilized standard benchmark scenarios and synthetic personas. While these represent realistic enterprise usage patterns, results may vary when applied to legacy monolithic codebases with unconstrained tool ecosystems or high-churn code repositories.
-
-\textit{Ethical Considerations:} Granting autonomous agents access to terminal commands and network resources introduces inherent safety hazards. Multi-agent systems deployed in enterprise settings must prevent unauthorized code execution and data poisoning. Our SafeFetch SSRF filter and toxic parser directly address these ethical and infrastructural security imperatives.
+Threats to validity include selection bias in the files inspected, source behavior that may differ from deployment configuration, and provider behavior that changes over time. Future work should publish a task corpus, exact environment and dependency versions, raw event logs, run seeds, and scripts that compute aggregate values. Any claim about safety should be scoped to the tested attack set. Ethical deployment also requires human review for consequential actions, least-privilege tool credentials, tenant isolation, and a clear record of what agents changed.
 
 \section{Conclusion and Future Work}
-In this paper, we presented \textit{Multi-Agent-Flow}, a production-ready hybrid multi-agent orchestration architecture that overcomes prevailing limitations in agent coordination, tool integration, and framework lock-in. 
+This paper examined the Multi-Agent-Flow repository as a source-level study of a multi-agent workflow platform. In answer to RQ1, the code represents shared coordination using Blackboard entries and constructs a prompt view capped at 7,000 characters; no comparative conflict or efficiency result can be inferred from that implementation fact. In answer to RQ2, the repository contains gateway, MCP, structured-output, and guardrail components, but it does not provide captured live evaluation data sufficient to claim measured interoperability, reliability, or security improvement.
 
-In direct response to \textbf{RQ1}, our empirical findings confirm that replacing unstructured peer-to-peer messaging with a dual-layer PostgreSQL and JSONL Blackboard shared state completely eliminates file write collisions (0\% race conditions across 40 production runs) while restricting prompt context consumption to approximately 7,000 characters, avoiding the 312\% token surge observed in P2P chat histories. In direct response to \textbf{RQ2}, the integration of the A2A/v1 envelope protocol and Model Context Protocol facilitates seamless cross-framework execution between CrewAI supervisor agents and Google ADK worker nodes. This hybrid orchestration attains an optimal operational balance, achieving an execution duration of $8.70 \pm 1.42$ seconds, an unblemished 100\% Pydantic schema adherence rate, an 0.88 task confidence score, and complete 100\% interception of adversarial prompt injection attacks.
-
-The transition of Large Language Models from passive generative models to active, tool-using autonomous agent swarms necessitates a fundamental shift in software architecture. In this work, we demonstrated that unstructured peer-to-peer conversational patterns, while intuitively appealing, are structurally inadequate for deterministic, mission-critical engineering tasks due to race hazards, context saturation, and lack of security isolation. Multi-Agent-Flow provides an empirically verified blueprint for building production-grade MAS. By combining the cognitive flexibility of CrewAI, the execution power of Google ADK, the standardized tooling of MCP, the determinism of Blackboard memory, and rigorous runtime guardrails, our system establishes that hybrid multi-agent orchestration can deliver both high reasoning autonomy and deterministic reliability.
-
-Future work will explore three high-impact directions: (i) integrating decentralized cryptographic consensus protocols to support multi-tenant federated Blackboards across untrusted organizations, (ii) implementing dynamic runtime agent synthesis capable of generating and training specialized ADK worker nodes on the fly based on incoming task requirements, and (iii) developing automated self-healing MCP tool registries that introspect third-party REST and GraphQL APIs to dynamically expand agent capabilities without human intervention. As multi-agent systems continue to proliferate across critical industries, we anticipate that the architectural principles established in this work---formal shared-state synchronization, open interoperability protocols, and strict boundary defenses---will serve as foundational pillars for next-generation autonomous software engineering.
-
+The benchmark CSV must be treated as synthetic because its generator samples preset distributions rather than recording system executions. A repeatable evaluation is therefore the next necessary step. Future work should (1) instrument actual runs and compare coordination strategies on a fixed task set, (2) test Blackboard concurrency and recovery behavior under controlled faults, and (3) evaluate tool and prompt defenses against a published attack suite while measuring false positives. This evidence would let the authors replace architectural expectations with bounded, reproducible findings. Until then, the paper's contribution is an implementation map and an evidence audit, not a claim of measured superiority.
 \section*{Code Repository and Reproducibility}
-The complete source code, database migrations, MCP server implementations, Vitest test suites, and the 40-run benchmark dataset are publicly available under the MIT License at:\\
+The repository reviewed for this paper is available at:\\
 \url{https://github.com/krishrathi1/Multi-Agent-Flow.git}
 
 \section*{AI-Use Declaration}
-During the preparation of this work, the authors utilized Large Language Model assistants (Claude 3.5 Sonnet and Gemini 1.5 Pro) for automated test suite execution assistance, benchmark script authoring, and preliminary code linting. All conceptual architectures, experimental evaluations, mathematical models, and final manuscript revisions were independently verified, analyzed, and synthesized by the authors.
+Generative AI was used to help organize and draft portions of this manuscript and summarize repository files. The authors must verify every technical statement and reference against the source material, revise the text in their own words, and disclose any additional AI use required by their course policy. No AI-generated experimental results are reported in this paper. The authors should attach the required similarity and AI-content reports; compliance with the course thresholds cannot be inferred from this declaration.
 
 \section*{Author Contributions}
+The following allocation is a provisional draft for the team to confirm before submission.
 \begin{itemize}
-    \item \textbf{Krish (230607):} Lead system architect; designed the dual-layer Blackboard architecture, developed the A2A/v1 protocol bridge, and implemented the hybrid CrewAI and ADK orchestration engine.
-    \item \textbf{Honey (230606):} Designed and integrated the dual-server Model Context Protocol (MCP) cluster, implemented the security guardrails (SSRF SafeFetch and injection defense), and authored the toxic language filter.
-    \item \textbf{Dishita (230602):} Executed the 40-run empirical performance evaluation, authored the statistical data analysis and boxplot visualization suite, and managed the production cloud deployment on Vercel and Ubuntu VPS.
+    \item \textbf{Krish (230607):} Project coordination and backend orchestration and persistence implementation.
+    \item \textbf{Honey (230606):} Agent and tool integration, including MCP-related and security components.
+    \item \textbf{Dishita (230602):} Frontend and dashboard implementation, documentation, and evaluation planning.
 \end{itemize}
 
 \bibliographystyle{IEEEtran}

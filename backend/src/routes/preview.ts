@@ -132,10 +132,18 @@ window.addEventListener('error', function (e) {
 
 const TAILWIND_BROWSER_CDN = 'https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4';
 
-/** Drops Tailwind build directives from CSS; the in-browser build supplies them. */
+/** Drops Tailwind build directives from CSS and marks root-relative asset URLs as external. */
 const tailwindDirectivesPlugin: esbuild.Plugin = {
   name: 'strip-tailwind-directives',
   setup(build) {
+    // Treat root-relative media/asset paths in CSS/JS as external so missing static assets don't abort preview builds.
+    build.onResolve({ filter: /^\// }, (args) => {
+      if (!/\.(tsx?|jsx?|mjs)$/.test(args.path)) {
+        return { path: args.path, external: true };
+      }
+      return undefined;
+    });
+
     build.onLoad({ filter: /\.css$/ }, async (args) => {
       const css = await fs.readFile(args.path, 'utf-8');
       if (!/tailwind|@config|@plugin/.test(css)) return undefined;

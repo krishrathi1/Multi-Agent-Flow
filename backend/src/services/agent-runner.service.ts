@@ -918,9 +918,53 @@ export async function startWorkspaceEdit(
           emit('process:edit:updated', job);
           res = await runOpenCode(prompt, job.model, workspace, 10 * 60_000, { env: { XAI_API_KEY: grokKey, GROK_API_KEY: grokKey } });
         } else if (groqKey) {
-          job.model = `groq/${groqModel()}`;
+          job.model = groqModel();
           emit('process:edit:updated', job);
-          res = await runOpenCode(prompt, job.model, workspace, 10 * 60_000, { env: { GROQ_API_KEY: groqKey } });
+          const secondDirect = await applyDirectWorkspaceEdit({
+            processId,
+            workspace,
+            instruction,
+            projectName: proc.name,
+            organizationId,
+            preferredModel: job.model,
+          });
+          if (secondDirect.ok) {
+            job.state = 'completed';
+            job.changedFiles = secondDirect.changedFiles;
+            job.summary = secondDirect.summary;
+            job.commit = await snapshotWorkspace(workspace, `Preview edit: ${instruction.replace(/\s+/g, ' ').slice(0, 72)}`);
+            if (agentId) {
+              const fileList = secondDirect.changedFiles.length
+                ? `\n\n**Updated Files (${secondDirect.changedFiles.length}):**\n${secondDirect.changedFiles.map((f: string) => `• \`${f}\``).join('\n')}`
+                : '';
+              const replyContent = secondDirect.summary
+                ? `${secondDirect.summary}${fileList}`
+                : `I have updated your application in real time per your instruction!${fileList}`;
+
+              await prisma.activity.create({
+                data: {
+                  organizationId,
+                  processId,
+                  agentId,
+                  type: ActivityType.MESSAGE,
+                  message: `${agentName} replied: ${replyContent.slice(0, 160)}`,
+                  metadata: {
+                    chat: true,
+                    role: 'assistant',
+                    content: replyContent,
+                    model: job.model,
+                    agentName,
+                    changedFiles: secondDirect.changedFiles,
+                    success: true,
+                    previewEdit: true,
+                  },
+                },
+              }).catch(() => {});
+              recordedAssistantReply = true;
+            }
+            return;
+          }
+          throw err;
         } else {
           throw err;
         }

@@ -8,6 +8,7 @@ import { LayoutGrid, Plus, ChevronRight, Users, CheckCircle, Calendar, ShieldChe
 import { Button } from '@/components/ui/Button';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { HourglassLoader } from '@/components/ui/HourglassLoader';
+import { useToast } from '@/components/ui/Toast';
 
 const boardTypeStyles: Record<string, { badge: string; label: string }> = {
   goal: { badge: 'text-blue-700 dark:text-blue-300 bg-blue-500/15 border-blue-500/30', label: 'Goal' },
@@ -31,6 +32,7 @@ interface CreateBoardData {
 }
 
 export function Boards() {
+  const toast = useToast();
   const [boards, setBoards] = useState<BoardWithGroup[]>([]);
   const [groups, setGroups] = useState<BoardGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,8 +80,10 @@ export function Boards() {
       const created = await api.boards.create(data as unknown as Record<string, unknown>);
       setBoards(prev => [created as BoardWithGroup, ...prev]);
       setShowCreateModal(false);
-    } catch (err) {
+      toast.success('Board Created', `"${created.name}" is now ready for collaborative agent memory.`);
+    } catch (err: any) {
       console.error('Failed to create board:', err);
+      toast.error('Board Creation Failed', err?.message || 'Could not create board.');
     }
   }
 

@@ -8,9 +8,11 @@ import { Badge } from '../components/ui/Badge';
 import { EmptyState } from '../components/ui/States';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { HourglassLoader } from '../components/ui/HourglassLoader';
+import { useToast } from '../components/ui/Toast';
 import type { OrgInvite } from '../types';
 
 export function Invitations() {
+  const toast = useToast();
   const [invites, setInvites] = useState<OrgInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
@@ -31,17 +33,23 @@ export function Invitations() {
     try {
       const invite = await api.invites.create({ invitedEmail: email.trim(), role });
       setInvites(prev => [invite, ...prev]);
+      toast.success('Invitation Sent', `Invite sent to ${email.trim()}`);
       setEmail('');
     } catch (err) {
-      alert((err as Error).message);
+      toast.error('Invitation Failed', (err as Error).message);
     } finally {
       setSending(false);
     }
   }
 
   async function handleRevoke(id: string) {
-    await api.invites.revoke(id);
-    setInvites(prev => prev.map(i => i.id === id ? { ...i, status: 'REVOKED' as const } : i));
+    try {
+      await api.invites.revoke(id);
+      setInvites(prev => prev.map(i => i.id === id ? { ...i, status: 'REVOKED' as const } : i));
+      toast.success('Invitation Revoked', 'The invitation has been cancelled.');
+    } catch (err) {
+      toast.error('Revoke Failed', (err as Error).message);
+    }
   }
 
   const statusTones: Record<string, 'warning' | 'success' | 'neutral' | 'danger'> = {

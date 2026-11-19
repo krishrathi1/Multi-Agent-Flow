@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Activity,
+  AppWindow,
   Bot,
   CheckCircle2,
   ChevronRight,
@@ -361,7 +362,7 @@ function ProductionBlockCard({
               <Button
                 size="xs"
                 variant="secondary"
-                icon={Play}
+                icon={AppWindow}
                 onClick={() => setShowWatchPreview(true)}
                 className="text-brand-600 dark:text-brand-400 border-brand-500/30 hover:bg-brand-500/10 shadow-2xs font-semibold"
               >
@@ -419,7 +420,7 @@ function ProductionBlockCard({
                       }}
                       className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:bg-hover transition-colors cursor-pointer text-left font-bold"
                     >
-                      <Play size={13} className="text-brand-500" />
+                      <AppWindow size={13} className="text-brand-500" />
                       <span>Watch Preview</span>
                     </button>
 

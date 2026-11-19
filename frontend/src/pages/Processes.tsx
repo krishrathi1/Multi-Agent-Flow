@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity as ActivityIcon,
+  AppWindow,
   Bot,
   Edit3,
   Factory,
@@ -261,7 +262,7 @@ function ProcessCard({
           <Button
             variant="secondary"
             size="xs"
-            icon={Play}
+            icon={AppWindow}
             onClick={() => onWatchPreview(process)}
             className="text-brand-600 dark:text-brand-400 border-brand-500/30 hover:bg-brand-500/10 shadow-2xs font-semibold"
             aria-label={`Watch Preview for ${process.name}`}

@@ -23,10 +23,12 @@ import { LiveSparkleIcon } from '../components/ui/LiveIcon';
 import { HourglassLoader } from '../components/ui/HourglassLoader';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { RepoFilesModal } from '../components/skills/RepoFilesModal';
+import { useToast } from '../components/ui/Toast';
 import { Folder } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function SkillsMarketplace() {
+  const toast = useToast();
   const [skills, setSkills] = useState<MarketplaceSkill[]>([]);
   const [packs, setPacks] = useState<SkillPack[]>([]);
   const [gateways, setGateways] = useState<Gateway[]>([]);
@@ -64,9 +66,10 @@ export function SkillsMarketplace() {
     try {
       const res = await api.skills.syncSkill(skillId);
       setSkills((prev) => prev.map((s) => (s.id === skillId ? res.skill : s)));
+      toast.success('Skill Synced', 'Repository files and tools updated.');
     } catch (err: any) {
       console.error('Failed to sync skill:', err);
-      alert(err?.message || 'Failed to sync skill repository');
+      toast.error('Sync Failed', err?.message || 'Failed to sync skill repository');
     } finally {
       setSyncingSkillId(null);
     }
@@ -158,9 +161,10 @@ export function SkillsMarketplace() {
     try {
       await api.skills.deleteSkill(skillId);
       setSkills((prev) => prev.filter((s) => s.id !== skillId));
+      toast.success('Skill Deleted', `"${skillName}" has been removed.`);
     } catch (err: any) {
       console.error('Failed to delete skill:', err);
-      alert(err?.message || 'Failed to delete skill');
+      toast.error('Delete Failed', err?.message || 'Failed to delete skill');
     }
   }
 
@@ -171,8 +175,10 @@ export function SkillsMarketplace() {
       const pack = await api.skills.createPack(packForm);
       setPacks((prev) => [pack, ...prev]);
       setPackForm({ name: '', description: '', sourceUrl: '', branch: 'main' });
-    } catch (err) {
+      toast.success('Pack Created', `"${pack.name}" has been registered.`);
+    } catch (err: any) {
       console.error('Failed to create pack:', err);
+      toast.error('Creation Failed', err?.message || 'Failed to create skill pack');
     } finally {
       setCreatingPack(false);
     }
@@ -183,9 +189,10 @@ export function SkillsMarketplace() {
     try {
       await api.skills.deletePack(packId);
       setPacks((prev) => prev.filter((p) => p.id !== packId));
+      toast.success('Pack Deleted', `"${packName}" has been removed.`);
     } catch (err: any) {
       console.error('Failed to delete pack:', err);
-      alert(err?.message || 'Failed to delete skill pack');
+      toast.error('Delete Failed', err?.message || 'Failed to delete skill pack');
     }
   }
 

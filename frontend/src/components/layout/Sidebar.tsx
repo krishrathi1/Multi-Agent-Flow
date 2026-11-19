@@ -84,7 +84,9 @@ const navSections: NavSection[] = [
       { path: '/gateways', label: 'Gateways', icon: Router },
       { path: '/mcp', label: 'MCP Hub & Tools', icon: Cpu },
       { path: '/skills', label: 'Skills Library', icon: Sparkles },
+      { path: '/soul-templates', label: 'Soul Templates', icon: Bot },
       { path: '/alerts', label: 'Alerts & Incidents', icon: AlertTriangle },
+      { path: '/settings', label: 'Settings', icon: Settings },
     ],
   },
 ];
