@@ -12,7 +12,7 @@ import { connectToolServer, SERVERS, type ToolContext, type ServerName } from '.
 export const TOOL_INTENT = /\b(forecast|predict|projection|trend|calculat|compute|how much|average|percent|sum of|total|estimate|search|look ?up|google|latest|version|npm|package|library|web|internet|online|https?:\/\/|url|website|page|parse|csv|json|file|workspace|runs?|history|cost|tokens|duration|database|db)\b/i;
 
 // Groq models that support tool use well on the free tier.
-const TOOL_MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+const TOOL_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
 const TOOL_RESULT_CHARS = 4000;
 
 export interface ToolChatResult {

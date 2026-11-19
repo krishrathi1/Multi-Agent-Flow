@@ -118,9 +118,12 @@ export async function grokChat(params: {
 // working when OpenCode's free models hit their usage limit.
 
 /** Default Groq model; override with GROQ_MODEL. */
-export const groqModel = () => process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-120b';
+export const groqModel = () => process.env.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile';
 /** Tried in order when the preferred model is rejected (limits, size). */
 const GROQ_FALLBACKS = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'mixtral-8x7b-32768',
   'openai/gpt-oss-120b',
   'openai/gpt-oss-20b',
   'qwen/qwen3.8-27b',
@@ -288,6 +291,8 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   'openai/gpt-oss-120b':{ input: 0.15 / 1_000_000, output: 0.60 / 1_000_000 },
   'openai/gpt-oss-20b': { input: 0.075 / 1_000_000, output: 0.30 / 1_000_000 },
   'qwen/qwen3.8-27b':   { input: 0.80 / 1_000_000, output: 4.00 / 1_000_000 },
+  'llama-3.3-70b-versatile':{ input: 0.59 / 1_000_000, output: 0.79 / 1_000_000 },
+  'llama-3.1-8b-instant':  { input: 0.05 / 1_000_000, output: 0.08 / 1_000_000 },
   'llama-3.3-70b':     { input: 0.59 / 1_000_000, output: 0.79 / 1_000_000 },
   'llama-3.1-8b':      { input: 0.05 / 1_000_000, output: 0.08 / 1_000_000 },
   'mixtral-8x7b':      { input: 0.24 / 1_000_000, output: 0.24 / 1_000_000 },
