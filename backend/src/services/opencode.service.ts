@@ -233,7 +233,8 @@ export async function run(
   } = {},
 ): Promise<{ result: string; model: string | null; exitCode: number | null }> {
   const args = ['run', prompt];
-  if (model?.trim()) args.push('--model', model.trim());
+  const targetModel = model?.trim() || config.opencodeModel;
+  if (targetModel) args.push('--model', targetModel);
   if (opts.agent) args.push('--agent', opts.agent);
   // Error-level logs on stderr are how a refused request becomes visible.
   args.push('--pure', '--print-logs', '--log-level', 'ERROR');
@@ -287,11 +288,13 @@ export async function run(
       const fatal = stderr.match(/message="stream error"[^\n]*error\.error="([^"]+)/g)
         ?.map((line) => line.replace(/^.*error\.error="/, ''))
         .find((msg) => FATAL_PROVIDER_ERROR.test(msg));
-      if (fatal) {
+      const modelNotFound = /ProviderModelNotFoundError|Model not found/i.test(stderr);
+      if (fatal || modelNotFound) {
         isTimedOut = true; // reuse the flag: we've settled, ignore 'close'
         clearTimeout(timer);
         stopAll();
-        reject(new OpenCodeUnavailableError(`OpenCode model unavailable: ${fatal.replace(/^AI_\w+:\s*/, '').slice(0, 240)}`));
+        const reason = fatal ? fatal.replace(/^AI_\w+:\s*/, '').slice(0, 240) : 'Model not found in OpenCode catalog';
+        reject(new OpenCodeUnavailableError(`OpenCode model unavailable: ${reason}`));
       }
     });
 
@@ -319,7 +322,8 @@ export async function run(
       let cleanResult = stdout.replace(/\x1b\[[0-9;]*m/g, '').trim();
       cleanResult = cleanResult.replace(/^>\s*\w+\s*·\s*[^\n\r]+\r?\n+/i, '').trim();
       if (cleanResult.length === 0 && code !== 0) {
-        reject(new Error(`OpenCode exited with code ${code}`));
+        const errDetail = stderr.trim().slice(-300) || `exit code ${code}`;
+        reject(new Error(`OpenCode exited with code ${code}: ${errDetail}`));
       } else {
         // exitCode lets callers tell a finished session from one that died
         // part-way but had already printed some of its transcript.

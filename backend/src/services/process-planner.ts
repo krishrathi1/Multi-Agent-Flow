@@ -2,7 +2,7 @@ import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 import { runClaudeCli, isClaudeCliEnabled } from '../lib/claude-cli.js';
 import { ask as askOpenCode } from './opencode.service.js';
-import { getGroqApiKey, groqChat } from './llm-provider.service.js';
+import { getGroqApiKey, groqChat, isGroqModel } from './llm-provider.service.js';
 
 /**
  * Turns a plain-language goal into a staged agent roster.
@@ -503,8 +503,8 @@ async function planWithLlm(prompt: string, requested?: number, preferredModel?: 
     ? `${prompt}\n\nUse exactly ${requested} agents.`
     : prompt;
 
-  // 1. Try explicit OpenCode provider model if selected
-  if (preferredModel && preferredModel.includes('/') && !preferredModel.startsWith('local/')) {
+  // 1. Try explicit OpenCode provider model if selected (and not Groq/local)
+  if (preferredModel && !isGroqModel(preferredModel) && preferredModel.includes('/') && !preferredModel.startsWith('local/')) {
     try {
       const combined = `${PLANNER_SYSTEM}\n\nUser Production Request:\n${ask}\n\nRespond ONLY with the raw JSON plan object:`;
       const op = await askOpenCode(combined, preferredModel, 90000);

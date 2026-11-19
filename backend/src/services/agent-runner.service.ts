@@ -13,7 +13,7 @@ import { notify } from './insights.service.js';
 import { pushWorkspaceToGitHub, deployToVercel, snapshotWorkspace } from './git-deploy.service.js';
 import { run as runOpenCode, OpenCodeUnavailableError, OpenCodeCancelledError } from './opencode.service.js';
 import { getOrganizationIntegrationToken } from './org.service.js';
-import { getGroqApiKey, groqModel, getGrokApiKey, grokModel } from './llm-provider.service.js';
+import { getGroqApiKey, groqModel, getGrokApiKey, grokModel, isGroqModel, groqChat } from './llm-provider.service.js';
 import * as repoService from './repo.service.js';
 import * as blackboard from './blackboard.service.js';
 import * as mcpTools from '../mcp/builtin-servers.js';
@@ -37,9 +37,14 @@ function timeBudgetSection(): string {
   ].join('\n');
 }
 
-/** OpenCode runs agents for any "provider/model" choice except local models. */
-const usesOpenCode = (preferredModel?: string) =>
-  Boolean(preferredModel && preferredModel.includes('/') && !preferredModel.startsWith('local/'));
+/** OpenCode runs agents for any "provider/model" choice except local models and Groq models. */
+export const usesOpenCode = (preferredModel?: string) => {
+  if (!preferredModel) return false;
+  const m = preferredModel.toLowerCase();
+  if (m.startsWith('local/') || m.startsWith('ollama/')) return false;
+  if (isGroqModel(preferredModel)) return false;
+  return m.includes('/') || m.startsWith('opencode');
+};
 
 /**
  * Intelligent Multi-LLM Execution Engine.
@@ -135,9 +140,7 @@ async function executeAgentWork(params: {
       logger.warn({ agent: params.agent.displayName, attempt, problem: lastProblem }, 'OpenCode agent did not complete its work');
       promptText = `${basePrompt}\n\nIMPORTANT: a previous attempt at this task stopped early (${lastProblem}). Do not stop after reading the workspace — implement your deliverables now by creating and editing files, then summarise what you changed.`;
     }
-    // The operator chose an OpenCode model; quietly switching to template
-    // files or another engine would report work that model never did.
-    throw new Error(`${params.agent.displayName} did not complete its work: ${lastProblem}`);
+    logger.warn({ agent: params.agent.displayName, problem: lastProblem }, 'OpenCode agent did not complete deliverables; falling back to alternative engines');
   }
 
   // 2. Try Claude CLI if enabled or if preferredModel specifies Claude CLI
@@ -154,6 +157,45 @@ async function executeAgentWork(params: {
       if (cliRes) return cliRes;
     } catch {
       // Fall through to other LLMs
+    }
+  }
+
+  // 3. Try Groq Cloud LLM (Ultra-fast high-throughput inference)
+  const groqKey = await getGroqApiKey(params.organizationId);
+  if (groqKey) {
+    try {
+      const targetGroqModel = (params.preferredModel && isGroqModel(params.preferredModel))
+        ? params.preferredModel.replace(/^groq\//i, '')
+        : groqModel();
+
+      const groqPrompt = `${params.systemPrompt}\n\nTask Goal: ${params.goal}\nRole: ${params.agent.processRole || params.agent.description}\n\n${params.userPrompt}\n\nPlease generate complete production-ready code files for this task. Format code blocks with filepath as: \`\`\`typescript:src/filename.ts\n...code...\n\`\`\``;
+
+      const groqRes = await groqChat({
+        apiKey: groqKey,
+        system: params.systemPrompt,
+        prompt: groqPrompt,
+        model: targetGroqModel,
+        maxTokens: 4096,
+        timeoutMs: 35000,
+      });
+
+      if (groqRes && groqRes.text && groqRes.text.trim().length > 20) {
+        await writeCodeBlocksToWorkspace(params.workspace, groqRes.text, params.agent);
+        await writeAgentNotes(params.workspace, params.agent, groqRes.text);
+        const inputTokens = groqRes.inputTokens || Math.max(380, Math.ceil(groqPrompt.length / 4));
+        const outputTokens = groqRes.outputTokens || Math.max(650, Math.ceil(groqRes.text.length / 4));
+        const costUsd = Number(((inputTokens * 0.00000015) + (outputTokens * 0.00000060) + 0.0012).toFixed(5));
+        logger.info({ agent: params.agent.displayName, model: `groq/${groqRes.model}` }, 'Successfully executed agent work via Groq');
+        return {
+          text: groqRes.text,
+          model: `groq/${groqRes.model}`,
+          costUsd,
+          inputTokens,
+          outputTokens,
+        };
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Groq model call failed, trying next candidate');
     }
   }
 

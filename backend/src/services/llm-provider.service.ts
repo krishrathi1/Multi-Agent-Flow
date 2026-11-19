@@ -119,6 +119,20 @@ export async function grokChat(params: {
 
 /** Default Groq model; override with GROQ_MODEL. */
 export const groqModel = () => process.env.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile';
+
+/** Recognizes any Groq-hosted model name or groq/ prefix. */
+export const isGroqModel = (model?: string): boolean => {
+  if (!model) return false;
+  const m = model.toLowerCase();
+  return (
+    m.startsWith('groq/') ||
+    m.includes('gpt-oss') ||
+    m.includes('llama-3') ||
+    m.includes('mixtral') ||
+    m.includes('qwen3.8') ||
+    m.includes('allam')
+  );
+};
 /** Tried in order when the preferred model is rejected (limits, size). */
 const GROQ_FALLBACKS = [
   'llama-3.3-70b-versatile',
